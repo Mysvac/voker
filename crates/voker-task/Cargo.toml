@@ -1,0 +1,53 @@
+[package]
+name = "voker-task"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = [ "std" ]
+
+web = [
+    "std",
+    "voker-os/web",
+]
+
+std = [
+    "voker-os/std",
+    "dep:async-channel",
+    "dep:atomic-waker",
+    "futures-lite/std",
+    "async-task/std",
+]
+
+# Use async-io's implementation of block_on instead of futures-lite
+# Can only be used in std env.
+# This is preferred if your application uses async-io.
+async_io = [ "dep:async-io" ]
+
+[dependencies]
+
+voker-cfg = { path = "../voker-cfg" }
+voker-utils = { path = "../voker-utils" }
+
+voker-os = { path = "../voker-os", default-features = false }
+
+# -------------------- External  --------------------
+
+async-task = { version = "4.7", default-features = false }
+futures-lite = { version = "2.6", default-features = false, features = [ "alloc"] }
+
+atomic-waker = { version = "1", default-features = false, optional = true }
+
+async-channel = { version = "2.5", optional = true }
+async-io = { version = "2.6", optional = true }
+
+[target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64")))'.dependencies]
+async-channel = { version = "2.5", optional = true, features = [ "portable-atomic" ] }
+async-task = { version = "4.7", default-features = false, features = [ "portable-atomic" ] }
+atomic-waker = { version = "1", default-features = false, features = [ "portable-atomic" ], optional = true }
+
+[lints]
+workspace = true

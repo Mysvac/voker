@@ -1,0 +1,83 @@
+[workspace]
+resolver = "3"
+members = [ "crates/*" ]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/voker-engine/voker"
+
+[package]
+name = "voker"
+exclude = [".github"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = [ "std", "debug", "auto_register" ]
+
+# Even if turned on, it only takes effect in Debug mode.
+debug = [
+    "std",
+    "voker-reflect/debug",
+    "voker-ecs/debug",
+]
+
+std = [
+    "voker-os/std",
+    "voker-reflect/std",
+    "voker-task/std",
+    "voker-ecs/std",
+]
+
+web = [
+    "voker-os/web",
+    "voker-task/web",
+]
+
+auto_register = [ "voker-reflect/auto_register" ]
+
+reflect_docs = [ "voker-reflect/reflect_docs" ]
+
+async_io = [ "voker-task/async_io" ]
+
+
+[dependencies]
+voker-cfg = { path = "./crates/voker-cfg" }
+voker-ptr = { path = "./crates/voker-ptr" }
+voker-utils = { path = "./crates/voker-utils" }
+
+voker-os = { path = "./crates/voker-os", default-features = false }
+voker-reflect = { path = "./crates/voker-reflect", default-features = false }
+voker-task = { path = "./crates/voker-task", default-features = false }
+voker-ecs = { path = "./crates/voker-ecs", default-features = false }
+voker-app = { path = "./crates/voker-app", default-features = false }
+
+[workspace.lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"
+
+type_complexity = "allow"
+too_many_arguments = "allow"
+
+type_id_on_box = "deny"
+missing_transmute_annotations = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "warn"
+unused_qualifications = "warn"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+all-features = true
+

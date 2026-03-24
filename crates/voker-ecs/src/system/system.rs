@@ -1,0 +1,420 @@
+#![expect(clippy::module_inception, reason = "For better structure.")]
+
+use core::fmt::Debug;
+
+use crate::error::EcsError;
+use crate::system::{AccessTable, SystemFlags, SystemName};
+use crate::tick::Tick;
+use crate::world::{UnsafeWorld, World};
+
+use super::SystemInput;
+
+// -----------------------------------------------------------------------------
+// System
+
+/// Core trait defining a runnable unit of logic in the ECS.
+///
+/// A `System` encapsulates executable logic that can operate on the ECS world,
+/// with clearly defined input and output types. Systems are the fundamental
+/// building blocks for game logic, simulation steps, and reactive behaviors.
+///
+/// Any Rust function with a compatible signature can be used as a system, for example:
+///
+/// ```ignore
+/// fn system_a(query: Query<&Name, Changed<Health>>) {
+///     /* do something */
+/// }
+/// ```
+///
+/// # Parallelism
+///
+/// At the moment, systems run through [`Schedule`](crate::schedule::Schedule),
+/// which builds an execution graph from system parameters to maximize parallel
+/// execution.
+///
+/// Two systems can run in parallel when their accesses do not conflict under
+/// read/write exclusion rules.
+///
+/// For example, these two systems can run in parallel because they access
+/// different data:
+///
+/// ```ignore
+/// fn system_a(query: Query<&Bar>, res: Res<Baz>) { }
+/// fn system_b(query: Query<&mut Foo>) { }
+/// ```
+///
+/// For `Query`, systems can also run in parallel if their filter constraints
+/// guarantee they never touch the same data:
+///
+/// ```ignore
+/// fn system_a(query: Query<&mut Foo, With<Bar>) { }
+/// fn system_b(query: Query<&mut Foo, Without<Bar>>) { }
+/// ```
+///
+/// ## Special Cases
+///
+/// There are two special categories of systems.
+///
+/// A system that accesses `NonSend` data cannot be moved across threads,
+/// so it must be scheduled on the main thread:
+///
+/// ```ignore
+/// fn system_a(foo: NonSend<Foo>) {
+///     /* do something */
+/// }
+/// ```
+///
+/// A system that takes `&mut World` is fully exclusive and cannot run in
+/// parallel with any other system:
+///
+/// ```ignore
+/// fn system_a(world: &mut World) {
+///     /* do something */
+/// }
+/// ```
+///
+/// Fully exclusive systems can limit parallel performance. For workloads such
+/// as spawning/despawning entities that require world mutation, prefer
+/// [`Commands`](crate::command::Commands) as a deferred alternative:
+///
+/// ```ignore
+/// fn system_a(mut commands: Commands) {
+///     /* do something */
+/// }
+/// ```
+///
+/// Commands submitted through `Commands` are not executed immediately. They are
+/// pushed into the world's deferred command queue, which is thread-safe.
+/// Therefore, `Commands` does not count as direct component/resource access and
+/// does not reduce system parallelism.
+#[diagnostic::on_unimplemented(message = "`{Self}` is not a system", label = "invalid system")]
+pub trait System: Send + Sync + 'static {
+    /// The system's input.
+    type Input: SystemInput;
+    /// The system's output.
+    type Output;
+
+    /// Returns the system's name for debugging and identification purposes.
+    fn name(&self) -> SystemName;
+
+    /// Returns the system's behavioral flags.
+    ///
+    /// Flags control how the system is scheduled and executed:
+    /// - `NON_SEND`: System cannot be moved between threads
+    /// - `EXCLUSIVE`: System requires exclusive world access
+    fn flags(&self) -> SystemFlags;
+
+    /// Gets the tick when this system last completed execution.
+    fn get_last_run(&self) -> Tick;
+
+    /// Sets the tick when this system last completed execution.
+    fn set_last_run(&mut self, last_run: Tick);
+
+    /// Initializes the system, registering any required components or resources.
+    fn initialize(&mut self, world: &mut World) -> AccessTable;
+
+    /// Executes the system's logic against the provided world.
+    ///
+    /// # Safety
+    ///
+    /// - The caller must ensure that the world's access patterns do not conflict
+    ///   with other systems running concurrently.
+    /// - The implementation must respect the access patterns declared in
+    ///   `initialize` and not access components/resources outside those patterns.
+    /// - For `NON_SEND` systems, the caller must ensure execution occurs on the
+    ///   same thread where the system was created.
+    /// - For `EXCLUSIVE` systems, the caller must ensure exclusive world access.
+    unsafe fn run(
+        &mut self,
+        input: <Self::Input as SystemInput>::Data<'_>,
+        world: UnsafeWorld<'_>,
+    ) -> Result<Self::Output, EcsError>;
+
+    /// Returns `true` if this system is marked as `NON_SEND`.
+    #[inline]
+    fn is_non_send(&self) -> bool {
+        self.flags().intersects(SystemFlags::NON_SEND)
+    }
+
+    /// Returns `true` if this system is marked as `EXCLUSIVE`.
+    #[inline]
+    fn is_exclusive(&self) -> bool {
+        self.flags().intersects(SystemFlags::EXCLUSIVE)
+    }
+}
+
+impl<I, O> Debug for dyn System<Input = I, Output = O>
+where
+    I: SystemInput + 'static,
+    O: 'static,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("System")
+            .field("name", &self.name())
+            .field("non_send", &self.is_non_send())
+            .field("exclusive", &self.is_exclusive())
+            .finish_non_exhaustive()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoSystem
+
+/// Trait for converting a value into a [`System`].
+///
+/// This trait enables ergonomic system construction from closures, functions,
+/// and combinators. It serves as the entry point for creating systems that
+/// can be scheduled and executed by the ECS.
+///
+/// # Combinators
+///
+/// IntoSystem provides several combinator methods for system composition:
+///
+/// - [`pipe`](IntoSystem::pipe): Chain two systems, feeding output of first as input to second
+/// - [`map`](IntoSystem::map): Transform system output using a function
+/// - [`run_if`](IntoSystem::run_if): Conditionally run the system based on another system's output
+pub trait IntoSystem<I: SystemInput, O, M>: Sized {
+    type System: System<Input = I, Output = O>;
+
+    fn into_system(this: Self, name: SystemName) -> Self::System;
+
+    fn pipe<B, BI, BO, MB>(self, other: B) -> IntoPipeSystem<Self, B>
+    where
+        O: 'static,
+        B: IntoSystem<BI, BO, MB>,
+        for<'a> BI: SystemInput<Data<'a> = O>,
+    {
+        IntoPipeSystem { a: self, b: other }
+    }
+
+    fn map<F, FO>(self, func: F) -> IntoMapSystem<Self, F>
+    where
+        F: FnMut(O) -> FO + Sync + Send + 'static,
+    {
+        IntoMapSystem { s: self, f: func }
+    }
+
+    fn run_if<C, MC>(self, condition: C) -> IntoRunIfSystem<Self, C>
+    where
+        O: 'static,
+        C: IntoSystem<(), bool, MC>,
+    {
+        IntoRunIfSystem {
+            s: self,
+            c: condition,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoPipeSystem
+
+pub struct IntoPipeSystem<A, B> {
+    a: A,
+    b: B,
+}
+
+pub struct PipeSystem<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<AI, AO, BI, BO, A, B, MA, MB> IntoSystem<AI, BO, (MA, MB, fn(AI) -> AO, fn(BI) -> BO)>
+    for IntoPipeSystem<A, B>
+where
+    AI: SystemInput,
+    for<'a> BI: SystemInput<Data<'a> = AO>,
+    A: IntoSystem<AI, AO, MA>,
+    B: IntoSystem<BI, BO, MB>,
+{
+    type System = PipeSystem<A::System, B::System>;
+
+    fn into_system(this: Self, name: SystemName) -> Self::System {
+        PipeSystem {
+            a: IntoSystem::into_system(this.a, name),
+            b: IntoSystem::into_system(this.b, name),
+        }
+    }
+}
+
+impl<AI, AO, BI, BO, A, B> System for PipeSystem<A, B>
+where
+    AI: SystemInput,
+    for<'a> BI: SystemInput<Data<'a> = AO>,
+    A: System<Input = AI, Output = AO>,
+    B: System<Input = BI, Output = BO>,
+{
+    type Input = AI;
+    type Output = BO;
+
+    fn name(&self) -> SystemName {
+        self.a.name()
+    }
+
+    fn flags(&self) -> SystemFlags {
+        self.a.flags().union(self.b.flags())
+    }
+
+    fn get_last_run(&self) -> Tick {
+        self.a.get_last_run()
+    }
+
+    fn set_last_run(&mut self, last_run: Tick) {
+        self.a.set_last_run(last_run);
+        self.b.set_last_run(last_run);
+    }
+
+    fn initialize(&mut self, world: &mut World) -> AccessTable {
+        self.a.initialize(world).merge(self.b.initialize(world))
+    }
+
+    unsafe fn run(
+        &mut self,
+        input: <Self::Input as SystemInput>::Data<'_>,
+        world: UnsafeWorld<'_>,
+    ) -> Result<Self::Output, EcsError> {
+        let data = unsafe { self.a.run(input, world)? };
+        unsafe { self.b.run(data, world) }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoMapSystem
+
+pub struct IntoMapSystem<S, F> {
+    s: S,
+    f: F,
+}
+
+pub struct MapSystem<S, F> {
+    s: S,
+    f: F,
+}
+
+impl<I, O, FO, S, F, M> IntoSystem<I, FO, (M, fn(I) -> O, fn(O) -> FO)> for IntoMapSystem<S, F>
+where
+    I: SystemInput,
+    S: IntoSystem<I, O, M>,
+    F: FnMut(O) -> FO + Sync + Send + 'static,
+{
+    type System = MapSystem<S::System, F>;
+
+    fn into_system(this: Self, name: SystemName) -> Self::System {
+        MapSystem {
+            s: IntoSystem::into_system(this.s, name),
+            f: this.f,
+        }
+    }
+}
+
+impl<I, O, FO, S, F> System for MapSystem<S, F>
+where
+    I: SystemInput,
+    S: System<Input = I, Output = O>,
+    F: FnMut(O) -> FO + Sync + Send + 'static,
+{
+    type Input = I;
+    type Output = FO;
+
+    fn name(&self) -> SystemName {
+        self.s.name()
+    }
+
+    fn flags(&self) -> SystemFlags {
+        self.s.flags()
+    }
+
+    fn get_last_run(&self) -> Tick {
+        self.s.get_last_run()
+    }
+
+    fn set_last_run(&mut self, last_run: Tick) {
+        self.s.set_last_run(last_run);
+    }
+
+    fn initialize(&mut self, world: &mut World) -> AccessTable {
+        self.s.initialize(world)
+    }
+
+    unsafe fn run(
+        &mut self,
+        input: <Self::Input as SystemInput>::Data<'_>,
+        world: UnsafeWorld<'_>,
+    ) -> Result<Self::Output, EcsError> {
+        let data = unsafe { self.s.run(input, world)? };
+        Ok((self.f)(data))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoRunIfSystem
+
+pub struct IntoRunIfSystem<S, C> {
+    s: S,
+    c: C,
+}
+
+pub struct RunIfSystem<S, C> {
+    s: S,
+    c: C,
+}
+
+impl<I, O, S, C, MS, MC> IntoSystem<I, Option<O>, (MS, MC, fn() -> bool, fn(I) -> O)>
+    for IntoRunIfSystem<S, C>
+where
+    I: SystemInput,
+    S: IntoSystem<I, O, MS>,
+    C: IntoSystem<(), bool, MC>,
+{
+    type System = RunIfSystem<S::System, C::System>;
+
+    fn into_system(this: Self, name: SystemName) -> Self::System {
+        RunIfSystem {
+            s: IntoSystem::into_system(this.s, name),
+            c: IntoSystem::into_system(this.c, name),
+        }
+    }
+}
+
+impl<I, O, S, C> System for RunIfSystem<S, C>
+where
+    I: SystemInput,
+    S: System<Input = I, Output = O>,
+    C: System<Input = (), Output = bool>,
+{
+    type Input = I;
+    type Output = Option<O>;
+
+    fn name(&self) -> SystemName {
+        self.c.name()
+    }
+
+    fn flags(&self) -> SystemFlags {
+        self.c.flags().union(self.s.flags())
+    }
+
+    fn get_last_run(&self) -> Tick {
+        self.c.get_last_run()
+    }
+
+    fn set_last_run(&mut self, last_run: Tick) {
+        self.c.set_last_run(last_run);
+        self.s.set_last_run(last_run);
+    }
+
+    fn initialize(&mut self, world: &mut World) -> AccessTable {
+        self.s.initialize(world).merge(self.c.initialize(world))
+    }
+
+    unsafe fn run(
+        &mut self,
+        input: <Self::Input as SystemInput>::Data<'_>,
+        world: UnsafeWorld<'_>,
+    ) -> Result<Self::Output, EcsError> {
+        if unsafe { self.c.run((), world)? } {
+            unsafe { Ok(Some(self.s.run(input, world)?)) }
+        } else {
+            Ok(None)
+        }
+    }
+}

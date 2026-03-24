@@ -1,0 +1,558 @@
+//! See <https://docs.rs/crate/crossbeam-queue/latest>
+//!
+//! - Version: 0.3.12
+//! - Date: 2026/01/01
+#![expect(unsafe_code, reason = "original implementation need unsafe codes")]
+
+use alloc::boxed::Box;
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::mem::{self, MaybeUninit};
+use core::panic::{RefUnwindSafe, UnwindSafe};
+
+use crate::sync::atomic::{self, AtomicUsize, Ordering};
+use crate::utils::{Backoff, CachePadded};
+
+// -----------------------------------------------------------------------------
+// Internal Type
+
+/// A slot in a queue.
+struct Slot<T> {
+    /// The current stamp.
+    ///
+    /// If the stamp equals the tail, this node will be next written to. If it equals head + 1,
+    /// this node will be next read from.
+    stamp: AtomicUsize,
+
+    /// The value in this slot.
+    value: UnsafeCell<MaybeUninit<T>>,
+}
+
+// -----------------------------------------------------------------------------
+// ArrayQueue
+
+/// A bounded multi-producer multi-consumer queue.
+///
+/// This queue allocates a fixed-capacity buffer on construction, which is used to store pushed
+/// elements. The queue cannot hold more elements than the buffer allows. Attempting to push an
+/// element into a full queue will fail. Having a buffer allocated upfront makes this queue
+/// a bit faster than [`ListQueue`].
+///
+/// [`ListQueue`]: super::ListQueue
+///
+/// # Examples
+///
+/// ```
+/// use voker_os::utils::ArrayQueue;
+///
+/// let q = ArrayQueue::new(2);
+///
+/// assert_eq!(q.push('a'), Ok(()));
+/// assert_eq!(q.push('b'), Ok(()));
+/// assert_eq!(q.push('c'), Err('c'));
+/// assert_eq!(q.pop(), Some('a'));
+/// ```
+pub struct ArrayQueue<T> {
+    /// The head of the queue.
+    ///
+    /// This value is a "stamp" consisting of an index into the buffer and a lap, but packed into a
+    /// single `usize`. The lower bits represent the index, while the upper bits represent the lap.
+    ///
+    /// Elements are popped from the head of the queue.
+    head: CachePadded<AtomicUsize>,
+
+    /// The tail of the queue.
+    ///
+    /// This value is a "stamp" consisting of an index into the buffer and a lap, but packed into a
+    /// single `usize`. The lower bits represent the index, while the upper bits represent the lap.
+    ///
+    /// Elements are pushed into the tail of the queue.
+    tail: CachePadded<AtomicUsize>,
+
+    /// The buffer holding slots.
+    buffer: Box<[Slot<T>]>,
+
+    /// A stamp with the value of `{ lap: 1, index: 0 }`.
+    one_lap: usize,
+}
+
+unsafe impl<T: Send> Sync for ArrayQueue<T> {}
+unsafe impl<T: Send> Send for ArrayQueue<T> {}
+impl<T> UnwindSafe for ArrayQueue<T> {}
+impl<T> RefUnwindSafe for ArrayQueue<T> {}
+
+impl<T> ArrayQueue<T> {
+    /// Creates a new bounded queue with the given capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the capacity is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::<i32>::new(100);
+    /// ```
+    pub fn new(cap: usize) -> Self {
+        assert!(cap > 0, "capacity must be non-zero");
+
+        // Head is initialized to `{ lap: 0, index: 0 }`.
+        // Tail is initialized to `{ lap: 0, index: 0 }`.
+        let head = 0;
+        let tail = 0;
+
+        // Allocate a buffer of `cap` slots initialized
+        // with stamps.
+        let buffer: Box<[Slot<T>]> = (0..cap)
+            .map(|i| {
+                // Set the stamp to `{ lap: 0, index: i }`.
+                Slot {
+                    stamp: AtomicUsize::new(i),
+                    value: UnsafeCell::new(MaybeUninit::uninit()),
+                }
+            })
+            .collect();
+
+        // One lap is the smallest power of two greater than `cap`.
+        let one_lap = (cap + 1).next_power_of_two();
+
+        Self {
+            buffer,
+            one_lap,
+            head: CachePadded::new(AtomicUsize::new(head)),
+            tail: CachePadded::new(AtomicUsize::new(tail)),
+        }
+    }
+
+    /// Attempts to push an element into the queue.
+    ///
+    /// If the queue is full, the element is returned back as an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(1);
+    ///
+    /// assert_eq!(q.push(10), Ok(()));
+    /// assert_eq!(q.push(20), Err(20));
+    /// ```
+    pub fn push(&self, value: T) -> Result<(), T> {
+        let backoff = Backoff::new();
+        let mut tail = self.tail.load(Ordering::Relaxed);
+
+        loop {
+            // Deconstruct the tail.
+            let index = tail & (self.one_lap - 1);
+            let lap = tail & !(self.one_lap - 1);
+
+            let new_tail = if index + 1 < self.capacity() {
+                // Same lap, incremented index.
+                // Set to `{ lap: lap, index: index + 1 }`.
+                tail + 1
+            } else {
+                // One lap forward, index wraps around to zero.
+                // Set to `{ lap: lap.wrapping_add(1), index: 0 }`.
+                lap.wrapping_add(self.one_lap)
+            };
+
+            // Inspect the corresponding slot.
+            debug_assert!(index < self.buffer.len());
+            let slot = unsafe { self.buffer.get_unchecked(index) };
+            let stamp = slot.stamp.load(Ordering::Acquire);
+
+            // If the tail and the stamp match, we may attempt to push.
+            if tail == stamp {
+                // Try moving the tail.
+                if let Err(t) = self.tail.compare_exchange_weak(
+                    tail,
+                    new_tail,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                ) {
+                    tail = t;
+                    backoff.spin();
+                } else {
+                    // Write the value into the slot and update the stamp.
+                    unsafe {
+                        slot.value.get().write(MaybeUninit::new(value));
+                    }
+                    slot.stamp.store(tail + 1, Ordering::Release);
+                    return Ok(());
+                }
+            } else if stamp.wrapping_add(self.one_lap) == tail + 1 {
+                let head = self.head.load(Ordering::SeqCst);
+
+                if head.wrapping_add(self.one_lap) == tail {
+                    return Err(value);
+                }
+
+                backoff.spin();
+                tail = self.tail.load(Ordering::Relaxed);
+            } else {
+                // Snooze because we need to wait for the stamp to get updated.
+                backoff.snooze();
+                tail = self.tail.load(Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Attempts to pop an element from the queue.
+    ///
+    /// If the queue is empty, `None` is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(1);
+    /// assert_eq!(q.push(10), Ok(()));
+    ///
+    /// assert_eq!(q.pop(), Some(10));
+    /// assert!(q.pop().is_none());
+    /// ```
+    pub fn pop(&self) -> Option<T> {
+        let backoff = Backoff::new();
+        let mut head = self.head.load(Ordering::Relaxed);
+
+        loop {
+            // Deconstruct the head.
+            let index = head & (self.one_lap - 1);
+            let lap = head & !(self.one_lap - 1);
+
+            // Inspect the corresponding slot.
+            debug_assert!(index < self.buffer.len());
+            let slot = unsafe { self.buffer.get_unchecked(index) };
+            let stamp = slot.stamp.load(Ordering::Acquire);
+
+            // If the stamp is ahead of the head by 1, we may attempt to pop.
+            if head + 1 == stamp {
+                let new = if index + 1 < self.capacity() {
+                    // Same lap, incremented index.
+                    // Set to `{ lap: lap, index: index + 1 }`.
+                    head + 1
+                } else {
+                    // One lap forward, index wraps around to zero.
+                    // Set to `{ lap: lap.wrapping_add(1), index: 0 }`.
+                    lap.wrapping_add(self.one_lap)
+                };
+
+                // Try moving the head.
+                match self.head.compare_exchange_weak(
+                    head,
+                    new,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => {
+                        // Read the value from the slot and update the stamp.
+                        let msg = unsafe { slot.value.get().read().assume_init() };
+                        slot.stamp
+                            .store(head.wrapping_add(self.one_lap), Ordering::Release);
+                        return Some(msg);
+                    }
+                    Err(h) => {
+                        head = h;
+                        backoff.spin();
+                    }
+                }
+            } else if stamp == head {
+                atomic::fence(Ordering::SeqCst);
+                let tail = self.tail.load(Ordering::Relaxed);
+
+                // If the tail equals the head, that means the channel is empty.
+                if tail == head {
+                    return None;
+                }
+
+                backoff.spin();
+                head = self.head.load(Ordering::Relaxed);
+            } else {
+                // Snooze because we need to wait for the stamp to get updated.
+                backoff.snooze();
+                head = self.head.load(Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Returns the capacity of the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::<i32>::new(100);
+    ///
+    /// assert_eq!(q.capacity(), 100);
+    /// ```
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// Returns `true` if the queue is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(100);
+    ///
+    /// assert!(q.is_empty());
+    /// q.push(1).unwrap();
+    /// assert!(!q.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        let head = self.head.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
+
+        // Is the tail lagging one lap behind head?
+        // Is the tail equal to the head?
+        //
+        // Note: If the head changes just before we load the tail, that means there was a moment
+        // when the channel was not empty, so it is safe to just return `false`.
+        tail == head
+    }
+
+    /// Returns `true` if the queue is full.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(1);
+    ///
+    /// assert!(!q.is_full());
+    /// q.push(1).unwrap();
+    /// assert!(q.is_full());
+    /// ```
+    pub fn is_full(&self) -> bool {
+        let tail = self.tail.load(Ordering::SeqCst);
+        let head = self.head.load(Ordering::SeqCst);
+
+        // Is the head lagging one lap behind tail?
+        //
+        // Note: If the tail changes just before we load the head, that means there was a moment
+        // when the queue was not full, so it is safe to just return `false`.
+        head.wrapping_add(self.one_lap) == tail
+    }
+
+    /// Returns the number of elements in the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(100);
+    /// assert_eq!(q.len(), 0);
+    ///
+    /// q.push(10).unwrap();
+    /// assert_eq!(q.len(), 1);
+    ///
+    /// q.push(20).unwrap();
+    /// assert_eq!(q.len(), 2);
+    /// ```
+    pub fn len(&self) -> usize {
+        loop {
+            // Load the tail, then load the head.
+            let tail = self.tail.load(Ordering::SeqCst);
+            let head = self.head.load(Ordering::SeqCst);
+
+            // If the tail didn't change, we've got consistent values to work with.
+            if self.tail.load(Ordering::SeqCst) == tail {
+                let hix = head & (self.one_lap - 1);
+                let tix = tail & (self.one_lap - 1);
+
+                return if hix < tix {
+                    tix - hix
+                } else if hix > tix {
+                    self.capacity() - hix + tix
+                } else if tail == head {
+                    0
+                } else {
+                    self.capacity()
+                };
+            }
+        }
+    }
+}
+
+impl<T> Drop for ArrayQueue<T> {
+    fn drop(&mut self) {
+        if mem::needs_drop::<T>() {
+            // Get the index of the head.
+            let head = *self.head.get_mut();
+            let tail = *self.tail.get_mut();
+
+            let hix = head & (self.one_lap - 1);
+            let tix = tail & (self.one_lap - 1);
+
+            let len = if hix < tix {
+                tix - hix
+            } else if hix > tix {
+                self.capacity() - hix + tix
+            } else if tail == head {
+                0
+            } else {
+                self.capacity()
+            };
+
+            // Loop over all slots that hold a message and drop them.
+            for i in 0..len {
+                // Compute the index of the next slot holding a message.
+                let index = if hix + i < self.capacity() {
+                    hix + i
+                } else {
+                    hix + i - self.capacity()
+                };
+
+                unsafe {
+                    debug_assert!(index < self.buffer.len());
+                    let slot = self.buffer.get_unchecked_mut(index);
+                    (*slot.value.get()).assume_init_drop();
+                }
+            }
+        }
+    }
+}
+
+impl<T> fmt::Debug for ArrayQueue<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.pad("ArrayQueue { .. }")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tests
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use alloc::vec::Vec;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread::scope;
+
+    use super::ArrayQueue;
+
+    #[test]
+    fn smoke() {
+        let q = ArrayQueue::new(1);
+
+        q.push(7).unwrap();
+        assert_eq!(q.pop(), Some(7));
+
+        q.push(8).unwrap();
+        assert_eq!(q.pop(), Some(8));
+        assert!(q.pop().is_none());
+    }
+
+    #[test]
+    fn capacity() {
+        for i in 1..10 {
+            let q = ArrayQueue::<i32>::new(i);
+            assert_eq!(q.capacity(), i);
+        }
+    }
+
+    #[test]
+    fn len_empty_full() {
+        let q = ArrayQueue::new(2);
+
+        assert_eq!(q.len(), 0);
+        assert!(q.is_empty());
+        assert!(!q.is_full());
+
+        q.push(()).unwrap();
+
+        assert_eq!(q.len(), 1);
+        assert!(!q.is_empty());
+        assert!(!q.is_full());
+
+        q.push(()).unwrap();
+
+        assert_eq!(q.len(), 2);
+        assert!(!q.is_empty());
+        assert!(q.is_full());
+
+        q.pop().unwrap();
+
+        assert_eq!(q.len(), 1);
+        assert!(!q.is_empty());
+        assert!(!q.is_full());
+    }
+
+    #[test]
+    fn spsc() {
+        #[cfg(miri)]
+        const COUNT: usize = 50;
+        #[cfg(not(miri))]
+        const COUNT: usize = 100_000;
+
+        let q = ArrayQueue::new(3);
+
+        scope(|scope| {
+            scope.spawn(|| {
+                for i in 0..COUNT {
+                    loop {
+                        if let Some(x) = q.pop() {
+                            assert_eq!(x, i);
+                            break;
+                        }
+                    }
+                }
+                assert!(q.pop().is_none());
+            });
+
+            scope.spawn(|| {
+                for i in 0..COUNT {
+                    while q.push(i).is_err() {}
+                }
+            });
+        });
+    }
+
+    #[test]
+    fn mpmc() {
+        #[cfg(miri)]
+        const COUNT: usize = 50;
+        #[cfg(not(miri))]
+        const COUNT: usize = 25_000;
+        const THREADS: usize = 4;
+
+        let q = ArrayQueue::<usize>::new(3);
+        let v = (0..COUNT).map(|_| AtomicUsize::new(0)).collect::<Vec<_>>();
+
+        scope(|scope| {
+            for _ in 0..THREADS {
+                scope.spawn(|| {
+                    for _ in 0..COUNT {
+                        let n = loop {
+                            if let Some(x) = q.pop() {
+                                break x;
+                            }
+                        };
+                        v[n].fetch_add(1, Ordering::SeqCst);
+                    }
+                });
+            }
+            for _ in 0..THREADS {
+                scope.spawn(|| {
+                    for i in 0..COUNT {
+                        while q.push(i).is_err() {}
+                    }
+                });
+            }
+        });
+
+        for c in v {
+            assert_eq!(c.load(Ordering::SeqCst), THREADS);
+        }
+    }
+}
