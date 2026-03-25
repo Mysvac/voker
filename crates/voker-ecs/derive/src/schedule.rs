@@ -3,7 +3,7 @@ use quote::quote;
 use syn::{DeriveInput, parse_quote};
 
 pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
-    use crate::path::fp::CloneFP;
+    use crate::path::fp::{CloneFP, DebugFP, EqFP, HashFP, SendFP, SyncFP};
     let voker_ecs_path = crate::path::voker_ecs();
     let schedule_label_ = crate::path::schedule_label_(&voker_ecs_path);
     let macro_utils_ = crate::path::macro_utils_(&voker_ecs_path);
@@ -15,7 +15,7 @@ pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote! { Self: Send + Sync + Debug + Hash + Eq + 'static });
+            .push(parse_quote! { Self: #SendFP + #SyncFP + #DebugFP + #HashFP + #EqFP + 'static });
     } else if generics.lifetimes().next().is_some() {
         generics
             .make_where_clause()

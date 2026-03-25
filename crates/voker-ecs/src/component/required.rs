@@ -4,6 +4,7 @@ use voker_utils::range_invoke;
 
 use crate::component::{Component, ComponentWriter};
 use crate::component::{ComponentCollector, ComponentRegistrar};
+use crate::world::FromWorld;
 
 // -----------------------------------------------------------------------------
 // Required
@@ -91,7 +92,7 @@ unsafe impl RequiredComponents for () {
     unsafe fn required_write(_writer: &mut ComponentWriter) {}
 }
 
-unsafe impl<T: Component + Default> RequiredComponents for T {
+unsafe impl<T: Component + FromWorld> RequiredComponents for T {
     fn required_register(registrar: &mut ComponentRegistrar) {
         registrar.register::<T>();
     }
@@ -102,7 +103,7 @@ unsafe impl<T: Component + Default> RequiredComponents for T {
 
     unsafe fn required_write(writer: &mut ComponentWriter) {
         unsafe {
-            writer.write_required::<T>(T::default);
+            writer.write_required::<T>(T::from_world);
         }
     }
 }

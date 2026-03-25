@@ -29,18 +29,15 @@ impl CommandQueue {
     }
 
     /// Returns the number of queued commands.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.queue.len()
     }
 
     /// Returns `true` if the queue contains no commands.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
-    }
-
-    /// Pushes a command to the back of the queue.
-    pub fn push(&self, command: CommandObject) {
-        self.queue.push(command);
     }
 
     /// Pops and returns the next command from the front of the queue.
@@ -52,8 +49,14 @@ impl CommandQueue {
     /// In typical usage, popping commands happens while holding a mutable
     /// borrow of `World` (exclusive access). In that context, cache-line
     /// invalidation is not a concern, so pre-locking is unnecessary.
+    #[must_use]
     pub fn pop(&self) -> Option<CommandObject> {
         self.queue.pop()
+    }
+
+    /// Pushes a command to the back of the queue.
+    pub fn push(&self, command: CommandObject) {
+        self.queue.push(command);
     }
 
     /// Extends the queue by appending all commands from an iterator.

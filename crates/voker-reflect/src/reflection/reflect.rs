@@ -44,7 +44,7 @@ use crate::ops::{ReflectMut, ReflectOwned, ReflectRef};
 /// like [`Box<dyn Reflect>`] will return the container's type ID rather than
 /// the contained reflective object's type ID.
 ///
-/// The VoidCraft framework prohibits `Box<T>::type_id` via `clippy` lints,
+/// The voker framework prohibits `Box<T>::type_id` via `clippy` lints,
 /// preventing such misuse internally. However, framework users must remain
 /// vigilant to avoid this error in their own code.
 ///

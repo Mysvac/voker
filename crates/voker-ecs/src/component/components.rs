@@ -42,19 +42,13 @@ impl Components {
     /// Looks up a component ID by its [`TypeId`].
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<ComponentId> {
-        self.mapper.get(&type_id).copied()
+        self.mapper.get(type_id).copied()
     }
 
     /// Returns the component info for the given ID.
     #[inline]
     pub fn get(&self, id: ComponentId) -> Option<&ComponentInfo> {
         self.infos.get(id.index())
-    }
-
-    /// Returns a mutable reference to the component info for the given ID.
-    #[inline]
-    pub fn get_mut(&mut self, id: ComponentId) -> Option<&mut ComponentInfo> {
-        self.infos.get_mut(id.index())
     }
 
     /// Returns the component info for the given ID without bounds checking.
@@ -67,15 +61,10 @@ impl Components {
         unsafe { self.infos.get_unchecked(id.index()) }
     }
 
-    /// Returns a mutable reference to the component info for the given ID
-    /// without bounds checking.
-    ///
-    /// # Safety
-    /// The caller must ensure `id` is a valid ID (i.e., `id.index() < self.len()`).
+    /// Returns an iterator over the ComponentInfos.
     #[inline]
-    pub unsafe fn get_unchecked_mut(&mut self, id: ComponentId) -> &mut ComponentInfo {
-        debug_assert!(id.index() < self.infos.len());
-        unsafe { self.infos.get_unchecked_mut(id.index()) }
+    pub fn iter(&self) -> core::slice::Iter<'_, ComponentInfo> {
+        self.infos.iter()
     }
 
     /// Registers a component type `T` and returns its unique ID.

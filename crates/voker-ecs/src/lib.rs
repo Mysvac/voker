@@ -43,6 +43,7 @@ pub mod utils;
 
 pub mod command;
 pub mod component;
+pub mod message;
 pub mod resource;
 pub mod storage;
 
@@ -70,6 +71,7 @@ pub mod prelude {
     pub use crate::command::{Commands, EntityCommands};
     pub use crate::component::Component;
     pub use crate::entity::Entity;
+    pub use crate::message::{Message, MessageMutator, MessageReader, MessageWriter, Messages};
     pub use crate::query::{Added, And, Changed, Or, Query, With, Without};
     pub use crate::resource::Resource;
     pub use crate::schedule::{Schedule, ScheduleLabel};

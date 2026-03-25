@@ -1,8 +1,22 @@
+// -----------------------------------------------------------------------------
+// Modules
+
+mod fetch_trait;
+mod get_trait;
+mod insert;
+mod remove;
+
+pub use fetch_trait::FetchComponents;
+pub use get_trait::GetComponents;
+
+// -----------------------------------------------------------------------------
+// Inline
+
 use core::fmt::Debug;
 
 use crate::entity::{Entity, EntityError, EntityLocation};
 use crate::tick::Tick;
-use crate::world::{FetchComponents, GetComponents, UnsafeWorld, World};
+use crate::world::{UnsafeWorld, World};
 
 /// Owned entity handle tied to a world borrow.
 ///
@@ -30,6 +44,66 @@ pub struct EntityRef<'a> {
     pub(crate) location: EntityLocation,
     pub(crate) last_run: Tick,
     pub(crate) this_run: Tick,
+}
+
+// -----------------------------------------------------------------------------
+// Entity
+
+impl World {
+    /// Allocates a new entity identifier.
+    ///
+    /// The returned entity is not inserted into any archetype until you spawn
+    /// or otherwise attach components.
+    pub fn alloc_entity(&self) -> Entity {
+        self.allocator.alloc()
+    }
+
+    /// Returns an owned entity handle for direct per-entity operations.
+    ///
+    /// # Panics
+    /// Panics if `entity` is not alive in this world.
+    pub fn entity_owned(&mut self, entity: Entity) -> EntityOwned<'_> {
+        let location = self.entities.locate(entity).unwrap();
+        EntityOwned {
+            world: self.into(),
+            entity,
+            location,
+        }
+    }
+
+    /// Returns a mutable entity view with cached tick context.
+    ///
+    /// # Panics
+    /// Panics if `entity` is not alive in this world.
+    pub fn entity_mut(&mut self, entity: Entity) -> EntityMut<'_> {
+        let location = self.entities.locate(entity).unwrap();
+        let last_run = self.last_run();
+        let this_run = self.this_run();
+        EntityMut {
+            world: self,
+            entity,
+            location,
+            last_run,
+            this_run,
+        }
+    }
+
+    /// Returns a shared entity view with cached tick context.
+    ///
+    /// # Panics
+    /// Panics if `entity` is not alive in this world.
+    pub fn entity_ref(&self, entity: Entity) -> EntityRef<'_> {
+        let location = self.entities.locate(entity).unwrap();
+        let last_run = self.last_run();
+        let this_run = self.this_run();
+        EntityRef {
+            world: self,
+            entity,
+            location,
+            last_run,
+            this_run,
+        }
+    }
 }
 
 impl<'a> From<EntityOwned<'a>> for EntityMut<'a> {
@@ -68,7 +142,7 @@ impl<'a> From<EntityMut<'a>> for EntityRef<'a> {
     }
 }
 
-macro_rules! impl_debug {
+macro_rules! impl_common_methods {
     ($name:ident) => {
         impl Debug for $name<'_> {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -78,66 +152,71 @@ macro_rules! impl_debug {
                     .finish()
             }
         }
+
+        impl $name<'_> {
+            /// Returns the underlying entity id.
+            pub fn entity(&self) -> Entity {
+                self.entity
+            }
+
+            /// Returns whether the entity's archetype contains `T`.
+            ///
+            /// See [`GetComponents`] for examples.
+            pub fn contains<T: GetComponents>(&self) -> bool {
+                unsafe { T::contains(self.unsafe_world(), self.location.arche_id) }
+            }
+
+            /// Gets raw shared component access for `T`.
+            ///
+            /// See [`GetComponents`] for examples.
+            pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'_>> {
+                unsafe {
+                    T::get(
+                        self.unsafe_world(),
+                        self.entity,
+                        self.location.table_id,
+                        self.location.table_row,
+                    )
+                }
+            }
+
+            /// Gets change-aware shared component access for `T`.
+            ///
+            /// See [`GetComponents`] for examples.
+            pub fn get_ref<T: GetComponents>(&self) -> Option<T::Ref<'_>> {
+                unsafe {
+                    T::get_ref(
+                        self.unsafe_world(),
+                        self.entity,
+                        self.location.table_id,
+                        self.location.table_row,
+                        self.last_run(),
+                        self.this_run(),
+                    )
+                }
+            }
+        }
     };
 }
 
-impl_debug!(EntityOwned);
-impl_debug!(EntityMut);
-impl_debug!(EntityRef);
+impl_common_methods!(EntityOwned);
+impl_common_methods!(EntityMut);
+impl_common_methods!(EntityRef);
 
 impl<'a> EntityOwned<'a> {
     #[inline(always)]
     fn this_run(&self) -> Tick {
-        let world = unsafe { self.world.data_mut() };
-        Tick::new(*world.this_run.get_mut())
+        unsafe { self.world.full_mut().this_run_fast() }
     }
 
     #[inline(always)]
     fn last_run(&self) -> Tick {
-        let world = unsafe { self.world.data_mut() };
-        Tick::new(*world.this_run.get_mut())
+        unsafe { self.world.read_only().last_run() }
     }
 
-    /// Returns the underlying entity id.
-    pub fn entity(&self) -> Entity {
-        self.entity
-    }
-
-    /// Returns whether the entity's archetype contains `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn contains<T: GetComponents>(&self) -> bool {
-        unsafe { T::contains(self.world, self.location.arche_id) }
-    }
-
-    /// Gets raw shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'_>> {
-        unsafe {
-            T::get(
-                self.world,
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-            )
-        }
-    }
-
-    /// Gets change-aware shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get_ref<T: GetComponents>(&self) -> Option<T::Ref<'_>> {
-        unsafe {
-            T::get_ref(
-                self.world,
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-                self.last_run(),
-                self.this_run(),
-            )
-        }
+    #[inline(always)]
+    fn unsafe_world(&self) -> UnsafeWorld<'_> {
+        self.world
     }
 
     /// Gets change-aware mutable component access for `T`.
@@ -181,46 +260,19 @@ impl<'a> EntityOwned<'a> {
 }
 
 impl<'a> EntityMut<'a> {
-    /// Returns the underlying entity id.
-    pub fn entity(&self) -> Entity {
-        self.entity
+    #[inline(always)]
+    fn this_run(&self) -> Tick {
+        self.this_run
     }
 
-    /// Returns whether the entity's archetype contains `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn contains<T: GetComponents>(&self) -> bool {
-        unsafe { T::contains(self.world.unsafe_world(), self.location.arche_id) }
+    #[inline(always)]
+    fn last_run(&self) -> Tick {
+        self.last_run
     }
 
-    /// Gets raw shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'_>> {
-        unsafe {
-            T::get(
-                self.world.unsafe_world(),
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-            )
-        }
-    }
-
-    /// Gets change-aware shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get_ref<T: GetComponents>(&self) -> Option<T::Ref<'_>> {
-        unsafe {
-            T::get_ref(
-                self.world.unsafe_world(),
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-                self.last_run,
-                self.this_run,
-            )
-        }
+    #[inline(always)]
+    fn unsafe_world(&self) -> UnsafeWorld<'_> {
+        self.world.unsafe_world()
     }
 
     /// Gets change-aware mutable component access for `T`.
@@ -258,46 +310,19 @@ impl<'a> EntityMut<'a> {
 }
 
 impl<'a> EntityRef<'a> {
-    /// Returns the underlying entity id.
-    pub fn entity(&self) -> Entity {
-        self.entity
+    #[inline(always)]
+    fn this_run(&self) -> Tick {
+        self.this_run
     }
 
-    /// Returns whether the entity's archetype contains `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn contains<T: GetComponents>(&self) -> bool {
-        unsafe { T::contains(self.world.unsafe_world(), self.location.arche_id) }
+    #[inline(always)]
+    fn last_run(&self) -> Tick {
+        self.last_run
     }
 
-    /// Gets raw shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'_>> {
-        unsafe {
-            T::get(
-                self.world.unsafe_world(),
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-            )
-        }
-    }
-
-    /// Gets change-aware shared component access for `T`.
-    ///
-    /// See [`GetComponents`] for examples.
-    pub fn get_ref<T: GetComponents>(&self) -> Option<T::Ref<'_>> {
-        unsafe {
-            T::get_ref(
-                self.world.unsafe_world(),
-                self.entity,
-                self.location.table_id,
-                self.location.table_row,
-                self.last_run,
-                self.this_run,
-            )
-        }
+    #[inline(always)]
+    fn unsafe_world(&self) -> UnsafeWorld<'_> {
+        self.world.unsafe_world()
     }
 
     /// Fetches a read-only component access pattern described by `T`.

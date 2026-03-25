@@ -8,7 +8,7 @@
 //!
 //! We strive to ensure that fallback implementations maintain the same API as the standard library
 //! (only stable APIs). Some newer APIs may not be immediately available;
-//! please submit an Issue in the [repository](https://github.com/VoidCraft-Engine/vc-core) for such cases.
+//! please submit an Issue in the [repository](https://github.com/voker-Engine/vc-core) for such cases.
 //!
 //! See the [standard library](https://doc.rust-lang.org/std/time) for further details.
 

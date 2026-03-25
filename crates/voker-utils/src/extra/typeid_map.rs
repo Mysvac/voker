@@ -89,25 +89,13 @@ impl<V> TypeIdMap<V> {
     }
 
     /// Returns a reference to the value corresponding to the type.
-    pub fn get(&self, type_id: &TypeId) -> Option<&V> {
-        self.0.get(type_id)
-    }
-
-    /// Returns a reference to the value corresponding to the type.
-    #[inline(always)]
-    pub fn get_type<T: ?Sized + 'static>(&self) -> Option<&V> {
-        self.get(&TypeId::of::<T>())
+    pub fn get(&self, type_id: TypeId) -> Option<&V> {
+        self.0.get(&type_id)
     }
 
     /// Returns a mutable reference to the value corresponding to the type.
-    pub fn get_mut(&mut self, type_id: &TypeId) -> Option<&mut V> {
-        self.0.get_mut(type_id)
-    }
-
-    /// Returns a mutable reference to the value corresponding to the type.
-    #[inline(always)]
-    pub fn get_mut_type<T: ?Sized + 'static>(&mut self) -> Option<&mut V> {
-        self.get_mut(&TypeId::of::<T>())
+    pub fn get_mut(&mut self, type_id: TypeId) -> Option<&mut V> {
+        self.0.get_mut(&type_id)
     }
 
     /// Inserts a key-value pair into the map.
@@ -115,51 +103,30 @@ impl<V> TypeIdMap<V> {
         self.0.insert(type_id, v)
     }
 
-    /// Inserts a key-value pair into the map.
-    #[inline(always)]
-    pub fn insert_type<T: ?Sized + 'static>(&mut self, v: V) -> Option<V> {
-        self.insert(TypeId::of::<T>(), v)
-    }
-
     /// Remove a pair if present, the order is random.
-    #[inline]
     pub fn remove_one(&mut self) -> Option<(TypeId, V)> {
         let type_id = *self.0.keys().next()?;
         self.0.remove_entry(&type_id)
     }
 
-    /// Removes a key from the map, returning the value at the key if the key was previously in the map.
+    /// Removes a key from the map, returning the value
+    /// at the key if the key was previously in the map.
     ///
     /// Keeps the allocated memory for reuse.
-    pub fn remove(&mut self, type_id: &TypeId) -> Option<V> {
-        self.0.remove(type_id)
-    }
-
-    /// Removes a key from the map, returning the value at the key if the key was previously in the map.
-    ///
-    /// Keeps the allocated memory for reuse.
-    #[inline(always)]
-    pub fn remove_type<T: ?Sized + 'static>(&mut self) -> Option<V> {
-        self.remove(&TypeId::of::<T>())
+    pub fn remove(&mut self, type_id: TypeId) -> Option<V> {
+        self.0.remove(&type_id)
     }
 
     /// Clears the map, removing all key-value pairs.
     ///
     /// Keeps the allocated memory for reuse.
-    #[inline]
     pub fn clear(&mut self) {
         self.0.clear();
     }
 
     /// Returns `true` if the map contains a value for the specified key.
-    pub fn contains(&self, type_id: &TypeId) -> bool {
-        self.0.contains_key(type_id)
-    }
-
-    /// Returns `true` if the map contains a value for the specified key.
-    #[inline(always)]
-    pub fn contains_type<T: ?Sized + 'static>(&self) -> bool {
-        self.contains(&TypeId::of::<T>())
+    pub fn contains(&self, type_id: TypeId) -> bool {
+        self.0.contains_key(&type_id)
     }
 
     /// Returns the number of elements in the map.
@@ -178,8 +145,8 @@ impl<V> TypeIdMap<V> {
     ///
     /// The iterator element type is `(&'a K, &'a V)`.
     #[inline]
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&TypeId, &V)> {
-        self.0.iter()
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (TypeId, &V)> {
+        self.0.iter().map(|(&k, v)| (k, v))
     }
 
     /// An iterator visiting all key-value pairs in arbitrary order,
@@ -187,8 +154,8 @@ impl<V> TypeIdMap<V> {
     ///
     /// The iterator element type is `(&'a K, &'a mut V)`.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (&TypeId, &mut V)> {
-        self.0.iter_mut()
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (TypeId, &mut V)> {
+        self.0.iter_mut().map(|(&k, v)| (k, v))
     }
 
     /// An iterator visiting all values in arbitrary order.
@@ -210,8 +177,8 @@ impl<V> TypeIdMap<V> {
     /// An iterator visiting all keys in arbitrary order.
     /// The iterator element type is &'a K.
     #[inline]
-    pub fn types(&self) -> impl ExactSizeIterator<Item = &TypeId> {
-        self.0.keys()
+    pub fn types(&self) -> impl ExactSizeIterator<Item = TypeId> {
+        self.0.keys().copied()
     }
 }
 

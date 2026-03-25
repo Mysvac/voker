@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel, UnitSystem};
@@ -16,13 +18,19 @@ pub struct Schedules {
     mapper: HashMap<InternedScheduleLabel, Schedule>,
 }
 
+impl Resource for Schedules {}
+
+impl Debug for Schedules {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list().entries(self.mapper.values()).finish()
+    }
+}
+
 impl Default for Schedules {
     fn default() -> Self {
         Self::new()
     }
 }
-
-impl Resource for Schedules {}
 
 impl Schedules {
     /// Creates an empty schedule registry.
@@ -89,7 +97,7 @@ impl Schedules {
     /// # Panics
     /// Panics if the number of systems in the target schedule exceeds `u16::MAX`.
     pub fn insert_system(&mut self, label: impl ScheduleLabel, system: UnitSystem) -> bool {
-        self.entry(label).insert(system.name(), system)
+        self.entry(label).insert(system)
     }
 
     /// Removes a system from the schedule identified by `label`.
@@ -100,18 +108,73 @@ impl Schedules {
         self.entry(label).remove(name)
     }
 
-    /// Adds a system to specific schedule using its Rust type name as [`SystemName`].
+    /// Adds an explicit ordering edge: `before -> after`.
     ///
-    /// Returns the generated name used for insertion.
+    /// Returns `false` if either system name is not present.
     ///
-    /// It is usually not recommended to use this function
-    /// because the system name is often unreadable.
+    /// If the edge already exists, this is idempotent.
+    pub fn insert_order(
+        &mut self,
+        label: impl ScheduleLabel,
+        before: SystemName,
+        after: SystemName,
+    ) -> bool {
+        self.entry(label).insert_order(before, after)
+    }
+
+    /// Removes an explicit ordering edge: `before -> after`.
     ///
-    /// Recommended only for testing or documentation purposes.
-    pub fn add_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> SystemName
+    /// Returns `false` if either system name is not present or the order is not present.
+    pub fn remove_order(
+        &mut self,
+        label: impl ScheduleLabel,
+        before: SystemName,
+        after: SystemName,
+    ) -> bool {
+        self.entry(label).remove_order(before, after)
+    }
+
+    pub fn add_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
     {
-        self.entry(label).add_system(system)
+        self.entry(label).add_system(system);
+        self
+    }
+
+    pub fn del_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
+    where
+        S: IntoSystem<(), (), M>,
+    {
+        self.entry(label).del_system(system);
+        self
+    }
+
+    pub fn add_order<X, Y, M1, M2>(
+        &mut self,
+        label: impl ScheduleLabel,
+        before: X,
+        after: Y,
+    ) -> &mut Self
+    where
+        X: IntoSystem<(), (), M1>,
+        Y: IntoSystem<(), (), M2>,
+    {
+        self.entry(label).add_order(before, after);
+        self
+    }
+
+    pub fn del_order<X, Y, M1, M2>(
+        &mut self,
+        label: impl ScheduleLabel,
+        before: X,
+        after: Y,
+    ) -> &mut Self
+    where
+        X: IntoSystem<(), (), M1>,
+        Y: IntoSystem<(), (), M2>,
+    {
+        self.entry(label).del_order(before, after);
+        self
     }
 }

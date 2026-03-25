@@ -16,6 +16,52 @@ crate::cfg::switch! {
 }
 
 // -----------------------------------------------------------------------------
+// thread_hash
+
+/// Returns a hash value of the current thread ID.
+///
+/// If `std` is not support, the function always return `1`.
+///
+/// This hash may have collisions, so it is only recommended for thread checking
+/// rather than as a unique identifier.
+///
+/// Based on the standard library implementation, `ThreadId` is currently a
+/// wrapper around `u64`, so a no-op hasher is used directly.
+///
+/// If this value is intended for use in hash tables, consider applying a
+/// second hash function.
+pub fn thread_hash() -> u64 {
+    use core::hash::{Hash, Hasher};
+
+    struct NoOpHasher(u64);
+    impl Hasher for NoOpHasher {
+        fn finish(&self) -> u64 {
+            self.0
+        }
+
+        fn write_u64(&mut self, i: u64) {
+            self.0 = i;
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            for &byte in bytes.iter().rev() {
+                self.0 = self.0.rotate_left(8) ^ (byte as u64);
+            }
+        }
+    }
+
+    let mut hasher = NoOpHasher(0);
+    // For eliminating clippy hint
+    hasher.write_u64(1);
+
+    crate::cfg::std! {
+        std::thread::current().id().hash(&mut hasher);
+    }
+
+    hasher.finish()
+}
+
+// -----------------------------------------------------------------------------
 // available_parallelism
 
 use core::num::NonZero;

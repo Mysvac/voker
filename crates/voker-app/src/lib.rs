@@ -20,12 +20,17 @@ extern crate alloc;
 // -----------------------------------------------------------------------------
 // modules
 
+mod exit;
+mod label;
+
+pub use exit::AppExit;
+pub use label::{AppLabel, InternedAppLabel};
+
 pub mod app;
 pub mod plugin;
 pub mod schedule;
-
-mod label;
+pub mod sub_app;
 
 pub use app::App;
-pub use label::{AppLabel, InternedAppLabel};
 pub use plugin::{Plugin, PluginsState};
+pub use sub_app::SubApp;

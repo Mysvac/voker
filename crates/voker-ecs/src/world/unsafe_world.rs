@@ -11,6 +11,18 @@ use crate::world::World;
 /// plus mutable access to cached state). It behaves like an unchecked pointer:
 /// the compiler can no longer enforce aliasing and thread-safety rules for you.
 ///
+/// # Access Modes
+///
+/// `UnsafeWorld` exposes three explicit access modes:
+/// - [`Self::read_only`]: shared world access for read paths.
+///   Typical use: inspect metadata while mutating separate local caches.
+/// - [`Self::data_mut`]: mutable access for data-only updates without structural
+///   changes.
+///   Typical use: mutate existing component/resource values under externally
+///   guaranteed disjointness.
+/// - [`Self::full_mut`]: fully mutable access including structural mutations.
+///   Typical use: add/remove entities/resources, register types, allocate ids.
+///
 /// The exposed methods are `unsafe` because the caller must uphold the borrow
 /// invariants required by Rust and by ECS world semantics.
 #[derive(Clone, Copy)]
@@ -24,6 +36,7 @@ unsafe impl Sync for UnsafeWorld<'_> {}
 
 impl<'a> From<&'a World> for UnsafeWorld<'a> {
     /// Creates an [`UnsafeWorld`] from a shared world reference.
+    #[inline(always)]
     fn from(value: &'a World) -> Self {
         UnsafeWorld {
             world: NonNull::from_ref(value),
@@ -34,6 +47,7 @@ impl<'a> From<&'a World> for UnsafeWorld<'a> {
 
 impl<'a> From<&'a mut World> for UnsafeWorld<'a> {
     /// Creates an [`UnsafeWorld`] from an exclusive world reference.
+    #[inline(always)]
     fn from(value: &'a mut World) -> Self {
         UnsafeWorld {
             world: NonNull::from_mut(value),
@@ -47,6 +61,7 @@ impl World {
     ///
     /// This does not grant any additional guarantees by itself. Safety must be
     /// enforced by the code that later dereferences the returned handle.
+    #[inline(always)]
     pub const fn unsafe_world(&self) -> UnsafeWorld<'_> {
         UnsafeWorld {
             world: NonNull::from_ref(self),
@@ -69,8 +84,8 @@ impl<'a> UnsafeWorld<'a> {
 
     /// Reinterprets this handle as a mutable world reference for data mutation.
     ///
-    /// This is intended for operations that mutate existing world data without
-    /// changing world structure.
+    /// This mode exists to express "data mutability" under a stronger contract:
+    /// mutate existing values, but do not perform structural world changes.
     ///
     /// # Safety
     /// - The caller must ensure exclusive mutable access according to Rust
@@ -86,19 +101,13 @@ impl<'a> UnsafeWorld<'a> {
 
     /// Reinterprets this handle as a fully mutable world reference.
     ///
+    /// Use this when structural mutation is required.
+    ///
     /// # Safety
     /// - There must be no other active borrows (shared or mutable) that alias
     ///   this world for the returned lifetime.
     #[inline(always)]
     pub const unsafe fn full_mut(self) -> &'a mut World {
         unsafe { &mut *self.world.as_ptr() }
-    }
-
-    /// Returns the underlying non-null world pointer.
-    ///
-    /// This does not dereference the pointer.
-    #[inline(always)]
-    pub const fn into_inner(self) -> NonNull<World> {
-        self.world
     }
 }

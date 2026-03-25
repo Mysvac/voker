@@ -86,7 +86,7 @@ pub(crate) fn impl_derive_component(ast: DeriveInput) -> TokenStream {
         Err(e) => return e.into_compile_error().into(),
     };
 
-    use crate::path::fp::OptionFP;
+    use crate::path::fp::{OptionFP, SendFP, SyncFP};
     let voker_ecs_path = crate::path::voker_ecs();
     let component_ = crate::path::component_(&voker_ecs_path);
     let cloner_ = crate::path::cloner_(&voker_ecs_path);
@@ -125,7 +125,7 @@ pub(crate) fn impl_derive_component(ast: DeriveInput) -> TokenStream {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote! { Self: Send + Sync + Sized + 'static });
+            .push(parse_quote! { Self: #SendFP + #SyncFP + Sized + 'static });
     } else if generics.lifetimes().next().is_some() {
         generics
             .make_where_clause()

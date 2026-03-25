@@ -3,7 +3,7 @@ use voker_ptr::OwningPtr;
 use crate::archetype::ArcheId;
 use crate::bundle::Bundle;
 use crate::component::ComponentWriter;
-use crate::tick::Tick;
+use crate::utils::{DebugLocation, ForgetEntityOnPanic};
 use crate::world::EntityOwned;
 
 impl EntityOwned<'_> {
@@ -25,7 +25,7 @@ impl EntityOwned<'_> {
     /// # struct Foo;
     /// # #[derive(Component, Debug)]
     /// # struct Bar;
-    /// let mut world = World::default();
+    /// let mut world = World::alloc();
     ///
     /// let mut entity = world.spawn(Foo);
     /// assert!(entity.contains::<Foo>());
@@ -34,11 +34,18 @@ impl EntityOwned<'_> {
     /// entity.insert(Bar);
     /// assert!(entity.contains::<Bar>());
     /// ```
+    #[track_caller]
     pub fn insert<B: Bundle>(&mut self, bundle: B) {
         let world = unsafe { self.world.full_mut() };
         let bundle_id = world.register_bundle::<B>();
         let old_arche_id = self.location.arche_id;
         let new_arche_id = world.arche_after_insert(old_arche_id, bundle_id);
+
+        let guard = ForgetEntityOnPanic {
+            entity: self.entity,
+            world: self.world,
+            location: DebugLocation::caller(),
+        };
 
         voker_ptr::into_owning!(bundle);
 
@@ -47,6 +54,8 @@ impl EntityOwned<'_> {
         } else {
             self.insert_moved(bundle, new_arche_id, B::write_explicit, B::write_required);
         }
+
+        ::core::mem::forget(guard);
     }
 
     #[inline(never)]
@@ -56,22 +65,18 @@ impl EntityOwned<'_> {
         write_explicit: unsafe fn(&mut ComponentWriter, usize),
     ) {
         let world = unsafe { self.world.data_mut() };
-        let tick = Tick::new(*world.this_run.get_mut());
 
         let arche_id = self.location.arche_id;
         let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
 
         let table_id = arche.table_id();
-        let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
-        let maps = &mut world.storages.maps;
 
-        let components = &world.components;
         let table_row = self.location.table_row;
         let entity = self.entity;
 
         unsafe {
-            let mut writer =
-                ComponentWriter::new(data, entity, table_row, tick, maps, table, components);
+            let mut writer = ComponentWriter::new(self.world, data, entity, table_id, table_row);
+
             arche.components().iter().for_each(|&id| {
                 writer.set_writed(id);
             });
@@ -88,8 +93,6 @@ impl EntityOwned<'_> {
         write_explicit: unsafe fn(&mut ComponentWriter, usize),
         write_required: unsafe fn(&mut ComponentWriter),
     ) {
-        let tick = Tick::new(unsafe { *self.world.full_mut().this_run.get_mut() });
-
         let old_arche_id = self.location.arche_id;
         let old_arche = unsafe {
             self.world
@@ -141,18 +144,15 @@ impl EntityOwned<'_> {
             self.location.table_row = new_row;
         }
 
-        let world = unsafe { self.world.data_mut() };
-        let old_arche = unsafe { world.archetypes.get_unchecked(old_arche_id) };
         let table_row = self.location.table_row;
         let table_id = self.location.table_id;
-        let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
-        let maps = &mut world.storages.maps;
-        let components = &world.components;
         let entity = self.entity;
+        let world = unsafe { self.world.data_mut() };
+        let old_arche = unsafe { world.archetypes.get_unchecked(old_arche_id) };
 
         unsafe {
-            let mut writer =
-                ComponentWriter::new(data, entity, table_row, tick, maps, table, components);
+            let mut writer = ComponentWriter::new(self.world, data, entity, table_id, table_row);
+
             old_arche.components().iter().for_each(|&id| {
                 writer.set_writed(id);
             });

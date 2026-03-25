@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::{fmt::Debug, iter::FusedIterator};
 
 use voker_utils::hash::HashMap;
 use voker_utils::hash::hash_map::RawEntryMut;
@@ -81,6 +81,26 @@ impl Tables {
     #[inline]
     pub fn get_id(&self, components: &[ComponentId]) -> Option<TableId> {
         self.mapper.get(components).copied()
+    }
+
+    /// Returns an iterator over the tables.
+    #[inline]
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (TableId, &Table)> + FusedIterator {
+        self.tables
+            .iter()
+            .enumerate()
+            .map(|(id, table)| (TableId::new(id as u32), table))
+    }
+
+    /// Returns an iterator that allows modifying each table.
+    #[inline]
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = (TableId, &mut Table)> + FusedIterator {
+        self.tables
+            .iter_mut()
+            .enumerate()
+            .map(|(id, table)| (TableId::new(id as u32), table))
     }
 
     /// Prepares the rough index for a new component type.

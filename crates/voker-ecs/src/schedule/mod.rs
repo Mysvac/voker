@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn basic() {
-        let mut world = World::default();
+        let mut world = World::alloc();
         let mut schedules = Schedules::new();
 
         schedules.add_system(Testing, spawn_entities);

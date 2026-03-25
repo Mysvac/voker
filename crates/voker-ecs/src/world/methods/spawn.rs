@@ -1,12 +1,140 @@
+use alloc::vec::Vec;
+use core::iter::FusedIterator;
+use core::ptr::NonNull;
+
 use voker_ptr::OwningPtr;
 
-use crate::archetype::ArcheId;
+use crate::archetype::{ArcheId, Archetype};
 use crate::bundle::{Bundle, BundleId};
 use crate::component::ComponentWriter;
-use crate::entity::{Entity, EntityLocation};
-use crate::tick::Tick;
-use crate::utils::DebugCheckedUnwrap;
-use crate::world::{EntityOwned, World};
+use crate::entity::{AllocEntitiesIter, Entity, EntityLocation};
+use crate::storage::Table;
+use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
+use crate::world::{EntityOwned, UnsafeWorld, World};
+
+struct BundleSpawner<'a> {
+    world: UnsafeWorld<'a>,
+    arche: NonNull<Archetype>,
+    table: NonNull<Table>,
+    write_explicit: unsafe fn(&mut ComponentWriter, usize),
+    write_required: unsafe fn(&mut ComponentWriter),
+    location: DebugLocation,
+}
+
+impl<'a> BundleSpawner<'a> {
+    #[inline(never)]
+    fn new(
+        world: &'a mut World,
+        bundle_id: BundleId,
+        write_explicit: unsafe fn(&mut ComponentWriter, usize),
+        write_required: unsafe fn(&mut ComponentWriter),
+        location: DebugLocation,
+    ) -> BundleSpawner<'a> {
+        #[cold]
+        #[inline(never)]
+        fn register_archetype(world: &mut World, bundle_id: BundleId) -> ArcheId {
+            let info = world.bundles.get(bundle_id).unwrap();
+            if let Some(id) = world.archetypes.get_id(info.components()) {
+                unsafe {
+                    world.archetypes.set_bundle_map(bundle_id, id);
+                }
+                return id;
+            }
+
+            let dense_len = info.dense_len();
+            let components = info.clone_components();
+            let table_id = unsafe {
+                let sparses = info.sparse_components();
+                world.storages.maps.register(&world.components, sparses);
+                let denses = info.dense_components();
+                world.storages.tables.register(&world.components, denses)
+            };
+
+            unsafe {
+                let id = world.archetypes.register(table_id, dense_len, components);
+                world.archetypes.set_bundle_map(bundle_id, id);
+                id
+            }
+        }
+
+        let arche_id = world
+            .archetypes
+            .get_id_by_bundle(bundle_id)
+            .unwrap_or_else(|| register_archetype(world, bundle_id));
+
+        let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
+        let table_id = arche.table_id();
+        let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
+
+        BundleSpawner {
+            arche: arche.into(),
+            table: table.into(),
+            world: world.into(),
+            write_explicit,
+            write_required,
+            location,
+        }
+    }
+
+    #[inline(never)]
+    fn spawn_at(&mut self, data: OwningPtr<'_>, entity: Entity) -> EntityLocation {
+        let world = unsafe { self.world.full_mut() };
+
+        if ::core::cfg!(debug_assertions) {
+            world.entities.can_spawn(entity).unwrap();
+        }
+
+        let maps = &mut world.storages.maps;
+        let arche = unsafe { self.arche.as_mut() };
+        let table = unsafe { self.table.as_mut() };
+        let arche_id = arche.id();
+        let table_id = arche.table_id();
+
+        let guard = ForgetEntityOnPanic {
+            entity,
+            world: self.world,
+            location: self.location,
+        };
+
+        let arche_row = unsafe { arche.insert_entity(entity) };
+        let table_row = unsafe { table.allocate(entity) };
+        arche.sparse_components().iter().for_each(|&cid| unsafe {
+            let map_id = maps.get_id(cid).debug_checked_unwrap();
+            let map = maps.get_unchecked_mut(map_id);
+            let _ = map.allocate(entity); // `MapRow` may be cached in the future.
+        });
+
+        unsafe {
+            let mut writer = ComponentWriter::new(world.into(), data, entity, table_id, table_row);
+
+            (self.write_explicit)(&mut writer, 0);
+            (self.write_required)(&mut writer);
+        }
+
+        let location = EntityLocation {
+            arche_id,
+            arche_row,
+            table_id,
+            table_row,
+        };
+
+        unsafe {
+            world.entities.set_spawned(entity, location).unwrap();
+        }
+
+        ::core::mem::forget(guard);
+
+        location
+    }
+
+    fn alloc(&mut self) -> Entity {
+        unsafe { self.world.full_mut().allocator.alloc_mut() }
+    }
+
+    fn alloc_many(&mut self, count: u32) -> AllocEntitiesIter<'a> {
+        unsafe { self.world.full_mut().allocator.alloc_many(count) }
+    }
+}
 
 impl World {
     /// Spawns a new entity from a bundle and returns an owned handle to it.
@@ -22,32 +150,37 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # use voker_ecs::world::World;
-    /// # use voker_ecs::component::Component;
-    /// #
-    /// # #[derive(Component, Debug, PartialEq, Eq)]
-    /// # struct Foo;
-    /// # #[derive(Component, Debug, PartialEq, Eq)]
-    /// # struct Bar(u64);
-    /// #
-    /// let mut world = World::default();
+    /// # use voker_ecs::prelude::*;
+    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// struct Foo;
+    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// struct Bar(u64);
+    ///
+    /// let mut world = World::alloc();
     /// let entity = world.spawn((Foo, Bar(123)));
     /// assert!(entity.contains::<(Foo, Bar)>());
     /// ```
-    #[inline(always)] // We enable inlining to avoid copying data
+    #[inline] // We enable inlining to avoid copying data
+    #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityOwned<'_> {
         let bundle_id = self.register_bundle::<B>();
 
-        voker_ptr::into_owning!(bundle);
-        let entity = self.allocator.alloc_mut();
-
-        self.spawn_internal(
-            bundle,
-            entity,
+        let mut spawner = BundleSpawner::new(
+            self,
             bundle_id,
             B::write_explicit,
             B::write_required,
-        )
+            DebugLocation::caller(),
+        );
+
+        let entity = spawner.alloc();
+        voker_ptr::into_owning!(bundle as data);
+
+        EntityOwned {
+            location: spawner.spawn_at(data, entity),
+            world: self.into(),
+            entity,
+        }
     }
 
     /// Spawns a new entity from a bundle and returns an owned handle to it.
@@ -67,125 +200,142 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # use voker_ecs::world::World;
-    /// # use voker_ecs::component::Component;
-    /// # #[derive(Component, Debug, PartialEq, Eq)]
-    /// # struct Foo;
-    /// # #[derive(Component, Debug, PartialEq, Eq)]
-    /// # struct Bar(u64);
-    /// let mut world = World::default();
+    /// # use voker_ecs::prelude::*;
+    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// struct Foo;
+    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// struct Bar(u64);
+    ///
+    /// let mut world = World::alloc();
     /// let entity = world.alloc_entity();
-    /// let entity = world.spawn_in((Foo, Bar(123)), entity);
+    /// let entity = world.spawn_at((Foo, Bar(123)), entity);
     /// assert!(entity.contains::<(Foo, Bar)>());
     /// ```
-    #[inline(always)] // We enable inlining to avoid copying data
-    pub fn spawn_in<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityOwned<'_> {
+    #[inline] // We enable inlining to avoid copying data
+    #[track_caller]
+    pub fn spawn_at<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityOwned<'_> {
         let bundle_id = self.register_bundle::<B>();
-        voker_ptr::into_owning!(bundle);
 
-        self.spawn_internal(
-            bundle,
-            entity,
+        let mut spawner = BundleSpawner::new(
+            self,
             bundle_id,
             B::write_explicit,
             B::write_required,
-        )
-    }
+            DebugLocation::caller(),
+        );
 
-    #[inline(never)]
-    fn spawn_internal(
-        &mut self,
-        data: OwningPtr<'_>,
-        entity: Entity,
-        bundle_id: BundleId,
-        write_explicit: unsafe fn(&mut ComponentWriter, usize),
-        write_required: unsafe fn(&mut ComponentWriter),
-    ) -> EntityOwned<'_> {
-        if ::core::cfg!(debug_assertions) {
-            self.entities.can_spawn(entity).unwrap();
-        }
-
-        let tick = Tick::new(*self.this_run.get_mut());
-
-        let arche_id = self.register_archetype_by_bundle(bundle_id);
-        let archetype = unsafe { self.archetypes.get_unchecked_mut(arche_id) };
-
-        let table_id = archetype.table_id();
-        let table = unsafe { self.storages.tables.get_unchecked_mut(table_id) };
-
-        let maps = &mut self.storages.maps;
-        let components = &self.components;
-
-        for &cid in archetype.sparse_components() {
-            unsafe {
-                let map_id = maps.get_id(cid).debug_checked_unwrap();
-                let map = maps.get_unchecked_mut(map_id);
-                let _ = map.allocate(entity); // `MapRow` may be cached in the future.
-            }
-        }
-
-        let table_row = unsafe { table.allocate(entity) };
-        let arche_row = unsafe { archetype.insert_entity(entity) };
-
-        unsafe {
-            let mut writer =
-                ComponentWriter::new(data, entity, table_row, tick, maps, table, components);
-
-            write_explicit(&mut writer, 0);
-            write_required(&mut writer);
-        }
-
-        let location = EntityLocation {
-            arche_id,
-            arche_row,
-            table_id,
-            table_row,
-        };
-
-        unsafe {
-            self.entities.set_spawned(entity, location).unwrap();
-        }
+        voker_ptr::into_owning!(bundle as data);
 
         EntityOwned {
-            world: self.unsafe_world(),
+            location: spawner.spawn_at(data, entity),
+            world: self.into(),
             entity,
-            location,
         }
     }
+}
 
+pub struct SpawnBatchIter<'w, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    inner: I,
+    spawner: BundleSpawner<'w>,
+    allocator: AllocEntitiesIter<'w>,
+}
+
+impl<I> Drop for SpawnBatchIter<'_, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    fn drop(&mut self) {
+        let len = self.allocator.len();
+        if len > 0 {
+            let mut buffer = Vec::with_capacity(len);
+            self.allocator.by_ref().for_each(|e| buffer.push(e));
+            let world = unsafe { self.spawner.world.full_mut() };
+            world.allocator.free_many(&buffer);
+        }
+    }
+}
+
+impl<I> Iterator for SpawnBatchIter<'_, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bundle = self.inner.next()?;
+        let entity = self
+            .allocator
+            .next()
+            .unwrap_or_else(|| self.spawner.alloc());
+
+        voker_ptr::into_owning!(bundle as data);
+
+        self.spawner.spawn_at(data, entity);
+
+        Some(entity)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<I: ExactSizeIterator<Item: Bundle>> ExactSizeIterator for SpawnBatchIter<'_, I> {}
+impl<I: FusedIterator<Item: Bundle>> FusedIterator for SpawnBatchIter<'_, I> {}
+
+impl World {
+    /// Returns an iterator for batch spawning entities.
+    ///
+    /// # Important
+    ///
+    /// Entity **spawning is lazy** and will only execute when the iterator is consumed.
+    ///
+    /// If the iterator is not fully consumed, remaining data will be properly
+    /// released and unused entity IDs will be reclaimed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::prelude::*;
+    /// #[derive(Component)]
+    /// struct Bar(u64);
+    ///
+    /// let mut world = World::alloc();
+    ///
+    /// let spawner = world.spawn_batch((0..100_u64).map(|id| Bar(id)));
+    /// let entities: Vec<Entity> = spawner.collect();
+    /// ```
     #[inline]
-    fn register_archetype_by_bundle(&mut self, bundle_id: BundleId) -> ArcheId {
-        if let Some(id) = self.archetypes.get_id_by_bundle(bundle_id) {
-            id
-        } else {
-            self.register_archetype_by_bundle_slow(bundle_id)
-        }
-    }
+    #[track_caller]
+    #[must_use = "`SpawnBatchIter` is lazy working."]
+    pub fn spawn_batch<I, B>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
+    where
+        B: Bundle,
+        I: IntoIterator<Item = B>,
+    {
+        let bundle_id = self.register_bundle::<B>();
+        let mut spawner = BundleSpawner::new(
+            self,
+            bundle_id,
+            B::write_explicit,
+            B::write_required,
+            DebugLocation::caller(),
+        );
 
-    #[cold]
-    #[inline(never)]
-    fn register_archetype_by_bundle_slow(&mut self, bundle_id: BundleId) -> ArcheId {
-        let info = self.bundles.get(bundle_id).unwrap();
-        if let Some(id) = self.archetypes.get_id(info.components()) {
-            unsafe {
-                self.archetypes.set_bundle_map(bundle_id, id);
-            }
-            return id;
-        }
+        let inner = iter.into_iter();
+        let count = inner.size_hint().0 as u32;
+        let allocator = spawner.alloc_many(count);
 
-        let dense_len = info.dense_len();
-        let components = info.clone_components();
-        let table_id = unsafe {
-            let sparses = info.sparse_components();
-            self.storages.maps.register(&self.components, sparses);
-            let denses = info.dense_components();
-            self.storages.tables.register(&self.components, denses)
-        };
-
-        unsafe {
-            let id = self.archetypes.register(table_id, dense_len, components);
-            self.archetypes.set_bundle_map(bundle_id, id);
-            id
+        SpawnBatchIter {
+            inner,
+            spawner,
+            allocator,
         }
     }
 }
@@ -213,11 +363,11 @@ mod tests {
 
     #[test]
     fn spawn_single() {
-        let mut world = World::default();
+        let mut world = World::alloc();
 
         let entity = world.spawn(Foo);
-        assert!(entity.get::<Foo>().is_some());
-        assert!(entity.get::<Bar>().is_none());
+        assert!(entity.contains::<Foo>());
+        assert!(!entity.contains::<Bar>());
 
         let entity = world.spawn(Bar(123));
         assert_eq!(entity.get::<Bar>(), Some(&Bar(123)));
@@ -230,7 +380,7 @@ mod tests {
 
     #[test]
     fn spawn_combined() {
-        let mut world = World::default();
+        let mut world = World::alloc();
 
         let entity = world.spawn((Foo, Bar(123), Baz(String::from("hello"))));
         assert_eq!(entity.get::<Foo>().unwrap(), &Foo);

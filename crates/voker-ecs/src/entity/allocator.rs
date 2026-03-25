@@ -798,8 +798,6 @@ impl Debug for EntityAllocator {
         f.debug_struct("EntityAllocator")
             .field("allocated", &self.shared.fresh.count())
             .field("recycled", &self.shared.free.count())
-            // .field("local_free_buffer", &self.local.free.len())
-            // .field("local_alloc_buffer", &self.local.free.len())
             .finish()
     }
 }
@@ -899,6 +897,7 @@ impl EntityAllocator {
     /// Allocates a single entity with mutable access, checking local buffer first.
     ///
     /// More efficient than [`alloc`](Self::alloc) when mutable access is available.
+    #[must_use]
     pub fn alloc_mut(&mut self) -> Entity {
         #[cold]
         #[inline(never)]
@@ -937,6 +936,7 @@ impl EntityAllocator {
     ///
     /// Note: Does not modify the entity's `Generation`. Callers must
     /// increment generation when reusing entity IDs to prevent aliasing.
+    #[must_use]
     pub fn alloc(&self) -> Entity {
         unsafe { self.shared.free.alloc() }.unwrap_or_else(|| self.shared.fresh.alloc())
     }
@@ -945,6 +945,7 @@ impl EntityAllocator {
     ///
     /// Returns an iterator that must be fully consumed; otherwise,
     /// any remaining entities will be leaked (not available for reuse).
+    #[must_use]
     pub fn alloc_many(&self, count: u32) -> AllocEntitiesIter<'_> {
         // SAFETY: Caller ensures exclusive access or proper synchronization
         let reused = unsafe { self.shared.free.alloc_many(count) };

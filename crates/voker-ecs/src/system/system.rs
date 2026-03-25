@@ -1,6 +1,7 @@
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
 use core::fmt::Debug;
+use core::marker::PhantomData;
 
 use crate::error::EcsError;
 use crate::system::{AccessTable, SystemFlags, SystemName};
@@ -111,6 +112,8 @@ pub trait System: Send + Sync + 'static {
     fn set_last_run(&mut self, last_run: Tick);
 
     /// Initializes the system, registering any required components or resources.
+    ///
+    /// The implementer must allow for repeated initialization.
     fn initialize(&mut self, world: &mut World) -> AccessTable;
 
     /// Executes the system's logic against the provided world.
@@ -173,10 +176,14 @@ where
 /// - [`pipe`](IntoSystem::pipe): Chain two systems, feeding output of first as input to second
 /// - [`map`](IntoSystem::map): Transform system output using a function
 /// - [`run_if`](IntoSystem::run_if): Conditionally run the system based on another system's output
-pub trait IntoSystem<I: SystemInput, O, M>: Sized {
+pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
     type System: System<Input = I, Output = O>;
 
-    fn into_system(this: Self, name: SystemName) -> Self::System;
+    fn into_system(this: Self) -> Self::System;
+
+    fn system_name(&self) -> SystemName {
+        SystemName::of::<Self>()
+    }
 
     fn pipe<B, BI, BO, MB>(self, other: B) -> IntoPipeSystem<Self, B>
     where
@@ -194,15 +201,26 @@ pub trait IntoSystem<I: SystemInput, O, M>: Sized {
         IntoMapSystem { s: self, f: func }
     }
 
-    fn run_if<C, MC>(self, condition: C) -> IntoRunIfSystem<Self, C>
-    where
-        O: 'static,
-        C: IntoSystem<(), bool, MC>,
-    {
-        IntoRunIfSystem {
+    fn with_marker<Marker: 'static>(self) -> IntoMarkerSystem<Self, Marker> {
+        IntoMarkerSystem {
             s: self,
-            c: condition,
+            _marker: PhantomData,
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// System itself
+
+impl<T: System> IntoSystem<T::Input, T::Output, ()> for T {
+    type System = T;
+
+    fn into_system(this: Self) -> Self {
+        this
+    }
+
+    fn system_name(&self) -> SystemName {
+        <T as System>::name(self)
     }
 }
 
@@ -215,6 +233,7 @@ pub struct IntoPipeSystem<A, B> {
 }
 
 pub struct PipeSystem<A, B> {
+    name: SystemName,
     a: A,
     b: B,
 }
@@ -229,11 +248,17 @@ where
 {
     type System = PipeSystem<A::System, B::System>;
 
-    fn into_system(this: Self, name: SystemName) -> Self::System {
+    fn into_system(this: Self) -> Self::System {
         PipeSystem {
-            a: IntoSystem::into_system(this.a, name),
-            b: IntoSystem::into_system(this.b, name),
+            name: Self::system_name(&this),
+            a: IntoSystem::into_system(this.a),
+            b: IntoSystem::into_system(this.b),
         }
+    }
+
+    fn system_name(&self) -> SystemName {
+        struct Pipe;
+        SystemName::of::<(A, Pipe, B)>()
     }
 }
 
@@ -248,7 +273,7 @@ where
     type Output = BO;
 
     fn name(&self) -> SystemName {
-        self.a.name()
+        self.name
     }
 
     fn flags(&self) -> SystemFlags {
@@ -287,6 +312,7 @@ pub struct IntoMapSystem<S, F> {
 }
 
 pub struct MapSystem<S, F> {
+    name: SystemName,
     s: S,
     f: F,
 }
@@ -299,11 +325,17 @@ where
 {
     type System = MapSystem<S::System, F>;
 
-    fn into_system(this: Self, name: SystemName) -> Self::System {
+    fn into_system(this: Self) -> Self::System {
         MapSystem {
-            s: IntoSystem::into_system(this.s, name),
+            name: Self::system_name(&this),
+            s: IntoSystem::into_system(this.s),
             f: this.f,
         }
+    }
+
+    fn system_name(&self) -> SystemName {
+        struct Map;
+        SystemName::of::<(S, Map, F)>()
     }
 }
 
@@ -317,7 +349,7 @@ where
     type Output = FO;
 
     fn name(&self) -> SystemName {
-        self.s.name()
+        self.name
     }
 
     fn flags(&self) -> SystemFlags {
@@ -347,63 +379,73 @@ where
 }
 
 // -----------------------------------------------------------------------------
-// IntoRunIfSystem
+// IntoMarkerSystem
 
-pub struct IntoRunIfSystem<S, C> {
+pub struct IntoMarkerSystem<S, M> {
     s: S,
-    c: C,
+    _marker: PhantomData<M>,
 }
 
-pub struct RunIfSystem<S, C> {
+pub struct MarkerSystem<S, M> {
+    name: SystemName,
     s: S,
-    c: C,
+    _marker: PhantomData<M>,
 }
 
-impl<I, O, S, C, MS, MC> IntoSystem<I, Option<O>, (MS, MC, fn() -> bool, fn(I) -> O)>
-    for IntoRunIfSystem<S, C>
+unsafe impl<S: Send, M> Send for IntoMarkerSystem<S, M> {}
+unsafe impl<S: Send, M> Send for MarkerSystem<S, M> {}
+unsafe impl<S: Sync, M> Sync for IntoMarkerSystem<S, M> {}
+unsafe impl<S: Sync, M> Sync for MarkerSystem<S, M> {}
+
+impl<I, O, S, M1, M2> IntoSystem<I, O, (M1, fn(I) -> O, M2)> for IntoMarkerSystem<S, M2>
 where
     I: SystemInput,
-    S: IntoSystem<I, O, MS>,
-    C: IntoSystem<(), bool, MC>,
+    S: IntoSystem<I, O, M1>,
+    M2: 'static,
 {
-    type System = RunIfSystem<S::System, C::System>;
+    type System = MarkerSystem<S::System, M2>;
 
-    fn into_system(this: Self, name: SystemName) -> Self::System {
-        RunIfSystem {
-            s: IntoSystem::into_system(this.s, name),
-            c: IntoSystem::into_system(this.c, name),
+    fn into_system(this: Self) -> Self::System {
+        MarkerSystem {
+            name: Self::system_name(&this),
+            s: IntoSystem::into_system(this.s),
+            _marker: PhantomData,
         }
+    }
+
+    fn system_name(&self) -> SystemName {
+        struct Marker<T>(PhantomData<T>);
+        SystemName::of::<(Marker<M2>, S)>()
     }
 }
 
-impl<I, O, S, C> System for RunIfSystem<S, C>
+impl<I, O, S, M> System for MarkerSystem<S, M>
 where
     I: SystemInput,
     S: System<Input = I, Output = O>,
-    C: System<Input = (), Output = bool>,
+    M: 'static,
 {
     type Input = I;
-    type Output = Option<O>;
+    type Output = O;
 
     fn name(&self) -> SystemName {
-        self.c.name()
+        self.name
     }
 
     fn flags(&self) -> SystemFlags {
-        self.c.flags().union(self.s.flags())
+        self.s.flags()
     }
 
     fn get_last_run(&self) -> Tick {
-        self.c.get_last_run()
+        self.s.get_last_run()
     }
 
     fn set_last_run(&mut self, last_run: Tick) {
-        self.c.set_last_run(last_run);
         self.s.set_last_run(last_run);
     }
 
     fn initialize(&mut self, world: &mut World) -> AccessTable {
-        self.s.initialize(world).merge(self.c.initialize(world))
+        self.s.initialize(world)
     }
 
     unsafe fn run(
@@ -411,10 +453,6 @@ where
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, EcsError> {
-        if unsafe { self.c.run((), world)? } {
-            unsafe { Ok(Some(self.s.run(input, world)?)) }
-        } else {
-            Ok(None)
-        }
+        unsafe { self.s.run(input, world) }
     }
 }

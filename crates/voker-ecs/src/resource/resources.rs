@@ -42,19 +42,13 @@ impl Resources {
     /// Looks up a resource ID by its [`TypeId`].
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<ResourceId> {
-        self.mapper.get(&type_id).copied()
+        self.mapper.get(type_id).copied()
     }
 
     /// Returns the resource info for the given ID.
     #[inline]
     pub fn get(&self, id: ResourceId) -> Option<&ResourceInfo> {
         self.infos.get(id.index())
-    }
-
-    /// Returns a mutable reference to the resource info for the given ID.
-    #[inline]
-    pub fn get_mut(&mut self, id: ResourceId) -> Option<&mut ResourceInfo> {
-        self.infos.get_mut(id.index())
     }
 
     /// Returns the resource info for the given ID without bounds checking.
@@ -67,15 +61,10 @@ impl Resources {
         unsafe { self.infos.get_unchecked(id.index()) }
     }
 
-    /// Returns a mutable reference to the resource info for the given ID
-    /// without bounds checking.
-    ///
-    /// # Safety
-    /// The caller must ensure `id` is a valid ID (i.e., `id.index() < self.len()`).
+    /// Returns an iterator over the ResourceInfos.
     #[inline]
-    pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResourceInfo {
-        debug_assert!(id.index() < self.infos.len());
-        unsafe { self.infos.get_unchecked_mut(id.index()) }
+    pub fn iter(&self) -> core::slice::Iter<'_, ResourceInfo> {
+        self.infos.iter()
     }
 
     /// Registers a resource type `T` and returns its unique ID.

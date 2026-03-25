@@ -31,7 +31,7 @@ use super::ResSet;
 ///   rarely-present components or large component sets
 #[derive(Debug)]
 pub struct Storages {
-    pub res: ResSet,
+    pub ress: ResSet,
     pub tables: Tables,
     pub maps: Maps,
 }
@@ -40,7 +40,7 @@ impl Storages {
     /// Creates a new, empty storage coordinator.
     pub(crate) fn new() -> Storages {
         Storages {
-            res: ResSet::new(),
+            ress: ResSet::new(),
             tables: Tables::new(),
             maps: Maps::new(),
         }
@@ -63,7 +63,7 @@ impl Storages {
     /// First call may allocate, subsequent calls are no-op
     #[inline]
     pub fn prepare_resource(&mut self, info: &ResourceInfo) {
-        self.res.prepare(info);
+        self.ress.prepare(info);
     }
 
     /// Prepares storage for a component type based on its storage strategy.
@@ -115,12 +115,12 @@ impl Storages {
     /// This provides near-optimal parallel utilization for large worlds with
     /// many tables and maps.
     pub fn check_ticks(&mut self, check: CheckTicks) {
-        let Storages { res, tables, maps } = self;
+        let Storages { ress, tables, maps } = self;
 
         if let Some(task_pool) = ComputeTaskPool::try_get() {
             task_pool.scope(|scope| {
                 scope.spawn(async move {
-                    res.check_ticks(check);
+                    ress.check_ticks(check);
                 });
                 tables.tables.iter_mut().for_each(|tb| {
                     scope.spawn(async move { tb.check_ticks(check) });
@@ -130,7 +130,7 @@ impl Storages {
                 });
             });
         } else {
-            res.check_ticks(check);
+            ress.check_ticks(check);
             tables.tables.iter_mut().for_each(|tb| {
                 tb.check_ticks(check);
             });

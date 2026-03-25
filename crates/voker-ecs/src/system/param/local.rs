@@ -4,7 +4,7 @@ use super::{ReadOnlySystemParam, SystemParam};
 use crate::error::EcsError;
 use crate::system::AccessTable;
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{FromWorld, UnsafeWorld, World};
 
 /// A system-local variable.
 ///
@@ -23,9 +23,9 @@ use crate::world::{UnsafeWorld, World};
 /// }
 /// ```
 #[derive(Debug)]
-pub struct Local<'s, T: Default + Send + Sync + 'static>(&'s mut T);
+pub struct Local<'s, T: FromWorld + Send + Sync + 'static>(&'s mut T);
 
-impl<'s, T: Default + Send + Sync + 'static> Deref for Local<'s, T> {
+impl<'s, T: FromWorld + Send + Sync + 'static> Deref for Local<'s, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -33,23 +33,23 @@ impl<'s, T: Default + Send + Sync + 'static> Deref for Local<'s, T> {
     }
 }
 
-impl<'s, T: Default + Send + Sync + 'static> DerefMut for Local<'s, T> {
+impl<'s, T: FromWorld + Send + Sync + 'static> DerefMut for Local<'s, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
 }
 
-unsafe impl<T: Default + Send + Sync + 'static> ReadOnlySystemParam for Local<'_, T> {}
+unsafe impl<T: FromWorld + Send + Sync + 'static> ReadOnlySystemParam for Local<'_, T> {}
 
-unsafe impl<T: Default + Send + Sync + 'static> SystemParam for Local<'_, T> {
+unsafe impl<T: FromWorld + Send + Sync + 'static> SystemParam for Local<'_, T> {
     type State = T;
     type Item<'world, 'state> = Local<'state, T>;
 
     const NON_SEND: bool = false;
     const EXCLUSIVE: bool = false;
 
-    fn init_state(_world: &mut World) -> Self::State {
-        T::default()
+    fn init_state(world: &mut World) -> Self::State {
+        T::from_world(world)
     }
 
     fn mark_access(_table: &mut AccessTable, _state: &Self::State) -> bool {

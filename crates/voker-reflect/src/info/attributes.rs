@@ -83,7 +83,7 @@ impl CustomAttributes {
 
     /// Returns an iterator over the stored attributes.
     #[inline]
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&TypeId, &dyn Reflect)> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (TypeId, &dyn Reflect)> {
         self.attributes.iter().map(|(key, val)| (key, &**val))
     }
 
@@ -96,7 +96,7 @@ impl CustomAttributes {
     /// Returns `true` if it contains the attribute with the given `TypeId`.
     #[inline]
     pub fn contains_by_id(&self, id: TypeId) -> bool {
-        self.attributes.contains(&id)
+        self.attributes.contains(id)
     }
 
     /// Returns the attribute of type `T`, if present.
@@ -109,7 +109,7 @@ impl CustomAttributes {
     /// Returns the attribute with the given `TypeId`, if present.
     #[inline]
     pub fn get_by_id(&self, id: TypeId) -> Option<&dyn Reflect> {
-        self.attributes.get(&id).map(core::ops::Deref::deref)
+        self.attributes.get(id).map(core::ops::Deref::deref)
     }
 
     /// Returns the number of stored attributes.

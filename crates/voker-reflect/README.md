@@ -4,8 +4,8 @@ This library implements a dynamic reflection system in Rust, designed to provide
 comprehensive runtime type information and data manipulation capabilities.
 
 While it's a general-purpose reflection system suitable for various scenarios,
-it's specifically designed for the VoidCraft Engine and may include
-platform-specific dependencies from VoidCraft that could be redundant in
+it's specifically designed for the voker Engine and may include
+platform-specific dependencies from voker that could be redundant in
 non-game-engine contexts.
 
 ## Goals

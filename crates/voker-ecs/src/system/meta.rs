@@ -37,51 +37,51 @@ impl Debug for SystemMeta {
 
 impl SystemMeta {
     #[inline]
-    pub fn new(name: SystemName) -> Self {
+    pub const fn new<T: 'static>() -> Self {
         Self {
-            name,
+            name: SystemName::of::<T>(),
             flags: SystemFlags::empty(),
             last_run: Tick::new(0),
         }
     }
 
     #[inline]
-    pub fn flags(&self) -> SystemFlags {
+    pub const fn flags(&self) -> SystemFlags {
         self.flags
     }
 
     #[inline]
-    pub fn name(&self) -> SystemName {
+    pub const fn name(&self) -> SystemName {
         self.name
     }
 
     #[inline]
-    pub fn get_last_run(&self) -> Tick {
+    pub const fn get_last_run(&self) -> Tick {
         self.last_run
     }
 
     #[inline]
-    pub fn set_last_run(&mut self, last_run: Tick) {
+    pub const fn set_last_run(&mut self, last_run: Tick) {
         self.last_run = last_run;
     }
 
     #[inline]
-    pub fn is_non_send(&self) -> bool {
+    pub const fn is_non_send(&self) -> bool {
         self.flags.intersects(SystemFlags::NON_SEND)
     }
 
     #[inline]
-    pub fn is_exclusive(&self) -> bool {
+    pub const fn is_exclusive(&self) -> bool {
         self.flags.intersects(SystemFlags::EXCLUSIVE)
     }
 
     #[inline]
-    pub fn set_non_send(&mut self) {
-        self.flags |= SystemFlags::NON_SEND;
+    pub const fn set_non_send(&mut self) {
+        self.flags = self.flags.union(SystemFlags::NON_SEND);
     }
 
     #[inline]
-    pub fn set_exclusive(&mut self) {
-        self.flags |= SystemFlags::EXCLUSIVE;
+    pub const fn set_exclusive(&mut self) {
+        self.flags = self.flags.union(SystemFlags::EXCLUSIVE);
     }
 }

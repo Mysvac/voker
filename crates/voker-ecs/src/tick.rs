@@ -131,7 +131,7 @@ impl Tick {
     /// ```
     #[inline]
     pub const fn is_newer_than(self, other: Tick, now: Tick) -> bool {
-        // `core::cmp::min` cannot currently be used in this `const fn`.
+        // `core::cmp::min` cannot be used in `const fn`.
         #[inline(always)]
         const fn min(x: u32, y: u32) -> u32 {
             if x < y { x } else { y }
@@ -147,10 +147,10 @@ impl Tick {
     ///
     /// `fall_back` should be computed as `now.relative_to(Tick::MAX_AGE)`.
     #[inline(always)]
-    pub(crate) fn quick_check(&mut self, now: Tick, fall_back: Tick) {
-        let age = now.relative_to(*self);
+    pub(crate) fn quick_check(this: &mut Tick, now: Tick, fall_back: Tick) {
+        let age = now.relative_to(*this);
         if age.0 > MAX_TICK_AGE {
-            *self = fall_back;
+            *this = fall_back;
         }
     }
 

@@ -86,3 +86,10 @@ pub(crate) fn schedule_label_(voker_ecs_path: &syn::Path) -> TokenStream {
         #voker_ecs_path::schedule::ScheduleLabel
     }
 }
+
+#[inline(always)]
+pub(crate) fn message_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::message::Message
+    }
+}

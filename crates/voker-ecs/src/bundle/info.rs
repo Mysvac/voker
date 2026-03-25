@@ -220,6 +220,12 @@ impl Bundles {
 
     /// Returns the bundle ID associated with a type ID, if it exists.
     pub fn get_id_by_type(&self, id: TypeId) -> Option<BundleId> {
-        self.type_mapper.get(&id).copied()
+        self.type_mapper.get(id).copied()
+    }
+
+    /// Returns an iterator over the BundleInfo.
+    #[inline]
+    pub fn iter(&self) -> core::slice::Iter<'_, BundleInfo> {
+        self.infos.iter()
     }
 }

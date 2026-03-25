@@ -1,5 +1,5 @@
 use crate::entity::{Entity, EntityError};
-use crate::utils::DebugCheckedUnwrap;
+use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::World;
 
 impl World {
@@ -25,50 +25,92 @@ impl World {
     /// # #[derive(Component, Debug)]
     /// # struct Foo;
     /// #
-    /// # let mut world = World::default();
+    /// let mut world = World::alloc();
+    ///
     /// let entity = world.spawn(Foo).entity();
     /// assert!(world.despawn(entity).is_ok());
     ///
     /// // Despawning the same entity again returns an error.
     /// assert!(world.despawn(entity).is_err());
     /// ```
+    #[track_caller]
     pub fn despawn(&mut self, entity: Entity) -> Result<(), EntityError> {
-        let location = unsafe { self.entities.set_despawned(entity)? };
-
-        let arche_id = location.arche_id;
-        let arche_row = location.arche_row;
-        let archetype = unsafe { self.archetypes.get_unchecked_mut(arche_id) };
-        let arche_moved = unsafe { archetype.remove_entity(arche_row) };
-
-        let table_id = location.table_id;
-        let table_row = location.table_row;
-        let table = unsafe { self.storages.tables.get_unchecked_mut(table_id) };
-        let table_moved = unsafe { table.swap_remove_and_drop(table_row) };
-
-        let maps = &mut self.storages.maps;
-        archetype
-            .sparse_components()
-            .iter()
-            .for_each(|&cid| unsafe {
-                let map_id = maps.get_id(cid).debug_checked_unwrap();
-                let map = maps.get_unchecked_mut(map_id);
-                let map_row = map.deallocate(entity).debug_checked_unwrap();
-                map.drop_item(map_row);
-            });
+        let entity = self.despawn_no_free(entity)?;
 
         let new_entity = unsafe { self.entities.free(entity.id(), 1) };
         self.allocator.free(new_entity);
+        Ok(())
+    }
 
-        let res1 = unsafe { self.entities.update_row(arche_moved) };
-        let res2 = unsafe { self.entities.update_row(table_moved) };
-        res1.and(res2)
+    /// Despawns an entity but do not reclaim [`Entity`] handle.
+    ///
+    /// - Returns [`EntityError`] if the cannot be despawned.
+    /// - Returens [`Entity`] that equivalent to input if despawn successed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::component::Component;
+    /// # use voker_ecs::world::World;
+    /// # #[derive(Component, Debug)]
+    /// # struct Foo;
+    /// #
+    /// let mut world = World::alloc();
+    ///
+    /// let entity = world.spawn(Foo).entity();
+    /// assert!(world.despawn_no_free(entity).is_ok());
+    /// assert!(world.despawn_no_free(entity).is_err());
+    ///
+    /// // reuse it
+    /// world.spawn_at(Foo, entity);
+    /// assert!(world.despawn(entity).is_ok());
+    /// ```
+    #[track_caller]
+    pub fn despawn_no_free(&mut self, entity: Entity) -> Result<Entity, EntityError> {
+        let location = unsafe { self.entities.set_despawned(entity)? };
+
+        let world = self.unsafe_world();
+
+        let guard = ForgetEntityOnPanic {
+            entity,
+            world,
+            location: DebugLocation::caller(),
+        };
+
+        let world = unsafe { world.full_mut() };
+
+        let arche_id = location.arche_id;
+        let arche_row = location.arche_row;
+        let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
+        let arche_moved = unsafe { arche.remove_entity(arche_row) };
+        let move_res1 = unsafe { world.entities.update_row(arche_moved) };
+
+        let table_id = location.table_id;
+        let table_row = location.table_row;
+        let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
+        let table_moved = unsafe { table.swap_remove_and_drop(table_row) };
+        let move_res2 = unsafe { world.entities.update_row(table_moved) };
+
+        let maps = &mut world.storages.maps;
+        arche.sparse_components().iter().for_each(|&cid| unsafe {
+            let map_id = maps.get_id(cid).debug_checked_unwrap();
+            let map = maps.get_unchecked_mut(map_id);
+            let map_row = map.deallocate(entity).unwrap();
+            map.drop_item(map_row);
+        });
+
+        ::core::mem::forget(guard);
+
+        move_res1?;
+        move_res2?;
+        Ok(entity)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::component::{Component, ComponentStorage};
-    use crate::world::{World, WorldIdAllocator};
+    use crate::world::World;
     use alloc::string::String;
     use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -101,7 +143,7 @@ mod tests {
             }
         }
 
-        let mut world = World::new(WorldIdAllocator::new().alloc());
+        let mut world = World::alloc();
 
         // Single
         DROP_COUNTER.store(0, Ordering::SeqCst);
@@ -139,7 +181,7 @@ mod tests {
             }
         }
 
-        let mut world = World::new(WorldIdAllocator::new().alloc());
+        let mut world = World::alloc();
 
         // Single
         DROP_COUNTER.store(0, Ordering::SeqCst);
@@ -187,7 +229,7 @@ mod tests {
             }
         }
 
-        let mut world = World::new(WorldIdAllocator::new().alloc());
+        let mut world = World::alloc();
         DENSE_COUNTER.store(0, Ordering::SeqCst);
         SPARSE_COUNTER.store(0, Ordering::SeqCst);
 

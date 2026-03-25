@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use core::panic::Location;
 
 use alloc::vec::Vec;
 
@@ -187,7 +188,7 @@ impl<'a> Commands<'a> {
 
     /// Allocates a new entity ID without spawning it.
     ///
-    /// This entity is uninitialized, can be used for [`Commands::spawn_in`].
+    /// This entity is uninitialized, can be used for [`Commands::spawn_at`].
     #[must_use]
     pub fn alloc_entity(&self) -> Entity {
         self.world.alloc_entity()
@@ -237,15 +238,15 @@ impl<'a> Commands<'a> {
     /// #
     /// fn example(mut commands: Commands) {
     ///     let entity = commands.alloc_entity();
-    ///     commands.spawn_in(Foo, entity);
+    ///     commands.spawn_at(Foo, entity);
     /// }
     /// ```
     #[inline]
     #[track_caller]
-    pub fn spawn_in<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityCommands<'_> {
+    pub fn spawn_at<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityCommands<'_> {
         self.buffer.push(CommandObject::new(move |world| {
             world.entities.can_spawn(entity)?;
-            world.spawn_in(bundle, entity);
+            world.spawn_at(bundle, entity);
             Ok(())
         }));
 
@@ -266,7 +267,7 @@ impl<'a> Commands<'a> {
     /// # struct Foo;
     /// #
     /// fn example(mut commands: Commands) {
-    ///     let entity_cmd = commands.spawn(Foo);
+    ///     let mut entity_cmd = commands.spawn(Foo);
     ///     entity_cmd.despawn();
     /// }
     /// ```
@@ -276,36 +277,57 @@ impl<'a> Commands<'a> {
         let entity = self.world.alloc_entity();
 
         self.buffer.push(CommandObject::new(move |world| {
-            world.spawn_in(bundle, entity);
+            world.spawn_at(bundle, entity);
             Ok(())
         }));
 
         self.with_entity(entity)
     }
 
-    /// Despawns an entity.
+    /// Spawns multiple entities from an iterator of bundles.
     ///
-    /// The entity and all its components will be removed.
-    /// Any subsequent operations on this entity will fail.
+    /// This command processes the entire batch when the command queue is executed.
+    /// Each bundle in the iterator will be used to spawn a new entity.
+    #[inline]
+    #[track_caller]
+    pub fn spawn_batch<I, B>(&mut self, batch: I)
+    where
+        B: Bundle,
+        I: IntoIterator<Item = B>,
+        I: Send + 'static,
+    {
+        self.buffer.push(CommandObject::new(move |world| {
+            let iter = world.spawn_batch(batch);
+            iter.for_each(|_| {});
+            Ok(())
+        }));
+    }
+
+    /// Despawns an entity, removing it and all its components.
+    ///
+    /// The entity becomes invalid after despawn. If the entity does
+    /// not exist, a warning is logged but the command succeeds.
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// use voker_ecs::prelude::*;
     ///
-    /// # #[derive(Component)]
-    /// # struct Foo;
-    /// #
     /// fn example(mut commands: Commands) {
-    ///     let entity = commands.spawn(Foo).entity();
+    ///     let entity = commands.spawn(()).entity();
     ///     commands.despawn(entity);
     /// }
     /// ```
     #[inline]
     #[track_caller]
     pub fn despawn(&mut self, entity: Entity) {
+        let location = Location::caller();
         self.buffer.push(CommandObject::new(move |world| {
-            world.despawn(entity).map_err(Into::into)
+            if let Err(e) = world.despawn(entity) {
+                voker_utils::cold_path();
+                log::warn!("{e}: {location}");
+            }
+            Ok(())
         }));
     }
 
@@ -331,6 +353,38 @@ impl<'a> Commands<'a> {
     pub fn try_despawn(&mut self, entity: Entity) {
         self.buffer.push(CommandObject::new(move |world| {
             let _ = world.despawn(entity);
+            Ok(())
+        }));
+    }
+
+    /// Despawns multiple entities in a single batch operation.
+    ///
+    /// The entity becomes invalid after despawn. If the entity does
+    /// not exist, a warning is logged but the command succeeds.
+    #[inline]
+    #[track_caller]
+    pub fn despawn_batch<I>(&mut self, entities: I)
+    where
+        I: Send + 'static,
+        I: IntoIterator<Item = Entity>,
+    {
+        let location = Location::caller();
+        self.buffer.push(CommandObject::new(move |world| {
+            let vec = entities
+                .into_iter()
+                .filter_map(|entity| {
+                    world
+                        .despawn_no_free(entity)
+                        .map_err(|e| {
+                            voker_utils::cold_path();
+                            log::warn!("{e}: {location}");
+                        })
+                        .ok()
+                })
+                .collect::<Vec<Entity>>();
+
+            world.allocator.free_many(&vec);
+
             Ok(())
         }));
     }

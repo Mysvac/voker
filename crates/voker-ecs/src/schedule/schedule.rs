@@ -498,7 +498,9 @@ impl Schedule {
     ///
     /// Returns `true` if this is a new insertion, `false` if an existing system
     /// with the same name was replaced.
-    pub fn insert(&mut self, name: SystemName, system: UnitSystem) -> bool {
+    pub fn insert(&mut self, system: UnitSystem) -> bool {
+        let name = system.name();
+
         if !self.is_changed {
             self.recycle_schedule();
             self.is_changed = true;
@@ -526,24 +528,6 @@ impl Schedule {
             );
             true
         }
-    }
-
-    /// Adds a system using its Rust type name as [`SystemName`].
-    ///
-    /// Returns the generated name used for insertion.
-    ///
-    /// It is usually **not recommended** to use this function
-    /// because the system name is often unreadable.
-    ///
-    /// Recommended only for testing or documentation purposes.
-    pub fn add_system<S, M>(&mut self, system: S) -> SystemName
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        let name = SystemName::new(core::any::type_name::<S>());
-        let unit_system = Box::new(IntoSystem::into_system(system, name));
-        self.insert(name, unit_system);
-        name
     }
 
     /// Adds an explicit ordering edge: `before -> after`.
@@ -606,6 +590,43 @@ impl Schedule {
     /// Returns the explicit ordering graph (without conflict-derived edges).
     pub fn order_graph(&self) -> &Dag<SystemKey> {
         &self.ordering.ordering
+    }
+}
+
+impl Schedule {
+    /// Adds a system using its Rust type name as [`SystemName`].
+    pub fn add_system<S, M>(&mut self, system: S) -> &mut Self
+    where
+        S: IntoSystem<(), (), M>,
+    {
+        self.insert(Box::new(IntoSystem::into_system(system)));
+        self
+    }
+
+    pub fn del_system<S, M>(&mut self, system: S) -> &mut Self
+    where
+        S: IntoSystem<(), (), M>,
+    {
+        self.remove(system.system_name());
+        self
+    }
+
+    pub fn add_order<X, Y, M1, M2>(&mut self, x: X, y: Y) -> &mut Self
+    where
+        X: IntoSystem<(), (), M1>,
+        Y: IntoSystem<(), (), M2>,
+    {
+        self.insert_order(x.system_name(), y.system_name());
+        self
+    }
+
+    pub fn del_order<X, Y, M1, M2>(&mut self, x: X, y: Y) -> &mut Self
+    where
+        X: IntoSystem<(), (), M1>,
+        Y: IntoSystem<(), (), M2>,
+    {
+        self.remove_order(x.system_name(), y.system_name());
+        self
     }
 }
 

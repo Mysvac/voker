@@ -16,7 +16,7 @@ use quote::quote;
 /// we have to scan the builder's `cargo.toml`.
 ///
 /// 1. For crates that depend on `voker_reflect`, `::voker_reflect` is returned here`.
-/// 2. For crates that depend on `voidcraft`, `::voidcraft::reflect` is returned here`.
+/// 2. For crates that depend on `voker`, `::voker::reflect` is returned here`.
 /// 3. For crates that depend on `void_craft`, `::void_craft::reflect` is returned here`.
 /// 4. For crates that depend on `vc`, `::vc::reflect` is returned here`.
 /// 5. For other situations, `::voker_reflect` is returned here, but this may be incorrect.

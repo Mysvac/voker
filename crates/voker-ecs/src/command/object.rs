@@ -59,8 +59,3 @@ impl CommandObject {
         (self.function)(world)
     }
 }
-
-const _STATIC_ASSERT_: () = const {
-    const fn is_send<T: Send>() {}
-    is_send::<CommandObject>();
-};

@@ -262,9 +262,7 @@ impl SystemExecutor for MultiThreadedExecutor {
             .unwrap_or_else(PoisonError::into_inner)
             .reset(schedule);
 
-        let main_thread_executor = world
-            .get_resource::<MainThreadExecutor>()
-            .map(|e| e.0.clone());
+        let main_thread_executor = world.resource::<MainThreadExecutor>().map(|e| e.0.clone());
         let external_executor = main_thread_executor.as_deref();
 
         let task_pool = ComputeTaskPool::get_or_init(TaskPool::default);

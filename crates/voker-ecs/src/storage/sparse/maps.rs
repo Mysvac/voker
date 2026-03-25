@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::iter::FusedIterator;
 
 use voker_utils::hash::SparseHashMap;
 
@@ -87,6 +88,24 @@ impl Maps {
     #[inline]
     pub fn get_id(&self, component: ComponentId) -> Option<MapId> {
         self.mapper.get(&component).copied()
+    }
+
+    /// Returns an iterator over the tables.
+    #[inline]
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (MapId, &Map)> + FusedIterator {
+        self.maps
+            .iter()
+            .enumerate()
+            .map(|(id, table)| (MapId::new(id as u32), table))
+    }
+
+    /// Returns an iterator that allows modifying each table.
+    #[inline]
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (MapId, &mut Map)> + FusedIterator {
+        self.maps
+            .iter_mut()
+            .enumerate()
+            .map(|(id, table)| (MapId::new(id as u32), table))
     }
 
     /// Prepares a new map for a component type if it doesn't already exist.

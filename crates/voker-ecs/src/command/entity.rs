@@ -61,13 +61,11 @@ impl<'a> EntityCommands<'a> {
     }
 
     /// Returns the world ID associated with this command buffer.
-    #[must_use]
     pub fn world_id(&self) -> WorldId {
         self.commands.world_id()
     }
 
     /// Returns the target entity of this command proxy.
-    #[must_use]
     pub fn entity(&self) -> Entity {
         self.entity
     }
@@ -107,7 +105,7 @@ impl<'a> EntityCommands<'a> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn push<F>(&mut self, func: F)
+    pub fn push<F>(&mut self, func: F) -> &'_ mut EntityCommands<'a>
     where
         F: Send + 'static,
         F: FnOnce(EntityOwned) -> Result<(), EcsError>,
@@ -121,23 +119,81 @@ impl<'a> EntityCommands<'a> {
                 location,
             })
         });
+        self
+    }
+
+    /// Pushes a custom deferred operation for this entity.
+    ///
+    /// If the entity is not spawn, the command will be skipped.
+    #[inline]
+    #[track_caller]
+    pub fn try_push<F>(&mut self, func: F) -> &'_ mut EntityCommands<'a>
+    where
+        F: Send + 'static,
+        F: FnOnce(EntityOwned) -> Result<(), EcsError>,
+    {
+        let entity = self.entity;
+        self.commands.push(move |world| {
+            if let Ok(location) = world.entities.locate(entity) {
+                func(EntityOwned {
+                    world: world.into(),
+                    entity,
+                    location,
+                })
+            } else {
+                Ok(())
+            }
+        });
+        self
     }
 
     /// Despawns the target entity.
     ///
     /// The entity and all its components will be removed.
     /// Any subsequently queued operations for this entity may fail.
+    ///
+    /// Note that this function will log failure, but not panic.
     #[inline]
     #[track_caller]
-    pub fn despawn(mut self) {
+    pub fn despawn(&mut self) -> &'_ mut EntityCommands<'a> {
         self.commands.despawn(self.entity);
+        self
     }
 
     /// Attempts to despawn the target entity, silently ignoring failures.
     #[inline]
     #[track_caller]
-    pub fn try_despawn(mut self) {
+    pub fn try_despawn(&mut self) -> &'_ mut EntityCommands<'a> {
         self.commands.try_despawn(self.entity);
+        self
+    }
+
+    /// Spawns an entity with the given bundle.
+    ///
+    /// The command will panic if spawn failed.
+    #[inline]
+    #[track_caller]
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> &'_ mut EntityCommands<'a> {
+        let entity = self.entity;
+        self.commands.push(move |world| {
+            world.spawn_at(bundle, entity);
+            Ok(())
+        });
+        self
+    }
+
+    /// Spawns an entity with the given bundle if the entity is valid.
+    #[inline]
+    #[track_caller]
+    pub fn try_spawn<B: Bundle>(&mut self, bundle: B) -> &'_ mut EntityCommands<'a> {
+        let entity = self.entity;
+        self.commands.push(move |world| {
+            if world.entities.can_spawn(entity).is_ok() {
+                world.spawn_at(bundle, entity);
+            }
+            Ok(())
+        });
+        self
     }
 
     /// Inserts a bundle into the target entity.
@@ -159,11 +215,12 @@ impl<'a> EntityCommands<'a> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn insert<B: Bundle>(&mut self, bundle: B) {
+    pub fn insert<B: Bundle>(&mut self, bundle: B) -> &'_ mut EntityCommands<'a> {
         self.push(move |mut entity| {
             entity.insert(bundle);
             Ok(())
         });
+        self
     }
 
     /// Removes a bundle from the target entity.
@@ -185,10 +242,11 @@ impl<'a> EntityCommands<'a> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn remove<B: Bundle>(&mut self) {
+    pub fn remove<B: Bundle>(&mut self) -> &'_ mut EntityCommands<'a> {
         self.push(move |mut entity| {
             entity.remove::<B>();
             Ok(())
         });
+        self
     }
 }

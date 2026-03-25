@@ -9,8 +9,8 @@
 //! The design keeps runtime APIs generic while preserving rich context for
 //! logging and debugging.
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::string::ToString;
 use core::error::Error;
 use core::fmt::{Debug, Display};
@@ -23,13 +23,13 @@ use crate::tick::Tick;
 use crate::utils::Cloner;
 
 // -----------------------------------------------------------------------------
-// EcsError
+// EcsResult
 
 /// Convenient result type for ECS operations.
 pub type EcsResult<T> = Result<T, EcsError>;
 
 // -----------------------------------------------------------------------------
-// ECSResult
+// EcsError
 
 /// Type-erased ECS error container.
 ///
@@ -122,10 +122,10 @@ impl ErrorContext {
     ///
     /// For systems, this is the system name.
     /// For commands, this is the call-site location string.
-    pub fn name(&self) -> Cow<'static, str> {
+    pub fn name(&self) -> String {
         match self {
-            Self::System { name, .. } => Cow::Borrowed(name.as_str()),
-            Self::Command { location, .. } => Cow::Owned(location.to_string()),
+            Self::System { name, .. } => name.to_string(),
+            Self::Command { location, .. } => location.to_string(),
         }
     }
 

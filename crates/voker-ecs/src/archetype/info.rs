@@ -249,7 +249,7 @@ impl Archetype {
                     }
                 }
                 // index + (step >> 1) < len
-                // index + min(step >> 1, 1) <= len
+                // index + max(step >> 1, 1) <= len
                 index += core::cmp::max(step >> 1, 1);
             }
         }
@@ -305,6 +305,20 @@ impl Archetype {
         &self.entities
     }
 
+    /// Finds the row index for a given entity using linear search.
+    ///
+    /// # Complexity
+    /// O(n) where n is the number of entities
+    ///
+    /// Note: This is inefficient and should be avoided.
+    #[must_use]
+    pub fn get_arche_row(&self, entity: Entity) -> Option<ArcheRow> {
+        self.entities
+            .iter()
+            .position(|e| *e == entity)
+            .map(|idx| ArcheRow(idx as u32))
+    }
+
     /// Returns the entity at the specified archetype row.
     ///
     /// # Safety
@@ -314,6 +328,7 @@ impl Archetype {
     /// # Complexity
     /// - Time: O(1)
     /// - Space: O(1)
+    #[must_use]
     pub unsafe fn entity_at(&mut self, row: ArcheRow) -> Entity {
         debug_assert!((row.0 as usize) < self.entities.len());
         unsafe { *self.entities.get_unchecked(row.0 as usize) }
@@ -349,6 +364,7 @@ impl Archetype {
     /// # Complexity
     /// - Time: O(1)
     /// - Space: O(1)
+    #[must_use]
     pub unsafe fn insert_entity(&mut self, entity: Entity) -> ArcheRow {
         let row = ArcheRow(self.entities.len() as u32);
         self.entities.push(entity);
@@ -385,6 +401,7 @@ impl Archetype {
     /// # Complexity
     /// - Time: O(1)
     /// - Space: O(1)
+    #[must_use]
     pub unsafe fn remove_entity(&mut self, row: ArcheRow) -> MovedEntityRow {
         debug_assert!((row.0 as usize) < self.entities.len());
 

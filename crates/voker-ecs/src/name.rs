@@ -6,16 +6,27 @@ use core::hash::{BuildHasher, Hash};
 use core::ops::Deref;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use voker_ecs_derive::Component;
 use voker_reflect::Reflect;
 use voker_utils::hash::FixedHashState;
 
-#[derive(Reflect, Component, Clone)]
+use crate::component::Component;
+use crate::utils::Cloner;
+
+/// A pre-built component for representing names.
+///
+/// This component stores a name string along with its precomputed hash value,
+/// providing efficient comparison and lookup operations. The hash is computed
+/// automatically and cached to avoid repeated hashing overhead.
+#[derive(Reflect, Clone)]
 #[reflect(Opaque, full)]
-#[component(Clone)]
 pub struct Name {
     name: Cow<'static, str>,
     hash: u64,
+}
+
+/// Manually implement to accelerate compilation.
+impl Component for Name {
+    const CLONER: Option<Cloner> = Some(Cloner::clonable::<Self>());
 }
 
 impl Hash for Name {
@@ -45,14 +56,12 @@ impl Ord for Name {
 }
 
 impl Display for Name {
-    #[inline(always)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         Display::fmt(self.as_str(), f)
     }
 }
 
 impl Debug for Name {
-    #[inline(always)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         Debug::fmt(self.as_str(), f)
     }
@@ -82,7 +91,7 @@ impl Name {
     /// Sets the entity's name.
     ///
     /// The internal hash will be re-computed.
-    #[inline(always)]
+    #[inline]
     pub fn set(&mut self, name: impl Into<Cow<'static, str>>) {
         *self = Name::new(name);
     }
@@ -90,49 +99,44 @@ impl Name {
     /// Updates the name of the entity in place.
     ///
     /// The internal hash will be re-computed.
-    #[inline(always)]
+    #[inline]
     pub fn mutate<F: FnOnce(&mut String)>(&mut self, f: F) {
         f(self.name.to_mut());
         self.update_hash();
     }
 
     /// Gets the name of the entity as a `&str`.
-    #[inline(always)]
+    #[inline]
     pub fn as_str(&self) -> &str {
         &self.name
     }
 }
 
 impl AsRef<str> for Name {
-    #[inline(always)]
     fn as_ref(&self) -> &str {
         &self.name
     }
 }
 
 impl From<&str> for Name {
-    #[inline(always)]
     fn from(name: &str) -> Self {
         Name::new(String::from(name))
     }
 }
 
 impl From<String> for Name {
-    #[inline(always)]
     fn from(name: String) -> Self {
         Name::new(name)
     }
 }
 
 impl From<&Name> for String {
-    #[inline(always)]
     fn from(val: &Name) -> String {
         String::from(val.as_str())
     }
 }
 
 impl From<Name> for String {
-    #[inline(always)]
     fn from(val: Name) -> String {
         val.name.into_owned()
     }

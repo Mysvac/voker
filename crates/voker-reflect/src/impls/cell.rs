@@ -182,7 +182,7 @@ macro_rules! impl_generic_cell {
                 self.0
                     .read()
                     .unwrap_or_else(PoisonError::into_inner)
-                    .get(&type_id)
+                    .get(type_id)
                     .copied()
             }
 

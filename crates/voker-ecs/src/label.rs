@@ -21,7 +21,7 @@ pub trait Internable: Hash + Eq + 'static {
     /// Returns `true` if the two references point to the same value.
     fn ref_eq(&self, other: &Self) -> bool;
     /// Feeds the reference to the hasher.
-    fn ref_hash<H: Hasher>(&self, state: &mut H);
+    fn ref_hash(&self, state: &mut dyn Hasher);
 }
 
 // -----------------------------------------------------------------------------
@@ -232,6 +232,12 @@ macro_rules! define_label {
             }
         }
 
+        impl ::core::hash::Hash for dyn $label_trait_name {
+            fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+                self.dyn_hash(state);
+            }
+        }
+
         impl ::core::cmp::PartialEq for dyn $label_trait_name {
             fn eq(&self, other: &Self) -> bool {
                 self.dyn_eq(other)
@@ -239,12 +245,6 @@ macro_rules! define_label {
         }
 
         impl ::core::cmp::Eq for dyn $label_trait_name {}
-
-        impl ::core::hash::Hash for dyn $label_trait_name {
-            fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
-                self.dyn_hash(state);
-            }
-        }
 
         impl $crate::label::Internable for dyn $label_trait_name {
             fn leak(&self) -> &'static Self {
@@ -259,14 +259,14 @@ macro_rules! define_label {
                 self.type_id() == other.type_id() && ::core::ptr::addr_eq(x_ptr, y_ptr)
             }
 
-            fn ref_hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+            fn ref_hash(&self, mut state: &mut dyn ::core::hash::Hasher) {
                 // Hash the type id...
-                ::core::hash::Hash::hash(&self.type_id(), state);
+                ::core::hash::Hash::hash(&self.type_id(), &mut state);
 
                 // ...and the pointer address.
                 // Cast to a unit `()` first to discard any pointer metadata.
                 let ptr = ::core::ptr::from_ref::<Self>(self) as *const ();
-                ::core::hash::Hash::hash(&ptr, state);
+                ::core::hash::Hash::hash(&ptr, &mut state);
             }
         }
 
@@ -298,8 +298,8 @@ mod tests {
                 core::ptr::eq(self, other)
             }
 
-            fn ref_hash<H: Hasher>(&self, state: &mut H) {
-                core::ptr::hash(self, state);
+            fn ref_hash(&self, mut state: &mut dyn Hasher) {
+                core::ptr::hash(self, &mut state);
             }
         }
 
@@ -329,8 +329,8 @@ mod tests {
                 core::ptr::eq(self, other)
             }
 
-            fn ref_hash<H: Hasher>(&self, state: &mut H) {
-                core::ptr::hash(self, state);
+            fn ref_hash(&self, mut state: &mut dyn Hasher) {
+                core::ptr::hash(self, &mut state);
             }
         }
 

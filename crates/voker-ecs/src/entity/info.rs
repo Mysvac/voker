@@ -344,6 +344,18 @@ impl Entities {
         }
         Ok(())
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Entity, EntityLocation)> {
+        self.infos.iter().enumerate().filter_map(|(idx, info)| {
+            if let Some(location) = info.location {
+                let temp = Entity::from_bits(idx as u64);
+                let entity = Entity::new(temp.id(), info.generation);
+                Some((entity, location))
+            } else {
+                None
+            }
+        })
+    }
 }
 
 // -----------------------------------------------------------------------------

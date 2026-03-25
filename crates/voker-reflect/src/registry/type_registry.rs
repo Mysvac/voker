@@ -172,7 +172,7 @@ impl TypeRegistry {
     /// This method will _not_ register type dependencies.
     /// Use [`register`](Self::register) to register a type with its dependencies.
     pub fn insert_type_meta(&mut self, type_meta: TypeMeta) {
-        if !self.type_meta_table.contains(&type_meta.type_id()) {
+        if !self.type_meta_table.contains(type_meta.type_id()) {
             Self::add_new_type_indices(
                 &type_meta,
                 &mut self.type_path_to_id,
@@ -261,7 +261,7 @@ impl TypeRegistry {
     ///     .register_type_trait::<Option<String>, ReflectDeserialize>();
     /// ```
     pub fn register_type_trait<T: Typed, D: TypeTrait + FromType<T>>(&mut self) -> &mut Self {
-        match self.type_meta_table.get_mut(&TypeId::of::<T>()) {
+        match self.type_meta_table.get_mut(TypeId::of::<T>()) {
             Some(type_meta) => type_meta.insert_trait(D::from_type()),
             None => panic!(
                 "Called `TypeRegistry::register_type_trait`, but the type `{}` of type_trait `{}` without registering",
@@ -342,7 +342,7 @@ impl TypeRegistry {
     /// Whether the type with given [`TypeId`] has been registered in this registry.
     #[inline]
     pub fn contains(&self, type_id: TypeId) -> bool {
-        self.type_meta_table.contains(&type_id)
+        self.type_meta_table.contains(type_id)
     }
 
     /// Returns a reference to the [`TypeMeta`] of the type with
@@ -351,7 +351,7 @@ impl TypeRegistry {
     /// If the specified type has not been registered, returns `None`.
     #[inline]
     pub fn get(&self, type_id: TypeId) -> Option<&TypeMeta> {
-        self.type_meta_table.get(&type_id)
+        self.type_meta_table.get(type_id)
     }
 
     /// Returns a mutable reference to the [`TypeMeta`] of the type with
@@ -360,7 +360,7 @@ impl TypeRegistry {
     /// If the specified type has not been registered, returns `None`.
     #[inline]
     pub fn get_mut(&mut self, type_id: TypeId) -> Option<&mut TypeMeta> {
-        self.type_meta_table.get_mut(&type_id)
+        self.type_meta_table.get_mut(type_id)
     }
 
     /// Returns a reference to the [`TypeMeta`] of the type with

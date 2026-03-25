@@ -235,8 +235,8 @@ pub struct FunctionSystem<M, F: SystemFunction<M>> {
 }
 
 impl<M, F: SystemFunction<M>> FunctionSystem<M, F> {
-    pub fn new(func: F, name: SystemName) -> Self {
-        let mut meta = SystemMeta::new(name);
+    pub fn new(func: F) -> Self {
+        let mut meta = SystemMeta::new::<F>();
         if <F::Param as SystemParam>::EXCLUSIVE {
             meta.set_exclusive();
         }
@@ -332,10 +332,14 @@ fn mismatched_world(name: SystemName, init: WorldId, run: WorldId) -> ! {
 // -----------------------------------------------------------------------------
 // FunctionSystem
 
-impl<M: 'static, F: SystemFunction<M>> IntoSystem<F::Input, F::Output, M> for F {
+impl<M: 'static, F: SystemFunction<M>> IntoSystem<F::Input, F::Output, (M, fn())> for F {
     type System = FunctionSystem<M, F>;
 
-    fn into_system(this: Self, name: SystemName) -> Self::System {
-        FunctionSystem::new(this, name)
+    fn into_system(this: Self) -> Self::System {
+        FunctionSystem::new(this)
+    }
+
+    fn system_name(&self) -> SystemName {
+        SystemName::of::<F>()
     }
 }

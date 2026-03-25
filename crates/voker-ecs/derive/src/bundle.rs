@@ -1,47 +1,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, Generics, Index, parse_quote};
-use syn::{
-    Ident, Type,
-    visit::{self, Visit},
-};
+use syn::{Data, DeriveInput, parse_quote};
+use syn::{Fields, Ident, Index, Type};
 
-struct IdentFinder<'a> {
-    idents: &'a [Ident],
-    found: bool,
-}
-
-impl<'a> Visit<'a> for IdentFinder<'a> {
-    fn visit_ident(&mut self, ident: &'a Ident) {
-        if !self.found {
-            self.found = self.idents.contains(ident);
-        }
-    }
-
-    fn visit_type(&mut self, ty: &'a Type) {
-        if !self.found {
-            visit::visit_type(self, ty);
-        }
-    }
-}
-
-fn contains_any_idents(ty: &Type, idents: &[Ident]) -> bool {
-    let mut finder = IdentFinder {
-        idents,
-        found: false,
-    };
-    finder.visit_type(ty);
-    finder.found
-}
-
-fn add_bundle_constraint(generics: &mut Generics, ty: &Type, bundle_: &TokenStream) {
-    generics
-        .make_where_clause()
-        .predicates
-        .push(parse_quote! { #ty: #bundle_ });
-}
+use crate::utils::{contains_any_idents, field_type_constraint};
 
 pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
+    use crate::path::fp::{SendFP, SyncFP};
+
     let voker_ecs_path = crate::path::voker_ecs();
     let bundle_ = crate::path::bundle_(&voker_ecs_path);
     let component_collector_ = crate::path::component_collector_(&voker_ecs_path);
@@ -59,7 +25,7 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote! { Self: Send + Sync + Sized + 'static });
+            .push(parse_quote! { Self: #SendFP + #SyncFP + Sized + 'static });
     } else if generics.lifetimes().next().is_some() {
         generics
             .make_where_clause()
@@ -76,7 +42,7 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
                     let ident = field.ident.as_ref().unwrap();
                     let ty = &field.ty;
                     if contains_any_idents(ty, &type_param_idents) {
-                        add_bundle_constraint(&mut generics, ty, &bundle_);
+                        field_type_constraint(&mut generics, ty, &bundle_);
                     }
                     (quote! { #ident }, ty)
                 })
@@ -89,7 +55,7 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
                     let index = Index::from(i);
                     let ty = &field.ty;
                     if contains_any_idents(ty, &type_param_idents) {
-                        add_bundle_constraint(&mut generics, ty, &bundle_);
+                        field_type_constraint(&mut generics, ty, &bundle_);
                     }
                     (quote! { #index }, ty)
                 })
@@ -97,11 +63,14 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
             Fields::Unit => {
                 let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
                 return quote! {
-                    unsafe impl #impl_generics #bundle_ for #type_ident #ty_generics #where_clause {
-                        fn collect_components(_collector: &mut #component_collector_) {}
-                        unsafe fn write_explicit(_writer: &mut #component_writer_, _base: usize) {}
-                        unsafe fn write_required(_writer: &mut #component_writer_) {}
-                    }
+                    const _: () = {
+                        #[expect(unsafe_code, reason = "bundle implementation is unsafe.")]
+                        unsafe impl #impl_generics #bundle_ for #type_ident #ty_generics #where_clause {
+                            fn collect_components(_collector: &mut #component_collector_) {}
+                            unsafe fn write_explicit(_writer: &mut #component_writer_, _base: usize) {}
+                            unsafe fn write_required(_writer: &mut #component_writer_) {}
+                        }
+                    };
                 }
                 .into();
             }

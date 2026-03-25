@@ -99,13 +99,14 @@ impl EntityError {
 
 macro_rules! impl_from {
     ($name:ident, $variant:ident) => {
-        impl From<EntityError> for $name {
+        impl TryFrom<EntityError> for $name {
+            type Error = EntityError;
             #[inline]
-            fn from(value: EntityError) -> Self {
+            fn try_from(value: EntityError) -> Result<Self, Self::Error> {
                 if let EntityError::$variant(ret) = value {
-                    ret
+                    Ok(ret)
                 } else {
-                    value.handle_error();
+                    Err(value)
                 }
             }
         }

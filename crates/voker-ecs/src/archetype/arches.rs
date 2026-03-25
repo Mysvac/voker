@@ -205,8 +205,21 @@ impl Archetypes {
         self.bundle_map.get(id.index()).and_then(|t| *t)
     }
 
+    /// Returns an iterator over the Archetypes.
+    #[inline]
+    pub fn iter(&self) -> core::slice::Iter<'_, Archetype> {
+        self.arches.iter()
+    }
+
+    /// Returns an iterator that allows modifying each Archetype.
+    #[inline]
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, Archetype> {
+        self.arches.iter_mut()
+    }
+
     /// Creates a new filter builder for querying archetypes by component requirements.
     #[inline]
+    #[must_use]
     pub fn filter(&self) -> ArcheFilter<'_> {
         ArcheFilter {
             arches: self,

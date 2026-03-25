@@ -1,6 +1,6 @@
 use crate::archetype::ArcheId;
 use crate::bundle::Bundle;
-use crate::utils::DebugCheckedUnwrap;
+use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::EntityOwned;
 
 impl EntityOwned<'_> {
@@ -31,7 +31,7 @@ impl EntityOwned<'_> {
     /// # struct Foo;
     /// # #[derive(Component, Debug)]
     /// # struct Bar;
-    /// let mut world = World::default();
+    /// let mut world = World::alloc();
     ///
     /// let mut entity = world.spawn((Foo, Bar));
     /// assert!(entity.contains::<Bar>());
@@ -39,15 +39,24 @@ impl EntityOwned<'_> {
     /// entity.remove::<Bar>();
     /// assert!(!entity.contains::<Bar>());
     /// ```
+    #[track_caller]
     pub fn remove<B: Bundle>(&mut self) {
         let world = unsafe { self.world.full_mut() };
         let bundle_id = world.register_bundle::<B>();
         let old_arche_id = self.location.arche_id;
         let new_arche_id = world.arche_after_remove(old_arche_id, bundle_id);
 
+        let guard = ForgetEntityOnPanic {
+            entity: self.entity,
+            world: self.world,
+            location: DebugLocation::caller(),
+        };
+
         if old_arche_id != new_arche_id {
             self.remove_moved(new_arche_id);
         }
+
+        ::core::mem::forget(guard);
     }
 
     #[inline(never)]

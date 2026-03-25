@@ -12,9 +12,10 @@ use voker_utils::hash::{SparseHashMap, SparseHashSet};
 
 use crate::component::{Component, ComponentId, ComponentStorage, Components};
 use crate::entity::Entity;
-use crate::storage::{Maps, Table, TableRow};
+use crate::storage::{Maps, Table, TableId, TableRow};
 use crate::tick::Tick;
 use crate::utils::DebugCheckedUnwrap;
+use crate::world::{UnsafeWorld, World};
 
 // -----------------------------------------------------------------------------
 // ComponentRegistrar
@@ -183,13 +184,14 @@ enum WritedState {
 /// - Offsets must be valid within the data buffer
 /// - Entity must be properly prepared to receive components
 pub struct ComponentWriter<'a> {
+    world: UnsafeWorld<'a>,
     data: OwningPtr<'a>,
-    components: &'a Components,
-    maps: &'a mut Maps,
-    table: &'a mut Table,
     entity: Entity,
-    table_row: TableRow,
     tick: Tick,
+    table_row: TableRow,
+    table: &'a mut Table,
+    maps: &'a mut Maps,
+    components: &'a Components,
     writed: SparseHashMap<ComponentId, WritedState>,
 }
 
@@ -198,22 +200,28 @@ impl ComponentWriter<'_> {
     /// Guaranteed by the caller.
     #[inline]
     pub unsafe fn new<'a>(
+        world: UnsafeWorld<'a>,
         data: OwningPtr<'a>,
         entity: Entity,
+        table_id: TableId,
         table_row: TableRow,
-        tick: Tick,
-        maps: &'a mut Maps,
-        table: &'a mut Table,
-        components: &'a Components,
     ) -> ComponentWriter<'a> {
+        let world_mut = unsafe { world.data_mut() };
+        // Strictly speaking, writer runing `data_mut`,
+        // intead of `full_mut`, cannot use `this_run_fast`.
+        let tick = world_mut.this_run();
+        let table = unsafe { world_mut.storages.tables.get_unchecked_mut(table_id) };
+        let maps = &mut world_mut.storages.maps;
+        let components = &world_mut.components;
         ComponentWriter {
+            world,
             data,
-            components,
-            maps,
-            table,
             entity,
-            table_row,
             tick,
+            table_row,
+            table,
+            maps,
+            components,
             writed: SparseHashMap::new(),
         }
     }
@@ -244,11 +252,11 @@ impl ComponentWriter<'_> {
     /// - `T` must be part of the target entity layout.
     /// - `T` must be registered and storage for it must be prepared.
     #[inline(never)]
-    pub unsafe fn write_required<T: Component>(&mut self, func: impl FnOnce() -> T) {
+    pub unsafe fn write_required<T: Component>(&mut self, func: impl FnOnce(&World) -> T) {
         let type_id = TypeId::of::<T>();
         let component = unsafe { self.components.get_id(type_id).debug_checked_unwrap() };
         if !self.writed.contains_key(&component) {
-            let data = func();
+            let data = func(unsafe { self.world.read_only() });
             voker_ptr::into_owning!(data);
             match T::STORAGE {
                 ComponentStorage::Dense => unsafe {

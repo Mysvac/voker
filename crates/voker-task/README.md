@@ -1,7 +1,7 @@
-# A refreshingly simple task executor for VoidCraft
+# A refreshingly simple task executor for voker
 
 This is a lightweight threadpool implementation with minimal dependencies, designed specifically
-for VoidCraft as a lighter alternative to `rayon` for fork-join parallelism patterns.
+for voker as a lighter alternative to `rayon` for fork-join parallelism patterns.
 The primary use case involves spawning tasks from a single thread and having that thread
 await their completion. This library is game-oriented and makes no guarantees about
 task fairness or execution order.

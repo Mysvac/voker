@@ -9,7 +9,7 @@
 //! may have some differences - for example, container sizes might differ from those in the standard library.
 //!
 //! Considering the update pace of the standard library, some newer APIs may not be immediately available;
-//! please submit an Issue in the [repository](https://github.com/VoidCraft-Engine/vc-core) for such cases.
+//! please submit an Issue in the [repository](https://github.com/voker-Engine/vc-core) for such cases.
 //!
 //! See the [standard library] for further details.
 //!

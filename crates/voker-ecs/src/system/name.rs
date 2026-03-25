@@ -1,86 +1,70 @@
-use alloc::string::String;
+use core::any::TypeId;
 use core::fmt::{Debug, Display};
-use core::hash::{BuildHasher, Hash};
-use core::ops::Deref;
+use core::hash::Hash;
 
-use voker_utils::hash::FixedHashState;
+use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // SystemName
 
 /// A unique identifier for a system.
-///
-/// `SystemName` provides an efficient, hashable representation of system names
-/// for use in debugging, scheduling, and system identification. It precomputes
-/// a hash using a fixed seed, making it suitable for use in hash maps and sets
-/// without runtime hashing overhead.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy)]
 pub struct SystemName {
-    name: &'static str,
-    hash: u64,
+    name: DebugName,
+    type_id: TypeId,
+}
+
+impl PartialEq for SystemName {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_id == other.type_id
+    }
+}
+
+impl Eq for SystemName {}
+
+impl PartialOrd for SystemName {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SystemName {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.type_id.cmp(&other.type_id)
+    }
 }
 
 impl Hash for SystemName {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.hash);
+        self.type_id.hash(state);
     }
 }
 
 impl SystemName {
-    /// Creates a new `SystemName` from a static string.
-    pub fn new(name: &'static str) -> Self {
+    pub const fn of<T: 'static>() -> Self {
         Self {
-            name,
-            hash: FixedHashState.hash_one(name),
+            name: DebugName::type_name::<T>(),
+            type_id: TypeId::of::<T>(),
         }
     }
 
-    /// Returns the underlying static string slice.
-    pub fn as_str(&self) -> &'static str {
+    pub const fn type_id(&self) -> TypeId {
+        self.type_id
+    }
+
+    pub const fn debug_name(&self) -> DebugName {
         self.name
-    }
-}
-
-impl From<&'static str> for SystemName {
-    fn from(value: &'static str) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<SystemName> for &'static str {
-    fn from(value: SystemName) -> Self {
-        value.name
-    }
-}
-
-impl From<SystemName> for String {
-    fn from(value: SystemName) -> Self {
-        String::from(value.name)
     }
 }
 
 impl Debug for SystemName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.name)
+        write!(f, "{}({:?})", self.name, self.type_id)
     }
 }
 
 impl Display for SystemName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.name)
-    }
-}
-
-impl Deref for SystemName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.name
-    }
-}
-
-impl AsRef<str> for SystemName {
-    fn as_ref(&self) -> &str {
-        self.name
+        write!(f, "{}({:?})", self.name, self.type_id)
     }
 }

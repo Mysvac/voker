@@ -9,7 +9,7 @@ impl World {
     ///
     /// This function does **not** cache the query state as a world resource.
     /// Use this when you want one-off query setup without persistent caching.
-    pub fn query_state<D: QueryData, F: QueryFilter>(&mut self) -> QueryState<D, F> {
+    pub fn query_once<D: QueryData, F: QueryFilter>(&mut self) -> QueryState<D, F> {
         <QueryState<D, F>>::new(self)
     }
 
@@ -26,13 +26,14 @@ impl World {
     pub fn cache_query_state<D: QueryData + 'static, F: QueryFilter + 'static>(
         &mut self,
     ) -> &mut QueryState<D, F> {
-        let world: UnsafeWorld<'_> = self.unsafe_world();
-        if let Some(state) = unsafe { world.data_mut().get_resource_mut::<QueryState<D, F>>() } {
+        let unsafe_world = self.unsafe_world();
+        let data_mut = unsafe { unsafe_world.data_mut() };
+        if let Some(state) = data_mut.resource_mut::<QueryState<D, F>>() {
             state.into_inner()
         } else {
-            let world = unsafe { world.full_mut() };
-            let state = <QueryState<D, F>>::new(world);
-            world.insert_resource(state)
+            let full_mut = unsafe { unsafe_world.full_mut() };
+            let state = <QueryState<D, F>>::new(full_mut);
+            full_mut.insert_resource(state)
         }
     }
 
@@ -42,7 +43,7 @@ impl World {
     pub fn clear_query_state<D: QueryData + 'static, F: QueryFilter + 'static>(&mut self) {
         let type_id = TypeId::of::<QueryState<D, F>>();
         if let Some(id) = self.resources.get_id(type_id)
-            && let Some(data) = self.storages.res.get_mut(id)
+            && let Some(data) = self.storages.ress.get_mut(id)
         {
             unsafe {
                 data.clear();
@@ -63,7 +64,7 @@ impl World {
     /// # #[derive(Component, Debug)]
     /// # struct Foo;
     /// #
-    /// # let mut world = World::default();
+    /// # let mut world = World::alloc();
     /// world.spawn(Foo);
     /// world.spawn(Foo);
     ///
@@ -97,7 +98,7 @@ impl World {
     /// # #[derive(Component, Debug)]
     /// # struct Bar(u64);
     /// #
-    /// # let mut world = World::default();
+    /// # let mut world = World::alloc();
     /// world.spawn((Foo, Bar(1)));
     /// world.spawn(Bar(2));
     ///
@@ -130,7 +131,7 @@ mod tests {
     use crate::entity::Entity;
     use crate::query::{And, Or, With, Without};
     use crate::tick::DetectChanges;
-    use crate::world::{EntityMut, EntityRef, World, WorldIdAllocator};
+    use crate::world::{EntityMut, EntityRef, World};
     use alloc::string::String;
     use alloc::vec::Vec;
 
@@ -159,8 +160,7 @@ mod tests {
 
     #[test]
     fn query_raw_ref() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
@@ -177,8 +177,7 @@ mod tests {
 
     #[test]
     fn query_raw_mut() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
@@ -197,8 +196,7 @@ mod tests {
 
     #[test]
     fn query_ref() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
@@ -212,8 +210,7 @@ mod tests {
 
     #[test]
     fn query_mut() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
         world.update_tick();
@@ -231,8 +228,7 @@ mod tests {
 
     #[test]
     fn query_entity() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         let e1 = world.spawn((Foo, Bar(100))).entity();
         let e2 = world.spawn((Foo, Bar(200))).entity();
@@ -247,8 +243,7 @@ mod tests {
 
     #[test]
     fn query_entity_ref() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
@@ -266,8 +261,7 @@ mod tests {
 
     #[test]
     fn query_entity_mut() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
@@ -290,8 +284,7 @@ mod tests {
 
     #[test]
     fn filter_with_single() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
@@ -307,8 +300,7 @@ mod tests {
 
     #[test]
     fn filter_with_tuple() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a")), Qux(1.0)));
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
@@ -325,8 +317,7 @@ mod tests {
 
     #[test]
     fn filter_without_single() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
@@ -342,8 +333,7 @@ mod tests {
 
     #[test]
     fn filter_without_tuple() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a")), Qux(1.0)));
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
@@ -360,8 +350,7 @@ mod tests {
 
     #[test]
     fn filter_or() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
@@ -378,8 +367,7 @@ mod tests {
 
     #[test]
     fn filter_and() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a")), Qux(1.0)));
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
@@ -399,8 +387,7 @@ mod tests {
 
     #[test]
     fn filter_nested_conditions() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a")), Qux(1.0)));
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
@@ -420,8 +407,7 @@ mod tests {
 
     #[test]
     fn filter_mixed_with_and_without() {
-        let allocator = WorldIdAllocator::new();
-        let mut world = World::new(allocator.alloc());
+        let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100), Baz(String::from("a")), Qux(1.0)));
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));

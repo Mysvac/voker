@@ -35,10 +35,11 @@ use crate::world::{UnsafeWorld, World};
 ///
 /// - [`&World`] and [`&mut World`]
 /// - [`Commands`]
-/// - [`Query`]
 /// - [`Local`]
+/// - [`Query`]
 /// - [`Res`], [`ResRef`], [`ResMut`]
 /// - [`NonSend`], [`NonSendRef`], [`NonSendMut`]
+/// - [`MessageReader`], [`MessageWriter`], [`MessageMutator`]
 ///
 /// Each parameter has a persistent [`State`](SystemParam::State) stored alongside
 /// the compiled system. That state is initialized once, contributes borrow
@@ -80,6 +81,9 @@ use crate::world::{UnsafeWorld, World};
 /// [`NonSend`]: crate::borrow::NonSend
 /// [`NonSendRef`]: crate::borrow::NonSendRef
 /// [`NonSendMut`]: crate::borrow::NonSendMut
+/// [`MessageReader`]: crate::message::MessageReader
+/// [`MessageWriter`]: crate::message::MessageWriter
+/// [`MessageMutator`]: crate::message::MessageMutator
 ///
 /// # Safety
 ///

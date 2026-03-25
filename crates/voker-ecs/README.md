@@ -13,6 +13,8 @@ and Velocity component.
 The ECS pattern encourages clean, decoupled designs by forcing you to break up your app data and logic into
 its core components. It also helps make your code faster by optimizing memory access patterns and making parallelism easier.
 
+This README covers core ECS building blocks first, then highlights practical feature modules.
+
 ## Worlds
 
 Entities, Components, and Resources are stored in a `World`.
@@ -21,7 +23,7 @@ Worlds, much like `std::collections`'s `HashSet` and `Vec`, expose operations to
 ```rust
 use voker_ecs::world::World;
 
-let world = World::default();
+let world = World::alloc();
 ```
 
 ## Components
@@ -33,6 +35,19 @@ use voker_ecs::prelude::*;
 
 #[derive(Component)]
 struct Position { x: f32, y: f32 }
+```
+
+## Resources
+
+Apps often require unique resources, such as asset collections, renderers, audio servers, time, etc.
+voker ECS makes this pattern a first class citizen. `Resource` is a special kind of component that
+does not belong to any entity. Instead, it is identified uniquely by its type:
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Resource)]
+struct Time { seconds: f32 }
 ```
 
 ## Entities
@@ -47,7 +62,7 @@ struct Position { x: f32, y: f32 }
 #[derive(Component)]
 struct Velocity { x: f32, y: f32 }
 
-let mut world = World::default();
+let mut world = World::alloc();
 
 let entity: EntityOwned = world
     .spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 0.0 }));
@@ -58,7 +73,7 @@ let velocity = entity.get::<Velocity>().unwrap();
 
 ## Systems
 
-Systems are normal Rust functions. Thanks to the Rust type system, VoidCraft ECS can use function parameter types
+Systems are normal Rust functions. Thanks to the Rust type system, voker ECS can use function parameter types
 to determine what data needs to be sent to the system. It also uses this "data access" information to determine what
 Systems can run in parallel with each other.
 
@@ -68,36 +83,16 @@ use voker_ecs::prelude::*;
 #[derive(Component)]
 struct Position { x: f32, y: f32 }
 
-fn print_position(query: Query<(Entity, &Position)>) {
+#[derive(Resource)]
+struct Time { seconds: f32 }
+
+fn print_position(query: Query<(Entity, &Position)>, time: Res<Time>) {
     for (entity, position) in query {
-        println!("Entity {} is at position: x {}, y {}", entity, position.x, position.y);
+        println!(
+            "|{}| Entity {} is at position: x {}, y {}",
+            time.seconds, entity, position.x, position.y,
+        );
     }
-}
-```
-
-## Resources
-
-Apps often require unique resources, such as asset collections, renderers, audio servers, time, etc.
-VoidCraft ECS makes this pattern a first class citizen. `Resource` is a special kind of component that
-does not belong to any entity. Instead, it is identified uniquely by its type:
-
-```rust
-use voker_ecs::prelude::*;
-
-#[derive(Resource, Default)]
-struct Time {
-    seconds: f32,
-}
-
-let mut world = World::default();
-
-world.insert_resource(Time::default());
-
-let time = world.get_resource::<Time>().unwrap();
-
-// You can also access resources from Systems
-fn print_time(time: Res<Time>) {
-    println!("{}", time.seconds);
 }
 ```
 
@@ -106,7 +101,7 @@ fn print_time(time: Res<Time>) {
 Schedules run a set of Systems according to some execution strategy.
 Systems can be added to any number of System Sets, which are used to control their scheduling metadata.
 
-The built in "parallel executor" considers dependencies between systems and (by default) run as many of
+The built-in "parallel executor" considers dependencies between systems and (by default) run as many of
 them in parallel as possible. This maximizes performance, while keeping the system execution safe. To control
 the system ordering, define explicit dependencies between systems and their sets.
 
@@ -129,7 +124,7 @@ fn movement(mut query: Query<(&mut Position, &Velocity)>) {
 
 fn main() {
     // Create a new empty World to hold our Entities and Components
-    let mut world = World::default();
+    let mut world = World::alloc();
 
     // Spawn an entity with Position and Velocity components
     world.spawn((
@@ -149,6 +144,64 @@ fn main() {
 ```
 
 ## Features
+
+The following modules extend core ECS workflows for filtering, change tracking,
+deferred mutation, message passing, and storage strategy control.
+
+### Component Storage
+
+voker ECS supports multiple component storage types.
+
+* **Dense Table**: Fast and cache friendly iteration, but slower adding and removing of components. This is the default storage type.
+* **Sparse Map**: Fast adding and removing of components, but slower iteration.
+
+Component storage types are configurable, and they default to table storage if the storage is not manually defined.
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Component)]
+struct TableStoredComponent;
+
+#[derive(Component)]
+#[component(storage = "sparse")]
+struct SparseStoredComponent;
+```
+
+See [`ComponentStorage`](crate::component::ComponentStorage) for more details.
+
+### Component Bundles
+
+Define sets of Components that should be added together.
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Default, Component)]
+struct Player;
+#[derive(Default, Component)]
+struct Position { x: f32, y: f32 }
+#[derive(Default, Component)]
+struct Velocity { x: f32, y: f32 }
+
+#[derive(Bundle, Default)]
+struct PlayerBundle {
+    player: Player,
+    position: Position,
+    velocity: Velocity,
+}
+
+let mut world = World::alloc();
+
+// Spawn a new entity and insert the default PlayerBundle
+world.spawn(PlayerBundle::default());
+
+// Bundles play well with Rust's struct update syntax
+world.spawn(PlayerBundle {
+    position: Position { x: 1.0, y: 1.0 },
+    ..Default::default()
+});
+```
 
 ### Query Filters
 
@@ -173,7 +226,7 @@ fn system(query: Query<&Position, And<(With<Player>, Without<Alive>)>>) {
 
 ### Change Detection
 
-VoidCraft ECS tracks _all_ changes to Components and Resources.
+voker ECS tracks _all_ changes to Components and Resources.
 
 Queries can filter for changed Components:
 
@@ -216,57 +269,71 @@ fn system(time: ResRef<Time>) {
 }
 ```
 
-### Component Storage
+### Deferred Commands
 
-VoidCrate ECS supports multiple component storage types.
-
-* **Dense Table**: Fast and cache friendly iteration, but slower adding and removing of components. This is the default storage type.
-* **Sparse Map**: Fast adding and removing of components, but slower iteration.
-
-Component storage types are configurable, and they default to table storage if the storage is not manually defined.
+`Commands` is a deferred command queue interface that lets systems enqueue world mutations
+without requiring immediate exclusive access to `World`.
 
 ```rust
 use voker_ecs::prelude::*;
 
 #[derive(Component)]
-struct TableStoredComponent;
+struct Disabled;
 
-#[derive(Component)]
-#[component(storage = "sparse")]
-struct SparseStoredComponent;
+fn despawn_disabled(mut commands: Commands, query: Query<Entity, With<Disabled>>) {
+    for entity in query {
+        commands.despawn(entity);
+    }
+}
 ```
 
-See [`ComponentStorage`](crate::component::ComponentStorage) for more details.
+Commands are queued first, then applied later by `World::apply_commands()`
+(typically by schedule execution flow).
 
-### Component Bundles
+### Messages
 
-Define sets of Components that should be added together.
+Messages are one-shot payloads sent between systems.
+They are useful when you want to decouple producers and consumers without adding direct dependencies.
 
 ```rust
 use voker_ecs::prelude::*;
+use voker_ecs_derive::Message;
 
-#[derive(Default, Component)]
-struct Player;
-#[derive(Default, Component)]
-struct Position { x: f32, y: f32 }
-#[derive(Default, Component)]
-struct Velocity { x: f32, y: f32 }
-
-#[derive(Bundle, Default)]
-struct PlayerBundle {
-    player: Player,
-    position: Position,
-    velocity: Velocity,
+#[derive(Message)]
+struct Collision {
+    lhs: u32,
+    rhs: u32,
 }
 
-let mut world = World::default();
+fn detect_collisions(mut writer: MessageWriter<Collision>) {
+    // Emit messages for this frame/update.
+    // (Replace with real collision detection logic.)
+    writer.write(Collision { lhs: 1, rhs: 2 });
+}
 
-// Spawn a new entity and insert the default PlayerBundle
-world.spawn(PlayerBundle::default());
-
-// Bundles play well with Rust's struct update syntax
-world.spawn(PlayerBundle {
-    position: Position { x: 1.0, y: 1.0 },
-    ..Default::default()
-});
+fn handle_collisions(mut reader: MessageReader<Collision>) {
+    for collision in reader.read() {
+        // React to each unread collision message.
+        let _ = (collision.lhs, collision.rhs);
+    }
+}
 ```
+
+Message types should be registered in the world:
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Message)]
+struct Collision;
+
+let mut world = World::alloc();
+world.register_message::<Collision>();
+
+// Run after a schedule pass to rotate message buffers globally.
+world.update_messages();
+```
+
+Internally, each message resource uses a two-buffer lifecycle.
+New writes go to the current buffer, and `update_messages` rotates buffers so readers
+can still observe recent messages for one additional update.

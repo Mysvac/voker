@@ -10,13 +10,13 @@ pub struct UninitSystemError {
 
 impl Debug for UninitSystemError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Uninitialized system {}.", self.name)
+        write!(f, "Uninitialized system {}.", self.name)
     }
 }
 
 impl Display for UninitSystemError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Uninitialized system {}.", self.name)
+        write!(f, "Uninitialized system {}.", self.name)
     }
 }
 

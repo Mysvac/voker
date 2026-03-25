@@ -162,7 +162,7 @@ impl TypeMeta {
 
     /// Removes a [`TypeTrait`] from the meta.
     pub fn remove_trait_by_id(&mut self, type_id: TypeId) -> Option<Box<dyn TypeTrait>> {
-        self.trait_table.remove(&type_id)
+        self.trait_table.remove(type_id)
     }
 
     /// Get a [`TypeTrait`] reference, or return `None` if it's doesn't exist.
@@ -174,7 +174,7 @@ impl TypeMeta {
 
     /// Get a [`TypeTrait`] reference, or return `None` if it's doesn't exist.
     pub fn get_trait_by_id(&self, type_id: TypeId) -> Option<&dyn TypeTrait> {
-        self.trait_table.get(&type_id).map(Deref::deref)
+        self.trait_table.get(type_id).map(Deref::deref)
     }
 
     /// Get a mutable [`TypeTrait`] reference, or return `None` if it's doesn't exist.
@@ -186,7 +186,7 @@ impl TypeMeta {
 
     /// Get a mutable [`TypeTrait`] reference, or return `None` if it's doesn't exist.
     pub fn get_trait_mut_by_id(&mut self, type_id: TypeId) -> Option<&mut dyn TypeTrait> {
-        self.trait_table.get_mut(&type_id).map(DerefMut::deref_mut)
+        self.trait_table.get_mut(type_id).map(DerefMut::deref_mut)
     }
 
     /// Return true if specific [`TypeTrait`] is exist.
@@ -197,7 +197,7 @@ impl TypeMeta {
 
     /// Return true if specific [`TypeTrait`] is exist.
     pub fn has_trait_by_id(&self, type_id: TypeId) -> bool {
-        self.trait_table.contains(&type_id)
+        self.trait_table.contains(type_id)
     }
 
     /// Return the number of [`TypeTrait`].
@@ -208,9 +208,7 @@ impl TypeMeta {
 
     /// An iterator visiting all `TypeId - &dyn TypeTrait` pairs in arbitrary order.
     pub fn trait_iter(&self) -> impl ExactSizeIterator<Item = (TypeId, &dyn TypeTrait)> {
-        self.trait_table
-            .iter()
-            .map(|(key, val)| (*key, val.deref()))
+        self.trait_table.iter().map(|(key, val)| (key, val.deref()))
     }
 
     /// An iterator visiting all `TypeId - &mut dyn TypeTrait` pairs in arbitrary order.
@@ -219,7 +217,7 @@ impl TypeMeta {
     ) -> impl ExactSizeIterator<Item = (TypeId, &mut dyn TypeTrait)> {
         self.trait_table
             .iter_mut()
-            .map(|(key, val)| (*key, val.deref_mut()))
+            .map(|(key, val)| (key, val.deref_mut()))
     }
 }
 
@@ -227,7 +225,7 @@ impl Clone for TypeMeta {
     fn clone(&self) -> Self {
         let mut new_map = TypeIdMap::with_capacity(self.trait_count());
         for (id, type_trait) in self.trait_table.iter() {
-            new_map.insert(*id, (**type_trait).clone_type_trait());
+            new_map.insert(id, (**type_trait).clone_type_trait());
         }
 
         Self {
