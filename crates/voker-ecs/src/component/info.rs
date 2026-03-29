@@ -26,18 +26,16 @@ pub struct ComponentDescriptor {
 
 impl ComponentDescriptor {
     /// Creates a new descriptor for component type `T`.
-    pub const fn new<T: Component>() -> Self {
-        const {
-            Self {
-                name: DebugName::type_name::<T>(),
-                type_id: TypeId::of::<T>(),
-                layout: Layout::new::<T>(),
-                storage: T::STORAGE,
-                mutable: T::MUTABLE,
-                dropper: T::DROPPER,
-                cloner: T::CLONER,
-                required: T::REQUIRED,
-            }
+    pub fn new<T: Component>() -> Self {
+        Self {
+            name: DebugName::type_name::<T>(),
+            type_id: TypeId::of::<T>(),
+            layout: Layout::new::<T>(),
+            storage: T::STORAGE,
+            mutable: T::MUTABLE,
+            dropper: T::DROPPER,
+            required: T::REQUIRED,
+            cloner: T::cloner(),
         }
     }
 }

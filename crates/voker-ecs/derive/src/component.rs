@@ -2,11 +2,11 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Type, parse_quote};
 
-#[derive(PartialEq, Eq)]
 enum Cloner {
-    None,
-    Clone,
     Copy,
+    Clone,
+    None,
+    Auto,
 }
 
 enum Storage {
@@ -24,8 +24,8 @@ struct Attributes {
 fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
     let mut ret = Attributes {
         mutable: false,
-        cloner: Cloner::None,
         storage: Storage::Dense,
+        cloner: Cloner::Auto,
         required: None,
     };
 
@@ -37,14 +37,6 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                     let lit: syn::LitBool = value.parse()?;
                     ret.mutable = lit.value;
                     Ok(())
-                } else if meta.path.is_ident("Clone") {
-                    if ret.cloner != Cloner::Copy {
-                        ret.cloner = Cloner::Clone;
-                    }
-                    Ok(())
-                } else if meta.path.is_ident("Copy") {
-                    ret.cloner = Cloner::Copy;
-                    Ok(())
                 } else if meta.path.is_ident("storage") {
                     let value = meta.value()?;
                     let lit: syn::LitStr = value.parse()?;
@@ -52,9 +44,10 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                         "sparse" => ret.storage = Storage::Sparse,
                         "dense" => ret.storage = Storage::Dense,
                         _ => {
-                            return Err(meta.error(
-                                "unsupported storage type, expected \"dense\" or \"sparse\"",
-                            ));
+                            return Err(meta.error(concat! {
+                                    "unsupported storage type, expected ",
+                                    "\"dense\" or \"sparse\".",
+                            }));
                         }
                     }
                     Ok(())
@@ -62,11 +55,26 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                     let value = meta.value()?;
                     ret.required = Some(value.parse()?);
                     Ok(())
+                } else if meta.path.is_ident("cloner") {
+                    let value = meta.value()?;
+                    let lit: syn::LitStr = value.parse()?;
+                    match lit.value().as_str() {
+                        "copy" => ret.cloner = Cloner::Copy,
+                        "clone" => ret.cloner = Cloner::Clone,
+                        "none" => ret.cloner = Cloner::None,
+                        "auto" => ret.cloner = Cloner::Auto,
+                        _ => {
+                            return Err(meta.error(concat! {
+                                "unsupported storage type, expected ",
+                                "\"auto\", \"copy\", \"clone\" or \"none\".",
+                            }));
+                        }
+                    }
+                    Ok(())
                 } else {
                     Err(meta.error(concat! {
                         "unsupported component attribute, expected the following:",
-                        "- `copy`\n",
-                        "- `clone`\n",
+                        "- `cloner = \"auto\"/\"copy\"/\"clone\"/\"none\"`\n",
                         "- `mutable = true/false`\n",
                         "- `storages = \"dense\"/\"sparse\"\n",
                         "- `required = T`, T is a Component or the tuple of Components.\n",
@@ -92,17 +100,28 @@ pub(crate) fn impl_derive_component(ast: DeriveInput) -> TokenStream {
     let cloner_ = crate::path::cloner_(&voker_ecs_path);
     let component_storage_ = crate::path::component_storage_(&voker_ecs_path);
     let required_ = crate::path::required_(&voker_ecs_path);
+    let macro_utils_ = crate::path::macro_utils_(&voker_ecs_path);
 
     let mutable_tokens = (!attrs.mutable).then(|| quote! { const MUTABLE: bool = false; });
 
     let cloner_tokens = match attrs.cloner {
-        Cloner::Clone => Some(
-            quote! { const CLONER: #OptionFP<#cloner_> = #OptionFP::Some(#cloner_::clonable::<Self>()); },
-        ),
-        Cloner::Copy => Some(
-            quote! { const CLONER: #OptionFP<#cloner_> = #OptionFP::Some(#cloner_::copyable::<Self>()); },
-        ),
-        Cloner::None => None,
+        Cloner::None => quote! {},
+        Cloner::Copy => quote! {
+            fn cloner() -> #OptionFP<#cloner_> {
+                Some(#cloner_::copyable::<Self>())
+            }
+        },
+        Cloner::Clone => quote! {
+            fn cloner() -> #OptionFP<#cloner_> {
+                Some(#cloner_::clonable::<Self>())
+            }
+        },
+        Cloner::Auto => quote! {
+            fn cloner() -> #OptionFP<#cloner_> {
+                use #macro_utils_::cloner::*;
+                (&&&&__CloneSpec::<Self>::INS).__specialized_cloner()
+            }
+        },
     };
 
     let storage_tokens = match attrs.storage {

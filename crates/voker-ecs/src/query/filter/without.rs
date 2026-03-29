@@ -27,12 +27,6 @@ pub struct Without<T: InWithout>(T);
 // -----------------------------------------------------------------------------
 // With for Component
 
-#[cold]
-#[inline(never)]
-fn set_table_for_sparse() -> ! {
-    unreachable!("Unexpected `set_for_table` for sparse component");
-}
-
 impl<T: Component> InWithout for T {}
 
 unsafe impl<T: Component> QueryFilter for Without<T> {
@@ -84,15 +78,12 @@ unsafe impl<T: Component> QueryFilter for Without<T> {
         cache: &mut Self::Cache<'w>,
         table: &'w Table,
     ) {
-        match T::STORAGE {
-            ComponentStorage::Dense => {
-                *cache = table.get_table_col(*state).is_none();
-            }
-            ComponentStorage::Sparse => {
-                // *cache = false;
-                set_table_for_sparse();
-            }
+        debug_assert! {
+            T::STORAGE.is_dense(),
+            "Unexpected `set_for_table` for sparse component",
         }
+
+        *cache = table.get_table_col(*state).is_none();
     }
 
     unsafe fn filter<'w>(
@@ -176,15 +167,12 @@ macro_rules! impl_tuple {
                 cache: &mut Self::Cache<'w>,
                 table: &'w Table,
             ) {
-                match <$name>::STORAGE {
-                    ComponentStorage::Dense => {
-                        *cache = table.get_table_col(*state).is_none();
-                    },
-                    ComponentStorage::Sparse => {
-                        // *cache = false;
-                        set_table_for_sparse();
-                    },
+                debug_assert!{
+                    <$name>::STORAGE.is_dense(),
+                    "Unexpected `set_for_table` for sparse component",
                 }
+
+                *cache = table.get_table_col(*state).is_none();
             }
 
             unsafe fn filter<'w>(
@@ -262,15 +250,12 @@ macro_rules! impl_tuple {
             ) {
                 *cache = true;
                 $(
-                    match <$name>::STORAGE {
-                        ComponentStorage::Dense => {
-                            *cache &= table.get_table_col(state.$index).is_none();
-                        },
-                        ComponentStorage::Sparse => {
-                            // *cache = false;
-                            set_table_for_sparse();
-                        },
+                    debug_assert!{
+                        <$name>::STORAGE.is_dense(),
+                        "Unexpected `set_for_table` for sparse component",
                     }
+
+                    *cache &= table.get_table_col(state.$index).is_none();
                 )*
             }
 

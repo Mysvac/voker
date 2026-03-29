@@ -27,9 +27,8 @@ use crate::utils::{Cloner, Dropper};
 /// #[derive(Component, Default)]
 /// struct Foo;
 ///
-/// // Cloneable component
+/// // A clonable component
 /// #[derive(Component, Clone, Default)]
-/// #[component(Clone)]
 /// struct Bar(String);
 ///
 /// // Component with required dependencies
@@ -44,7 +43,7 @@ use crate::utils::{Cloner, Dropper};
 ///
 /// // Combined: copyable, immutable, with multiple required dependencies
 /// #[derive(Component, Clone, Copy)]
-/// #[component(Copy, mutable = false, required = (Foo, Bar))]
+/// #[component(cloner = "copy", mutable = false, required = (Foo, Bar))]
 /// struct GameVersion<T: Copy>(T);
 /// ```
 ///
@@ -73,21 +72,6 @@ use crate::utils::{Cloner, Dropper};
 /// If a component is immutable, APIs such as `get_mut` and `fetch` cannot return
 /// mutable references (they return `None`). A mutable `Query` access instead
 /// returns an error, which by default may lead to a panic.
-///
-/// ## Cloner
-///
-/// Copy/clone behavior is controlled by [`Component::CLONER`], and is disabled
-/// by default.
-///
-/// The default is conservative because generic `T` cannot be universally
-/// determined as `Clone` at **compile time** in stable Rust.
-///
-/// To opt in, use [`Cloner`]:
-/// - For `Clone` types, use [`Cloner::clonable`].
-/// - For `Copy` types, use [`Cloner::copyable`] (more efficient).
-///
-/// With the derive macro, this can be configured via `#[component(Copy)]` or
-/// `#[component(Clone)]`.
 ///
 /// ## Required
 ///
@@ -137,15 +121,14 @@ pub trait Component: Sized + Send + Sync + 'static {
     /// The function pointer of [`Drop`].
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
 
-    /// The function pointer of [`Clone`], default is not clonable.
-    const CLONER: Option<Cloner> = None;
-
     /// The required components, default is `None`.
     const REQUIRED: Option<Required> = None;
 
-    /// Maps the entities on this component using the given [`EntityMapper`].
-    ///
-    /// This is used to remap entities in contexts like scenes and entity cloning.
+    #[inline(always)]
+    fn cloner() -> Option<Cloner> {
+        None
+    }
+
     #[inline(always)]
     #[expect(unused_variables, reason = "default implementation")]
     fn map_entities<E: EntityMapper>(this: &mut Self, mapper: &mut E) {}

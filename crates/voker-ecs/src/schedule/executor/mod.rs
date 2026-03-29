@@ -47,7 +47,6 @@ pub enum ExecutorKind {
 // MultiThreadExecutor
 
 use crate::resource::Resource;
-use crate::utils::Cloner;
 use voker_os::sync::Arc;
 use voker_task::ScopeExecutor;
 
@@ -60,5 +59,4 @@ pub struct MainThreadExecutor(pub Arc<ScopeExecutor<'static>>);
 
 impl Resource for MainThreadExecutor {
     const MUTABLE: bool = false;
-    const CLONER: Option<Cloner> = Some(Cloner::clonable::<Self>());
 }

@@ -1,4 +1,4 @@
-use crate::utils::{Cloner, Dropper};
+use crate::utils::Dropper;
 
 /// Marker trait for values stored in a world's resource storage.
 ///
@@ -29,20 +29,10 @@ use crate::utils::{Cloner, Dropper};
 /// #[derive(Resource)]
 /// struct Foo;
 ///
-/// // Cloneable resource
-/// #[derive(Resource, Clone)]
-/// #[resource(Clone)]
-/// struct Bar(String);
-///
 /// // Immutable resource
 /// #[derive(Resource)]
 /// #[resource(mutable = false)]
 /// struct Logger { /* .. */ }
-///
-/// // Combined: copyable and immutable
-/// #[derive(Resource, Clone, Copy)]
-/// #[resource(Copy, mutable = false)]
-/// struct GameVersion<T: Copy>(T);
 /// ```
 ///
 /// [Resource derive macro]: crate::derive::Resource
@@ -60,21 +50,6 @@ use crate::utils::{Cloner, Dropper};
 /// If a resource is immutable, APIs such as `get_mut` and `fetch` cannot return
 /// mutable references (they return `None`). A mutable `Query` access instead
 /// returns an error, which by default may lead to a panic.
-///
-/// ## Cloner
-///
-/// Copy/clone behavior is controlled by [`Resource::CLONER`], and is disabled
-/// by default.
-///
-/// The default is conservative because generic `T` cannot be universally
-/// determined as `Clone` at compile time in stable Rust.
-///
-/// To opt in, use [`Cloner`]:
-/// - For `Clone` types, use [`Cloner::clonable`].
-/// - For `Copy` types, use [`Cloner::copyable`] (more efficient).
-///
-/// With the derive macro, this can be configured via `#[resource(Copy)]` or
-/// `#[resource(Clone)]`.
 ///
 /// ## Dropper
 ///
@@ -96,6 +71,5 @@ use crate::utils::{Cloner, Dropper};
 )]
 pub trait Resource: Sized + 'static {
     const MUTABLE: bool = true;
-    const CLONER: Option<Cloner> = None;
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
 }

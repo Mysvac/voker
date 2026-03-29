@@ -3,7 +3,7 @@ use core::any::TypeId;
 use core::fmt::Debug;
 
 use super::{Resource, ResourceId};
-use crate::utils::{Cloner, DebugName, Dropper};
+use crate::utils::{DebugName, Dropper};
 
 // -----------------------------------------------------------------------------
 // ResourceDescriptor
@@ -19,7 +19,6 @@ pub struct ResourceDescriptor {
     pub layout: Layout,
     pub mutable: bool,
     pub dropper: Option<Dropper>,
-    pub cloner: Option<Cloner>,
 }
 
 impl ResourceDescriptor {
@@ -31,7 +30,6 @@ impl ResourceDescriptor {
                 type_id: TypeId::of::<T>(),
                 layout: Layout::new::<T>(),
                 mutable: T::MUTABLE,
-                cloner: T::CLONER,
                 dropper: T::DROPPER,
             }
         }
@@ -100,11 +98,5 @@ impl ResourceInfo {
     #[inline(always)]
     pub fn dropper(&self) -> Option<Dropper> {
         self.descriptor.dropper
-    }
-
-    /// Returns the component's clone function.
-    #[inline(always)]
-    pub fn cloner(&self) -> Option<Cloner> {
-        self.descriptor.cloner
     }
 }

@@ -66,7 +66,7 @@
 /// Sparse storage should be reserved for special flag components or rarely-present data.
 /// Additionally, sparse components should not be held by large numbers of entities to
 /// minimize random access during queries.
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentStorage {
     #[default]
     Dense = 0,

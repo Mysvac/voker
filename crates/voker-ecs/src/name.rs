@@ -26,7 +26,9 @@ pub struct Name {
 
 /// Manually implement to accelerate compilation.
 impl Component for Name {
-    const CLONER: Option<Cloner> = Some(Cloner::clonable::<Self>());
+    fn cloner() -> Option<Cloner> {
+        Some(Cloner::clonable::<Self>())
+    }
 }
 
 impl Hash for Name {

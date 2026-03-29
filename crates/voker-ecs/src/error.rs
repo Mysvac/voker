@@ -20,7 +20,6 @@ use core::panic::Location;
 use crate::resource::Resource;
 use crate::system::SystemName;
 use crate::tick::Tick;
-use crate::utils::Cloner;
 
 // -----------------------------------------------------------------------------
 // EcsResult
@@ -152,7 +151,6 @@ pub struct DefaultErrorHandler(pub ErrorHandler);
 
 impl Resource for DefaultErrorHandler {
     const MUTABLE: bool = true;
-    const CLONER: Option<Cloner> = Some(Cloner::copyable::<Self>());
 }
 
 impl Default for DefaultErrorHandler {

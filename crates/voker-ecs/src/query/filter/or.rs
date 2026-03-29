@@ -110,13 +110,8 @@ macro_rules! impl_tuple {
             type State = ( $( <$name>::State ),* );
             type Cache<'world> = ( $( <$name>::Cache<'world> ),* );
 
-            const COMPONENTS_ARE_DENSE: bool = {
-                true $( && <$name>::COMPONENTS_ARE_DENSE )*
-            };
-
-            // The use of 'Or' may lead to incomplete archetype-based
-            // filtering, thus entity filtering must be enabled.
-            const ENABLE_ENTITY_FILTER: bool = true;
+            const COMPONENTS_ARE_DENSE: bool = { true $( && <$name>::COMPONENTS_ARE_DENSE )* };
+            const ENABLE_ENTITY_FILTER: bool = { false $( || <$name>::ENABLE_ENTITY_FILTER )* };
 
             fn build_state(
                 world: &mut World,
