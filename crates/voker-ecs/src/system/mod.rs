@@ -26,7 +26,7 @@ pub use error::UninitSystemError;
 pub use function::{FunctionSystem, SystemFunction};
 pub use input::{In, InMut, InRef, SystemInput};
 pub use meta::{SystemFlags, SystemMeta};
-pub use name::SystemName;
+pub use name::SystemId;
 pub use param::{Local, ReadOnlySystemParam, SystemParam};
 pub use system::{IntoMapSystem, IntoPipeSystem};
 pub use system::{IntoSystem, MapSystem, PipeSystem, System};

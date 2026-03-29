@@ -133,7 +133,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         self.executor.completed.push(system_index);
         if let Err(payload) = result {
             cfg::std! {
-                ::std::eprintln!("Encountered a panic in system `{}`!", _system.name());
+                ::std::eprintln!("Encountered a panic in system `{}`!", _system.id());
             }
             // set the payload to propagate the error
             *self.executor.panic_payload.lock().unwrap() = Some(payload);
@@ -162,14 +162,15 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     fn spawn_system_task(&self, system_index: u16) {
         let system = &mut unsafe { &mut *self.systems[system_index as usize].get() }.system;
         let non_send = system.is_non_send();
-        let name = system.name();
         let context: Context<'scope, 'env, 'sys> = *self;
 
         let task = async move {
             let func = AssertUnwindSafe(|| unsafe {
                 if let Err(e) = system.run((), context.world) {
+                    voker_utils::cold_path();
                     let last_run = system.get_last_run();
-                    let ctx = ErrorContext::System { name, last_run };
+                    let id = system.id();
+                    let ctx = ErrorContext::System { id, last_run };
                     (context.error_handler)(e, ctx);
                 }
             });

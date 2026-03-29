@@ -18,7 +18,7 @@ use core::ops::{Deref, DerefMut};
 use core::panic::Location;
 
 use crate::resource::Resource;
-use crate::system::SystemName;
+use crate::system::SystemId;
 use crate::tick::Tick;
 
 // -----------------------------------------------------------------------------
@@ -46,7 +46,7 @@ pub struct EcsError {
 #[non_exhaustive]
 pub enum ErrorContext {
     System {
-        name: SystemName,
+        id: SystemId,
         last_run: Tick,
     },
     Command {
@@ -123,7 +123,7 @@ impl ErrorContext {
     /// For commands, this is the call-site location string.
     pub fn name(&self) -> String {
         match self {
-            Self::System { name, .. } => name.to_string(),
+            Self::System { id, .. } => id.to_string(),
             Self::Command { location, .. } => location.to_string(),
         }
     }

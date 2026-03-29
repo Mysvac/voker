@@ -5,42 +5,42 @@ use core::hash::Hash;
 use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
-// SystemName
+// SystemId
 
 /// A unique identifier for a system.
 #[derive(Clone, Copy)]
-pub struct SystemName {
+pub struct SystemId {
     name: DebugName,
     type_id: TypeId,
 }
 
-impl PartialEq for SystemName {
+impl PartialEq for SystemId {
     fn eq(&self, other: &Self) -> bool {
         self.type_id == other.type_id
     }
 }
 
-impl Eq for SystemName {}
+impl Eq for SystemId {}
 
-impl PartialOrd for SystemName {
+impl PartialOrd for SystemId {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for SystemName {
+impl Ord for SystemId {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.type_id.cmp(&other.type_id)
     }
 }
 
-impl Hash for SystemName {
+impl Hash for SystemId {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.type_id.hash(state);
     }
 }
 
-impl SystemName {
+impl SystemId {
     pub const fn of<T: 'static>() -> Self {
         Self {
             name: DebugName::type_name::<T>(),
@@ -57,13 +57,13 @@ impl SystemName {
     }
 }
 
-impl Debug for SystemName {
+impl Debug for SystemId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}({:?})", self.name, self.type_id)
     }
 }
 
-impl Display for SystemName {
+impl Display for SystemId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}({:?})", self.name, self.type_id)
     }

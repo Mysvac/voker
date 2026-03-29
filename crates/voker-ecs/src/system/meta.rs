@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use bitflags::bitflags;
 
-use crate::system::SystemName;
+use crate::system::SystemId;
 use crate::tick::Tick;
 
 bitflags! {
@@ -19,7 +19,7 @@ bitflags! {
 /// Metadata container for system execution information.
 #[derive(Clone, Copy)]
 pub struct SystemMeta {
-    name: SystemName,
+    id: SystemId,
     flags: SystemFlags,
     last_run: Tick,
 }
@@ -27,7 +27,7 @@ pub struct SystemMeta {
 impl Debug for SystemMeta {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SystemMeta")
-            .field("name", &self.name)
+            .field("id", &self.id)
             .field("last_run", &self.last_run)
             .field("non_send", &self.is_non_send())
             .field("exclusive", &self.is_exclusive())
@@ -39,20 +39,20 @@ impl SystemMeta {
     #[inline]
     pub const fn new<T: 'static>() -> Self {
         Self {
-            name: SystemName::of::<T>(),
+            id: SystemId::of::<T>(),
             flags: SystemFlags::empty(),
             last_run: Tick::new(0),
         }
     }
 
     #[inline]
-    pub const fn flags(&self) -> SystemFlags {
-        self.flags
+    pub const fn id(&self) -> SystemId {
+        self.id
     }
 
     #[inline]
-    pub const fn name(&self) -> SystemName {
-        self.name
+    pub const fn flags(&self) -> SystemFlags {
+        self.flags
     }
 
     #[inline]

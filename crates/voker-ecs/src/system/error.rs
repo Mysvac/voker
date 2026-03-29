@@ -1,11 +1,11 @@
 use core::error::Error;
 use core::fmt::{Debug, Display};
 
-use crate::system::SystemName;
+use crate::system::SystemId;
 
 #[derive(Clone)]
 pub struct UninitSystemError {
-    pub name: SystemName,
+    pub name: SystemId,
 }
 
 impl Debug for UninitSystemError {

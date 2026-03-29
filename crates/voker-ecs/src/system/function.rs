@@ -1,6 +1,6 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
 use crate::error::EcsError;
-use crate::system::{IntoSystem, SystemName, UninitSystemError};
+use crate::system::{IntoSystem, SystemId, UninitSystemError};
 use crate::tick::Tick;
 use crate::world::{World, WorldId};
 
@@ -256,8 +256,8 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
     type Input = F::Input;
     type Output = F::Output;
 
-    fn name(&self) -> SystemName {
-        self.meta.name()
+    fn id(&self) -> SystemId {
+        self.meta.id()
     }
 
     fn flags(&self) -> SystemFlags {
@@ -279,7 +279,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
             world_id: world.id(),
         });
         if !<F::Param as SystemParam>::mark_access(&mut table, &state.param) {
-            invalid_system_access(self.meta.name());
+            invalid_system_access(self.meta.id());
         }
         table
     }
@@ -290,11 +290,11 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         world: crate::world::UnsafeWorld<'_>,
     ) -> Result<Self::Output, EcsError> {
         let Some(state) = &mut self.state else {
-            return Err(uninit_system_error(self.meta.name()));
+            return Err(uninit_system_error(self.meta.id()));
         };
         let world_id = unsafe { world.read_only().id() };
         if state.world_id != world_id {
-            mismatched_world(self.meta.name(), state.world_id, world_id);
+            mismatched_world(self.meta.id(), state.world_id, world_id);
         }
 
         let last_run = self.meta.get_last_run();
@@ -313,19 +313,19 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
 
 #[cold]
 #[inline(never)]
-fn uninit_system_error(name: SystemName) -> EcsError {
+fn uninit_system_error(name: SystemId) -> EcsError {
     EcsError::from(UninitSystemError { name })
 }
 
 #[cold]
 #[inline(never)]
-fn invalid_system_access(name: SystemName) -> ! {
+fn invalid_system_access(name: SystemId) -> ! {
     panic!("System {name} params access conflict.")
 }
 
 #[cold]
 #[inline(never)]
-fn mismatched_world(name: SystemName, init: WorldId, run: WorldId) -> ! {
+fn mismatched_world(name: SystemId, init: WorldId, run: WorldId) -> ! {
     panic!("System {name} is initialized in world {init}, but runs in world {run}.")
 }
 
@@ -339,7 +339,7 @@ impl<M: 'static, F: SystemFunction<M>> IntoSystem<F::Input, F::Output, (M, fn())
         FunctionSystem::new(this)
     }
 
-    fn system_name(&self) -> SystemName {
-        SystemName::of::<F>()
+    fn system_id(&self) -> SystemId {
+        SystemId::of::<F>()
     }
 }

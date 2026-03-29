@@ -4,7 +4,7 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 
 use crate::error::EcsError;
-use crate::system::{AccessTable, SystemFlags, SystemName};
+use crate::system::{AccessTable, SystemFlags, SystemId};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -96,7 +96,7 @@ pub trait System: Send + Sync + 'static {
     type Output;
 
     /// Returns the system's name for debugging and identification purposes.
-    fn name(&self) -> SystemName;
+    fn id(&self) -> SystemId;
 
     /// Returns the system's behavioral flags.
     ///
@@ -153,7 +153,7 @@ where
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("System")
-            .field("name", &self.name())
+            .field("id", &self.id())
             .field("non_send", &self.is_non_send())
             .field("exclusive", &self.is_exclusive())
             .finish_non_exhaustive()
@@ -181,8 +181,8 @@ pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
 
     fn into_system(this: Self) -> Self::System;
 
-    fn system_name(&self) -> SystemName {
-        SystemName::of::<Self>()
+    fn system_id(&self) -> SystemId {
+        SystemId::of::<Self>()
     }
 
     fn pipe<B, BI, BO, MB>(self, other: B) -> IntoPipeSystem<Self, B>
@@ -219,8 +219,8 @@ impl<T: System> IntoSystem<T::Input, T::Output, ()> for T {
         this
     }
 
-    fn system_name(&self) -> SystemName {
-        <T as System>::name(self)
+    fn system_id(&self) -> SystemId {
+        <T as System>::id(self)
     }
 }
 
@@ -233,7 +233,7 @@ pub struct IntoPipeSystem<A, B> {
 }
 
 pub struct PipeSystem<A, B> {
-    name: SystemName,
+    id: SystemId,
     a: A,
     b: B,
 }
@@ -250,15 +250,15 @@ where
 
     fn into_system(this: Self) -> Self::System {
         PipeSystem {
-            name: Self::system_name(&this),
+            id: Self::system_id(&this),
             a: IntoSystem::into_system(this.a),
             b: IntoSystem::into_system(this.b),
         }
     }
 
-    fn system_name(&self) -> SystemName {
+    fn system_id(&self) -> SystemId {
         struct Pipe;
-        SystemName::of::<(A, Pipe, B)>()
+        SystemId::of::<(A, Pipe, B)>()
     }
 }
 
@@ -272,8 +272,8 @@ where
     type Input = AI;
     type Output = BO;
 
-    fn name(&self) -> SystemName {
-        self.name
+    fn id(&self) -> SystemId {
+        self.id
     }
 
     fn flags(&self) -> SystemFlags {
@@ -312,7 +312,7 @@ pub struct IntoMapSystem<S, F> {
 }
 
 pub struct MapSystem<S, F> {
-    name: SystemName,
+    id: SystemId,
     s: S,
     f: F,
 }
@@ -327,15 +327,15 @@ where
 
     fn into_system(this: Self) -> Self::System {
         MapSystem {
-            name: Self::system_name(&this),
+            id: Self::system_id(&this),
             s: IntoSystem::into_system(this.s),
             f: this.f,
         }
     }
 
-    fn system_name(&self) -> SystemName {
+    fn system_id(&self) -> SystemId {
         struct Map;
-        SystemName::of::<(S, Map, F)>()
+        SystemId::of::<(S, Map, F)>()
     }
 }
 
@@ -348,8 +348,8 @@ where
     type Input = I;
     type Output = FO;
 
-    fn name(&self) -> SystemName {
-        self.name
+    fn id(&self) -> SystemId {
+        self.id
     }
 
     fn flags(&self) -> SystemFlags {
@@ -387,7 +387,7 @@ pub struct IntoMarkerSystem<S, M> {
 }
 
 pub struct MarkerSystem<S, M> {
-    name: SystemName,
+    id: SystemId,
     s: S,
     _marker: PhantomData<M>,
 }
@@ -407,15 +407,15 @@ where
 
     fn into_system(this: Self) -> Self::System {
         MarkerSystem {
-            name: Self::system_name(&this),
+            id: Self::system_id(&this),
             s: IntoSystem::into_system(this.s),
             _marker: PhantomData,
         }
     }
 
-    fn system_name(&self) -> SystemName {
+    fn system_id(&self) -> SystemId {
         struct Marker<T>(PhantomData<T>);
-        SystemName::of::<(Marker<M2>, S)>()
+        SystemId::of::<(Marker<M2>, S)>()
     }
 }
 
@@ -428,8 +428,8 @@ where
     type Input = I;
     type Output = O;
 
-    fn name(&self) -> SystemName {
-        self.name
+    fn id(&self) -> SystemId {
+        self.id
     }
 
     fn flags(&self) -> SystemFlags {

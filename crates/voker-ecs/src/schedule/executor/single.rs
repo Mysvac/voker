@@ -76,11 +76,11 @@ impl SystemExecutor for SingleThreadedExecutor {
 
         systems.iter_mut().for_each(|obj| {
             let system = &mut obj.system;
-            let name = system.name();
             let func = AssertUnwindSafe(|| unsafe {
                 if let Err(e) = system.run((), world.unsafe_world()) {
                     let last_run = system.get_last_run();
-                    let ctx = ErrorContext::System { name, last_run };
+                    let id = system.id();
+                    let ctx = ErrorContext::System { id, last_run };
                     handler(e, ctx);
                 }
             });
@@ -88,7 +88,7 @@ impl SystemExecutor for SingleThreadedExecutor {
             cfg::std! {
                 if {
                     if let Err(payload) = ::std::panic::catch_unwind(func) {
-                        ::std::eprintln!("Encountered a panic in system `{}`!", system.name());
+                        ::std::eprintln!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     }
                 } else {

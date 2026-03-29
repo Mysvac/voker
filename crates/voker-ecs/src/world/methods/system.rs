@@ -6,7 +6,7 @@ use crate::component::Component;
 use crate::entity::Entity;
 use crate::error::ErrorContext;
 use crate::prelude::Resource;
-use crate::system::{IntoSystem, System, SystemInput, SystemName};
+use crate::system::{IntoSystem, System, SystemId, SystemInput};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -15,10 +15,10 @@ use crate::world::World;
 /// Erased system object stored in world-level registry entities.
 type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
 
-/// Maps a [`SystemName`] to the entity that stores the registered system instance.
+/// Maps a [`SystemId`] to the entity that stores the registered system instance.
 #[derive(Default)]
 struct SystemRegistry {
-    mapper: NoOpHashMap<SystemName, Entity>,
+    mapper: NoOpHashMap<SystemId, Entity>,
 }
 
 /// Component payload used to store one registered boxed system on an entity.
@@ -35,17 +35,17 @@ impl<I: SystemInput + 'static, O: 'static> Component for RegisteredSystem<I, O> 
 
 impl SystemRegistry {
     /// Inserts or replaces the entity binding of a system name.
-    pub fn insert(&mut self, name: SystemName, entity: Entity) {
+    pub fn insert(&mut self, name: SystemId, entity: Entity) {
         self.mapper.insert(name, entity);
     }
 
     /// Removes a system binding and returns its entity if it exists.
-    pub fn remove(&mut self, name: SystemName) -> Option<Entity> {
+    pub fn remove(&mut self, name: SystemId) -> Option<Entity> {
         self.mapper.remove(&name)
     }
 
     /// Returns the entity currently bound to a system name.
-    pub fn get(&self, name: SystemName) -> Option<Entity> {
+    pub fn get(&self, name: SystemId) -> Option<Entity> {
         self.mapper.get(&name).copied()
     }
 }
@@ -54,13 +54,13 @@ impl SystemRegistry {
 // SystemRegistry, RegisteredSystem
 
 impl World {
-    /// Registers a system into world storage and returns its [`SystemName`].
+    /// Registers a system into world storage and returns its [`SystemId`].
     ///
     /// If another system with the same name already exists, it will be replaced.
     pub fn register_system<I, O, M>(
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
-    ) -> SystemName
+    ) -> SystemId
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -72,7 +72,7 @@ impl World {
     ///
     /// Users can directly use `register_system`, it can also be used for `BoxedSystem`.
     #[inline(never)]
-    fn register_boxed_system<I, O>(&mut self, mut system: BoxedSystem<I, O>) -> SystemName
+    fn register_boxed_system<I, O>(&mut self, mut system: BoxedSystem<I, O>) -> SystemId
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -85,8 +85,8 @@ impl World {
         let world_2 = unsafe { unsafe_world.full_mut() };
 
         let mut registry = world.resource_mut_or_init::<SystemRegistry>();
-        let name = system.name();
-        if let Some(old_entity) = registry.remove(name) {
+        let id = system.id();
+        if let Some(old_entity) = registry.remove(id) {
             // Keep one active registration per system name.
             world_2.despawn(old_entity).unwrap();
         }
@@ -95,16 +95,16 @@ impl World {
             system: Some(system),
         };
         let entity = world_2.spawn(data).entity();
-        registry.insert(name, entity);
+        registry.insert(id, entity);
 
-        name
+        id
     }
 
     /// Unregisters a named system and returns the boxed system instance.
     ///
     /// Returns `None` if the name is not registered or the expected typed payload
     /// does not match.
-    pub fn unregister_system<I, O>(&mut self, name: SystemName) -> Option<BoxedSystem<I, O>>
+    pub fn unregister_system<I, O>(&mut self, name: SystemId) -> Option<BoxedSystem<I, O>>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -123,7 +123,7 @@ impl World {
     ///
     /// The system is temporarily taken from storage, executed, then stored back.
     /// Any runtime error is sent to the world's default error handler.
-    pub fn run_system_with<I, O>(&mut self, name: SystemName, input: I::Data<'_>) -> Option<O>
+    pub fn run_system_with<I, O>(&mut self, name: SystemId, input: I::Data<'_>) -> Option<O>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -135,7 +135,7 @@ impl World {
         let mut data = entity_mut.get_mut::<RegisteredSystem<I, O>>()?;
         let mut system = data.system.take()?;
 
-        let name = system.name();
+        let id = system.id();
         // SAFETY: the registered system is executed against the current world
         // following the same contracts as schedule-driven execution.
         let ret = unsafe { system.run(input, self.unsafe_world()) };
@@ -151,7 +151,7 @@ impl World {
                 voker_utils::cold_path();
                 let hander = self.default_error_handler();
                 let ctx = ErrorContext::System {
-                    name,
+                    id,
                     last_run: self.last_run(),
                 };
                 (hander.0)(e, ctx);
@@ -161,7 +161,7 @@ impl World {
     }
 
     /// Runs a named system with unit input.
-    pub fn run_system<O: 'static>(&mut self, name: SystemName) -> Option<O> {
+    pub fn run_system<O: 'static>(&mut self, name: SystemId) -> Option<O> {
         self.run_system_with::<(), O>(name, ())
     }
 }

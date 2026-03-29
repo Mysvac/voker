@@ -14,7 +14,7 @@ use super::{Dag, SystemKey, SystemObject, UnitSystem};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
 use super::{InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use crate::schedule::AnonymousSchedule;
-use crate::system::{IntoSystem, SystemName};
+use crate::system::{IntoSystem, SystemId};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -64,8 +64,8 @@ pub struct Schedule {
 
 #[derive(Default)]
 struct Allocator {
-    slots: SlotMap<SystemKey, SystemName>,
-    names: NoOpHashMap<SystemName, SystemKey>,
+    slots: SlotMap<SystemKey, SystemId>,
+    idents: NoOpHashMap<SystemId, SystemKey>,
 }
 
 // -----------------------------------------------------------------------------
@@ -171,34 +171,38 @@ impl SystemSchedule {
 // Allocator Implementation
 
 impl Allocator {
-    fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemName, &SystemKey)> + '_ {
-        self.names.iter()
+    fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemId, &SystemKey)> + '_ {
+        self.idents.iter()
     }
 
-    fn contains(&self, name: SystemName) -> bool {
-        self.names.contains_key(&name)
+    fn len(&self) -> usize {
+        self.idents.len()
     }
 
-    fn get_key(&self, name: SystemName) -> Option<SystemKey> {
-        self.names.get(&name).copied()
+    fn contains(&self, id: SystemId) -> bool {
+        self.idents.contains_key(&id)
     }
 
-    fn get_name(&self, key: SystemKey) -> Option<SystemName> {
+    fn get_key(&self, id: SystemId) -> Option<SystemKey> {
+        self.idents.get(&id).copied()
+    }
+
+    fn get_name(&self, key: SystemKey) -> Option<SystemId> {
         self.slots.get(key).copied()
     }
 
-    fn insert(&mut self, name: SystemName) -> SystemKey {
-        self.names.get(&name).copied().unwrap_or_else(|| {
-            let key = self.slots.insert(name);
-            self.names.insert(name, key);
+    fn insert(&mut self, id: SystemId) -> SystemKey {
+        self.idents.get(&id).copied().unwrap_or_else(|| {
+            let key = self.slots.insert(id);
+            self.idents.insert(id, key);
             key
         })
     }
 
-    fn remove(&mut self, name: SystemName) -> Option<SystemKey> {
-        let key = self.names.remove(&name)?;
+    fn remove(&mut self, id: SystemId) -> Option<SystemKey> {
+        let key = self.idents.remove(&id)?;
         let removed = self.slots.remove(key);
-        debug_assert_eq!(removed, Some(name));
+        debug_assert_eq!(removed, Some(id));
         Some(key)
     }
 }
@@ -295,7 +299,7 @@ impl Debug for Schedule {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Schedule")
             .field("label", &self.label)
-            .field("systems", &self.allocator.names.keys())
+            .field("systems", &self.allocator.idents.keys())
             .finish()
     }
 }
@@ -470,14 +474,14 @@ impl Schedule {
     }
 
     /// Returns `true` if a system with `name` exists in this schedule.
-    pub fn contains(&self, name: SystemName) -> bool {
+    pub fn contains(&self, name: SystemId) -> bool {
         self.allocator.contains(name)
     }
 
     /// Removes a system by name.
     ///
     /// Returns `true` if a system was removed.
-    pub fn remove(&mut self, name: SystemName) -> bool {
+    pub fn remove(&mut self, name: SystemId) -> bool {
         let Some(key) = self.allocator.remove(name) else {
             return false;
         };
@@ -499,17 +503,17 @@ impl Schedule {
     /// Returns `true` if this is a new insertion, `false` if an existing system
     /// with the same name was replaced.
     pub fn insert(&mut self, system: UnitSystem) -> bool {
-        let name = system.name();
+        let id = system.id();
 
         if !self.is_changed {
             self.recycle_schedule();
             self.is_changed = true;
         }
 
-        if let Some(key) = self.allocator.get_key(name) {
+        if let Some(key) = self.allocator.get_key(id) {
             self.buffer.remove(key);
             self.buffer.insert(key, system);
-            let len = self.allocator.names.len();
+            let len = self.allocator.len();
             assert!(
                 len <= u16::MAX as usize,
                 "too many systems in schedule {:?}",
@@ -517,10 +521,10 @@ impl Schedule {
             );
             false
         } else {
-            let key = self.allocator.insert(name);
+            let key = self.allocator.insert(id);
             self.buffer.insert(key, system);
             self.ordering.insert_node(key);
-            let len = self.allocator.names.len();
+            let len = self.allocator.len();
             assert!(
                 len <= u16::MAX as usize,
                 "too many systems in schedule {:?}",
@@ -535,7 +539,7 @@ impl Schedule {
     /// Returns `false` if either system name is not present.
     ///
     /// If the edge already exists, this is idempotent.
-    pub fn insert_order(&mut self, before: SystemName, after: SystemName) -> bool {
+    pub fn insert_order(&mut self, before: SystemId, after: SystemId) -> bool {
         let Some(a) = self.allocator.get_key(before) else {
             return false;
         };
@@ -556,7 +560,7 @@ impl Schedule {
     /// Removes an explicit ordering edge: `before -> after`.
     ///
     /// Returns `false` if either system name is not present or the order is not present.
-    pub fn remove_order(&mut self, before: SystemName, after: SystemName) -> bool {
+    pub fn remove_order(&mut self, before: SystemId, after: SystemId) -> bool {
         let Some(a) = self.allocator.get_key(before) else {
             return false;
         };
@@ -573,17 +577,17 @@ impl Schedule {
     }
 
     /// Returns the internal key for a system name.
-    pub fn get_key(&self, name: SystemName) -> Option<SystemKey> {
+    pub fn get_key(&self, name: SystemId) -> Option<SystemKey> {
         self.allocator.get_key(name)
     }
 
     /// Returns the system name for an internal key.
-    pub fn get_name(&self, key: SystemKey) -> Option<SystemName> {
+    pub fn get_name(&self, key: SystemKey) -> Option<SystemId> {
         self.allocator.get_name(key)
     }
 
     /// Iterates over all registered systems as `(name, key)` pairs.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemName, &SystemKey)> + '_ {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemId, &SystemKey)> + '_ {
         self.allocator.iter()
     }
 
@@ -594,7 +598,7 @@ impl Schedule {
 }
 
 impl Schedule {
-    /// Adds a system using its Rust type name as [`SystemName`].
+    /// Adds a system using its Rust type name as [`SystemId`].
     pub fn add_system<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
@@ -607,7 +611,7 @@ impl Schedule {
     where
         S: IntoSystem<(), (), M>,
     {
-        self.remove(system.system_name());
+        self.remove(system.system_id());
         self
     }
 
@@ -616,7 +620,7 @@ impl Schedule {
         X: IntoSystem<(), (), M1>,
         Y: IntoSystem<(), (), M2>,
     {
-        self.insert_order(x.system_name(), y.system_name());
+        self.insert_order(x.system_id(), y.system_id());
         self
     }
 
@@ -625,7 +629,7 @@ impl Schedule {
         X: IntoSystem<(), (), M1>,
         Y: IntoSystem<(), (), M2>,
     {
-        self.remove_order(x.system_name(), y.system_name());
+        self.remove_order(x.system_id(), y.system_id());
         self
     }
 }

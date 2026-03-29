@@ -4,7 +4,7 @@ use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel, UnitSystem};
 use crate::resource::Resource;
-use crate::system::{IntoSystem, SystemName};
+use crate::system::{IntoSystem, SystemId};
 
 // -----------------------------------------------------------------------------
 // Schedules
@@ -104,7 +104,7 @@ impl Schedules {
     ///
     /// - Returns `false` if the system does not exist.
     /// - Returns `true` if the system existed and was removed.
-    pub fn remove_system(&mut self, label: impl ScheduleLabel, name: SystemName) -> bool {
+    pub fn remove_system(&mut self, label: impl ScheduleLabel, name: SystemId) -> bool {
         self.entry(label).remove(name)
     }
 
@@ -116,8 +116,8 @@ impl Schedules {
     pub fn insert_order(
         &mut self,
         label: impl ScheduleLabel,
-        before: SystemName,
-        after: SystemName,
+        before: SystemId,
+        after: SystemId,
     ) -> bool {
         self.entry(label).insert_order(before, after)
     }
@@ -128,8 +128,8 @@ impl Schedules {
     pub fn remove_order(
         &mut self,
         label: impl ScheduleLabel,
-        before: SystemName,
-        after: SystemName,
+        before: SystemId,
+        after: SystemId,
     ) -> bool {
         self.entry(label).remove_order(before, after)
     }
