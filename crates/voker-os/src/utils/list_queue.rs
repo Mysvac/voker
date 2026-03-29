@@ -286,9 +286,9 @@ impl<T> ListQueue<T> {
     /// This is not suitable for all scenarios, and it is recommended that
     /// users manually specify the limit using [`ListQueue::new`].
     pub const DEFAULT_LIMIT: usize = {
-        if size_of::<T>() >= 256 {
+        if size_of::<T>() >= 128 {
             2
-        } else if size_of::<T>() >= 64 {
+        } else if size_of::<T>() >= 16 {
             4
         } else {
             8

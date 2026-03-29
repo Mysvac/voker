@@ -12,10 +12,11 @@
 mod access;
 mod error;
 mod function;
+mod ident;
 mod input;
 mod meta;
-mod name;
 mod param;
+mod registry;
 mod system;
 
 // -----------------------------------------------------------------------------
@@ -24,9 +25,10 @@ mod system;
 pub use access::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
 pub use error::UninitSystemError;
 pub use function::{FunctionSystem, SystemFunction};
+pub use ident::{SystemEntity, SystemId};
 pub use input::{In, InMut, InRef, SystemInput};
 pub use meta::{SystemFlags, SystemMeta};
-pub use name::SystemId;
 pub use param::{Local, ReadOnlySystemParam, SystemParam};
+pub use registry::SystemRegistry;
 pub use system::{IntoMapSystem, IntoPipeSystem};
 pub use system::{IntoSystem, MapSystem, PipeSystem, System};

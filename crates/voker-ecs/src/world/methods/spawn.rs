@@ -286,6 +286,16 @@ where
     }
 }
 
+impl<I> SpawnBatchIter<'_, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    pub fn exhaust(&mut self) {
+        self.by_ref().for_each(|_| {});
+    }
+}
+
 impl<I: ExactSizeIterator<Item: Bundle>> ExactSizeIterator for SpawnBatchIter<'_, I> {}
 impl<I: FusedIterator<Item: Bundle>> FusedIterator for SpawnBatchIter<'_, I> {}
 
@@ -313,7 +323,7 @@ impl World {
     /// ```
     #[inline]
     #[track_caller]
-    #[must_use = "`SpawnBatchIter` is lazy working."]
+    #[must_use = "`SpawnBatchIter` is lazy. Add `.exhaust()` if you don't need the results."]
     pub fn spawn_batch<I, B>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
         B: Bundle,

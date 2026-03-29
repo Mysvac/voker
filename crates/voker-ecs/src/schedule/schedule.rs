@@ -383,6 +383,7 @@ impl Schedule {
         schedule.incoming.resize(topo.len(), 0);
         schedule.outgoing.resize(topo.len(), &[]);
         let mut outgoing: Vec<Vec<u16>> = Vec::with_capacity(topo.len());
+        outgoing.resize_with(topo.len(), Vec::<u16>::new);
 
         let mut indices: HashMap<SystemKey, usize> = HashMap::with_capacity(topo.len());
         topo.iter().enumerate().for_each(|(idx, &key)| {
@@ -615,21 +616,21 @@ impl Schedule {
         self
     }
 
-    pub fn add_order<X, Y, M1, M2>(&mut self, x: X, y: Y) -> &mut Self
+    pub fn add_order<X, Y, M1, M2>(&mut self, before: X, after: Y) -> &mut Self
     where
         X: IntoSystem<(), (), M1>,
         Y: IntoSystem<(), (), M2>,
     {
-        self.insert_order(x.system_id(), y.system_id());
+        self.insert_order(before.system_id(), after.system_id());
         self
     }
 
-    pub fn del_order<X, Y, M1, M2>(&mut self, x: X, y: Y) -> &mut Self
+    pub fn del_order<X, Y, M1, M2>(&mut self, before: X, after: Y) -> &mut Self
     where
         X: IntoSystem<(), (), M1>,
         Y: IntoSystem<(), (), M2>,
     {
-        self.remove_order(x.system_id(), y.system_id());
+        self.remove_order(before.system_id(), after.system_id());
         self
     }
 }

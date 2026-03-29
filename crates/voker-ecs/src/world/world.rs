@@ -16,6 +16,7 @@ use crate::message::MessageRegistry;
 use crate::resource::Resources;
 use crate::schedule::Schedules;
 use crate::storage::Storages;
+use crate::system::SystemRegistry;
 use crate::tick::{CHECK_CYCLE, CheckTicks, Tick};
 use crate::world::WorldId;
 
@@ -41,6 +42,7 @@ pub struct World {
     pub schedules: Schedules,
     pub storages: Storages,
     pub command_queue: CommandQueue,
+    pub system_registry: SystemRegistry,
     pub message_registry: MessageRegistry,
 }
 
@@ -82,6 +84,7 @@ impl World {
             schedules: Schedules::new(),
             storages: Storages::new(),
             command_queue: CommandQueue::new(),
+            system_registry: SystemRegistry::new(),
             message_registry: MessageRegistry::new(),
         })
     }

@@ -1,167 +1,135 @@
 use alloc::boxed::Box;
 
-use voker_utils::hash::NoOpHashMap;
-
 use crate::component::Component;
 use crate::entity::Entity;
 use crate::error::ErrorContext;
-use crate::prelude::Resource;
-use crate::system::{IntoSystem, System, SystemId, SystemInput};
+use crate::system::{IntoSystem, System, SystemInput};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
-// SystemRegistry, RegisteredSystem
+// SystemComponent
 
 /// Erased system object stored in world-level registry entities.
 type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
-
-/// Maps a [`SystemId`] to the entity that stores the registered system instance.
-#[derive(Default)]
-struct SystemRegistry {
-    mapper: NoOpHashMap<SystemId, Entity>,
-}
 
 /// Component payload used to store one registered boxed system on an entity.
 ///
 /// Wrapped in `Option` so a system can be temporarily taken out for execution
 /// and then placed back into storage.
-struct RegisteredSystem<I: SystemInput, O> {
+struct SystemComponent<I: SystemInput, O> {
     system: Option<BoxedSystem<I, O>>,
 }
 
-impl Resource for SystemRegistry {}
-
-impl<I: SystemInput + 'static, O: 'static> Component for RegisteredSystem<I, O> {}
-
-impl SystemRegistry {
-    /// Inserts or replaces the entity binding of a system name.
-    pub fn insert(&mut self, name: SystemId, entity: Entity) {
-        self.mapper.insert(name, entity);
-    }
-
-    /// Removes a system binding and returns its entity if it exists.
-    pub fn remove(&mut self, name: SystemId) -> Option<Entity> {
-        self.mapper.remove(&name)
-    }
-
-    /// Returns the entity currently bound to a system name.
-    pub fn get(&self, name: SystemId) -> Option<Entity> {
-        self.mapper.get(&name).copied()
-    }
-}
+impl<I: SystemInput + 'static, O: 'static> Component for SystemComponent<I, O> {}
 
 // -----------------------------------------------------------------------------
-// SystemRegistry, RegisteredSystem
+// SystemRegistry, SystemComponent
 
 impl World {
-    /// Registers a system into world storage and returns its [`SystemId`].
-    ///
-    /// If another system with the same name already exists, it will be replaced.
-    pub fn register_system<I, O, M>(
-        &mut self,
-        system: impl IntoSystem<I, O, M> + 'static,
-    ) -> SystemId
-    where
-        I: SystemInput + 'static,
-        O: 'static,
-    {
-        self.register_boxed_system(Box::new(IntoSystem::into_system(system)))
-    }
-
-    /// Separate to reduce compilation workload.
-    ///
-    /// Users can directly use `register_system`, it can also be used for `BoxedSystem`.
+    #[cold]
     #[inline(never)]
-    fn register_boxed_system<I, O>(&mut self, mut system: BoxedSystem<I, O>) -> SystemId
+    fn register_boxed_system<I, O>(&mut self, mut system: BoxedSystem<I, O>) -> Entity
     where
         I: SystemInput + 'static,
         O: 'static,
     {
         // Ensure param/access metadata is prepared before first run.
         let _ = system.initialize(self);
-
-        let unsafe_world = self.unsafe_world();
-        let world = unsafe { unsafe_world.data_mut() };
-        let world_2 = unsafe { unsafe_world.full_mut() };
-
-        let mut registry = world.resource_mut_or_init::<SystemRegistry>();
         let id = system.id();
-        if let Some(old_entity) = registry.remove(id) {
-            // Keep one active registration per system name.
-            world_2.despawn(old_entity).unwrap();
-        }
 
-        let data = RegisteredSystem {
+        let data = SystemComponent {
             system: Some(system),
         };
-        let entity = world_2.spawn(data).entity();
-        registry.insert(id, entity);
+        let entity = self.spawn(data).entity();
+        self.system_registry.insert(id, entity);
 
-        id
+        entity
     }
 
-    /// Unregisters a named system and returns the boxed system instance.
-    ///
-    /// Returns `None` if the name is not registered or the expected typed payload
-    /// does not match.
-    pub fn unregister_system<I, O>(&mut self, name: SystemId) -> Option<BoxedSystem<I, O>>
+    fn run_system_internal<I, O>(&mut self, entity: Entity, input: I::Data<'_>) -> Option<O>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        let registry = self.resource_mut::<SystemRegistry>()?;
-        let entity = registry.get(name)?;
-        let mut entity = self.entity_owned(entity);
-        let mut registed = entity.get_mut::<RegisteredSystem<I, O>>()?;
-        let system = registed.system.take();
-        entity.despawn().unwrap();
-        self.resource_mut::<SystemRegistry>().unwrap().remove(name);
-        system
-    }
-
-    /// Runs a registered system with explicit input.
-    ///
-    /// The system is temporarily taken from storage, executed, then stored back.
-    /// Any runtime error is sent to the world's default error handler.
-    pub fn run_system_with<I, O>(&mut self, name: SystemId, input: I::Data<'_>) -> Option<O>
-    where
-        I: SystemInput + 'static,
-        O: 'static,
-    {
-        let registry = self.resource_mut::<SystemRegistry>()?;
-        let entity = registry.get(name)?;
-
         let mut entity_mut = self.entity_mut(entity);
-        let mut data = entity_mut.get_mut::<RegisteredSystem<I, O>>()?;
+        let mut data = entity_mut.get_mut::<SystemComponent<I, O>>()?;
         let mut system = data.system.take()?;
 
-        let id = system.id();
         // SAFETY: the registered system is executed against the current world
         // following the same contracts as schedule-driven execution.
         let ret = unsafe { system.run(input, self.unsafe_world()) };
 
         // Put the system back to preserve registration for future runs.
         let mut entity_mut = self.entity_mut(entity);
-        let mut data = entity_mut.get_mut::<RegisteredSystem<I, O>>().unwrap();
-        data.system = Some(system);
+        let mut data = entity_mut.get_mut::<SystemComponent<I, O>>().unwrap();
 
         match ret {
-            Ok(ret) => Some(ret),
+            Ok(ret) => {
+                data.system = Some(system);
+                Some(ret)
+            }
             Err(e) => {
                 voker_utils::cold_path();
+                let id = system.id();
+                let last_run = system.get_last_run();
+                data.system = Some(system);
                 let hander = self.default_error_handler();
-                let ctx = ErrorContext::System {
-                    id,
-                    last_run: self.last_run(),
-                };
+                let ctx = ErrorContext::System { id, last_run };
                 (hander.0)(e, ctx);
                 None
             }
         }
     }
 
+    #[inline]
+    pub fn run_system_with<I, O, M>(
+        &mut self,
+        system: impl IntoSystem<I, O, M> + 'static,
+        input: I::Data<'_>,
+    ) -> Option<O>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        let id = system.system_id();
+        let entity = self.system_registry.get(id).unwrap_or_else(|| {
+            self.register_boxed_system(Box::new(IntoSystem::into_system(system)))
+        });
+
+        self.run_system_internal::<I, O>(entity, input)
+    }
+
     /// Runs a named system with unit input.
-    pub fn run_system<O: 'static>(&mut self, name: SystemId) -> Option<O> {
-        self.run_system_with::<(), O>(name, ())
+    #[inline]
+    pub fn run_system<O: 'static, M>(
+        &mut self,
+        system: impl IntoSystem<(), O, M> + 'static,
+    ) -> Option<O> {
+        self.run_system_with::<(), O, M>(system, ())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{name::Name, query::Query, world::World};
+
+    #[test]
+    fn temp() {
+        let mut world = World::alloc();
+
+        world.run_system(spawn);
+        world.run_system(display);
+
+        fn spawn(world: &mut World) {
+            for id in 0..100 {
+                world.spawn(Name::new(alloc::format!("id_{id}")));
+            }
+        }
+
+        fn display(query: Query<&Name>) {
+            for name in query {
+                std::eprintln!("{name}");
+            }
+        }
     }
 }
