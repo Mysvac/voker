@@ -291,8 +291,9 @@ where
     I: Iterator,
     I::Item: Bundle,
 {
-    pub fn exhaust(&mut self) {
-        self.by_ref().for_each(|_| {});
+    #[inline]
+    pub fn exhaust(self) {
+        self.for_each(|_| {});
     }
 }
 

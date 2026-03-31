@@ -18,7 +18,7 @@ impl World {
     /// [`World::query`] and [`World::query_with`] call this automatically to
     /// avoid repeated initialization and archetype-filter setup costs.
     ///
-    /// If you do not want caching, use [`World::query_state`] for ad-hoc
+    /// If you do not want caching, use [`World::query_once`] for ad-hoc
     /// query construction.
     ///
     /// Note: when `Query` is used as a system parameter, its query state is

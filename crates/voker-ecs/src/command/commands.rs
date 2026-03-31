@@ -404,3 +404,22 @@ impl<'a> Commands<'a> {
         }
     }
 }
+
+#[test]
+fn temp() {
+    use crate::world::World;
+
+    let mut world = World::alloc();
+
+    assert!(world.entity_count() == 0);
+    world.run_system(spawn);
+    assert!(world.entity_count() == 1);
+
+    world.apply_commands();
+    assert!(world.entity_count() == 101);
+
+    fn spawn(mut cmd: Commands) {
+        // 生成 100 个无组件的实体
+        cmd.spawn_batch((0..100).map(|_| ()));
+    }
+}

@@ -179,6 +179,8 @@ fn updata_dense_state(
     let old_len = storages.len();
     let new_version = archetypes.len();
 
+    let mut buffer: Vec<StorageId> = Vec::with_capacity(new_version - old_len);
+
     for arche_id in (*version)..new_version {
         let arche_id = unsafe { ArcheId::new_unchecked(arche_id as u32) };
         let archetype = unsafe { archetypes.get_unchecked(arche_id) };
@@ -186,20 +188,33 @@ fn updata_dense_state(
             table_id: archetype.table_id(),
         };
 
-        let matched = filter_params
-            .iter()
-            .any(|param| archetype.matches_sorted(param.with(), param.without()));
-        if matched && storages.binary_search(&storage_id).is_err() {
-            storages.push(storage_id);
+        if storages.binary_search(&storage_id).is_err() {
+            let matched = filter_params
+                .iter()
+                .any(|param| archetype.matches_sorted(param.with(), param.without()));
+
+            if matched {
+                buffer.push(storage_id);
+            }
         }
     }
 
-    if storages.len() != old_len {
-        // storages is partially sorted,
-        // so we choose `sort` instead of `unstable_sort`.
-        storages.sort();
-        storages.dedup(); // optional
-    }
+    // Assuming the max table ID in storages is A, which represents
+    // the maximum ID that met the criteria during the last update.
+    //
+    // Obviously, we only need to determine whether the newly added
+    // table meets the conditions. An important discovery is that,
+    // the table ID that meets the conditions and is not in storages
+    // must have a value greater than `A`. If its value is less than
+    // or equal to A, then this table must have been processed in a
+    // previous update, If the conditions are met, it should already
+    // be in storages.
+    //
+    // Therefore, we only need to sort the newly added parts.
+
+    buffer.sort_unstable();
+    buffer.dedup();
+    storages.append(&mut buffer);
 
     *version = new_version;
 }

@@ -61,9 +61,8 @@ use crate::utils::Dropper;
 /// # Safety
 ///
 /// Implementing this trait promises that the type can be stored behind the ECS'
-/// type-erased resource storage. If you override [`Self::CLONER`] or
-/// [`Self::DROPPER`], they must match the implementor's actual layout and drop
-/// behavior.
+/// type-erased resource storage. If you override [`Self::DROPPER`], they must
+/// match the implementor's actual layout and drop behavior.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a resource",
     label = "invalid resource",

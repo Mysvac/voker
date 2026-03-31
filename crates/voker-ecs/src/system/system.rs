@@ -175,7 +175,7 @@ where
 ///
 /// - [`pipe`](IntoSystem::pipe): Chain two systems, feeding output of first as input to second
 /// - [`map`](IntoSystem::map): Transform system output using a function
-/// - [`run_if`](IntoSystem::run_if): Conditionally run the system based on another system's output
+/// - [`with_marker`](IntoSystem::with_marker): Conditionally run the system based on another system's output
 pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
     type System: System<Input = I, Output = O>;
 

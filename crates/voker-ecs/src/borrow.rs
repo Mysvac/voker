@@ -53,9 +53,9 @@ pub struct Res<'w, T: Resource + Sync> {
 /// A shared reference to a `Send + Sync` resource with change detection.
 ///
 /// This is the read-only resource parameter for systems that need change ticks,
-/// or the wrapper returned by [`World::get_resource_ref`].
+/// or the wrapper returned by [`World::resource_ref`].
 ///
-/// [`World::get_resource_ref`]: crate::world::World::get_resource_ref
+/// [`World::resource_ref`]: crate::world::World::resource_ref
 ///
 /// # Examples
 ///
@@ -81,10 +81,10 @@ pub struct ResRef<'w, T: Resource + Sync> {
 /// An exclusive reference to a `Send` resource with change detection.
 ///
 /// This is the mutable resource parameter for systems and the wrapper returned by
-/// [`World::get_resource_mut`]. Mutable access participates in the ECS borrow rules,
+/// [`World::resource_mut`]. Mutable access participates in the ECS borrow rules,
 /// so no other system can read or write the same resource at the same time.
 ///
-/// [`World::get_resource_mut`]: crate::world::World::get_resource_mut
+/// [`World::resource_mut`]: crate::world::World::resource_mut
 ///
 /// # Examples
 ///
