@@ -24,10 +24,10 @@ use quote::quote;
 /// The cost of this function is relatively high (accessing files, obtaining read-write lock permissions, querying content...),
 /// so the crate path is mainly obtained through parameter passing rather than reacquiring.
 pub(crate) fn voker_reflect() -> syn::Path {
-    voker_path::crate_path!(voker_reflect)
+    voker_macro_utils::crate_path!(voker_reflect)
 }
 
-pub(crate) use voker_path::full_path as fp;
+pub(crate) use voker_macro_utils::full_path as fp;
 
 // -----------------------------------------------------------------------------
 // Modules

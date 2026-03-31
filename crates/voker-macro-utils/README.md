@@ -1,6 +1,6 @@
-# voker-path
+# voker-macro-utils
 
-Path helpers for proc-macro crates.
+Helpers for proc-macro crates.
 
 This crate provides:
 

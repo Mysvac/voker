@@ -2,6 +2,7 @@
 //!
 //! This module reads the active `Cargo.toml` from `CARGO_MANIFEST_DIR` and
 //! resolves crate names into absolute [`syn::Path`] values.
+//!
 //! A small cache keyed by manifest path and modified time avoids reparsing on
 //! repeated lookups in the same process.
 
@@ -30,19 +31,23 @@ struct Manifest {
 
 /// Resolve a crate name to an absolute [`syn::Path`].
 ///
-/// Resolution order:
-/// 1. `dependencies`
-/// 2. `dev-dependencies`
-/// 3. fallback to the provided name as an absolute path (`::name`)
+/// Can **not** be used for third-party crates that with `voker_` prefix.
 ///
 /// Internal aliasing rule:
 /// if dependency `voker` exists and the requested name starts with `voker_`,
 /// the prefix is mapped to `::voker::<module>`.
 ///
 /// Practical flow:
-/// 1. If target does not start with `voker_`, use direct dependency lookup; if not found, return input form.
-/// 2. If target starts with `voker_` and a same-name dependency exists, return that direct dependency path.
-/// 3. If target starts with `voker_`, same-name dependency does not exist, but dependency `voker` exists, return `::voker::<module>`.
+///
+/// 1. If target does not start with `voker_`, use direct dependency lookup;
+///    if not found, return input form.
+///
+/// 2. If target starts with `voker_` and a same-name dependency exists,
+///    return that direct dependency path.
+///
+/// 3. If target starts with `voker_`, same-name dependency does not exist,
+///    but dependency `voker` exists, return `::voker::<module>`.
+///
 /// 4. Otherwise, return the input form as absolute path (`::name`).
 ///
 /// # Panics
@@ -53,7 +58,7 @@ struct Manifest {
 /// # Examples
 ///
 /// ```ignore
-/// let syn_path = voker_path::crate_path("syn");
+/// let ecs_path = voker_path::crate_path("voker_ecs");
 /// ```
 pub fn crate_path(path: &'static str) -> syn::Path {
     Manifest::shared(|manifest| manifest.find_crate_path(path))
@@ -64,6 +69,7 @@ impl Manifest {
         static MANIFESTS: RwLock<BTreeMap<PathBuf, Manifest>> = RwLock::new(BTreeMap::new());
 
         #[cold]
+        #[inline(always)]
         const fn cold_path() {}
 
         fn manifest_meta() -> (PathBuf, SystemTime) {

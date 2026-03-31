@@ -16,7 +16,7 @@ reflect_docs = []
 auto_register = []
 
 [dependencies]
-voker-path = { path = "../../voker-path" }
+voker-macro-utils = { path = "../../voker-macro-utils" }
 
 syn = { version = "2.0", features = ["visit", "full", "extra-traits"] }
 quote = "1.0"

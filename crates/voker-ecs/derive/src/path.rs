@@ -9,10 +9,10 @@ use quote::quote;
 
 /// Get the correct access path to the `voker_ecs` crate.
 pub(crate) fn voker_ecs() -> syn::Path {
-    voker_path::crate_path!(voker_ecs)
+    voker_macro_utils::crate_path!(voker_ecs)
 }
 
-pub(crate) use voker_path::full_path as fp;
+pub(crate) use voker_macro_utils::full_path as fp;
 
 #[inline(always)]
 pub(crate) fn macro_utils_(voker_ecs_path: &syn::Path) -> TokenStream {

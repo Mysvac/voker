@@ -4,14 +4,13 @@
 //! This allows proc-macro code to emit stable, absolute paths such as
 //! `::core::any::Any` without manually writing those segments repeatedly.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```no_run
 //! use quote::quote;
 //! use voker_path::full_path::AnyFP;
 //!
-//! let marker = AnyFP;
-//! let tokens = quote!(#marker);
+//! let tokens = quote!(#AnyFP);
 //! assert_eq!(tokens.to_string(), ":: core :: any :: Any");
 //! ```
 
