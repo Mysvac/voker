@@ -143,7 +143,7 @@ unsafe impl<T: Component> QueryData for &T {
                 let row = table_row.0 as usize;
                 let data = unsafe { column.get_data(row) };
                 data.debug_assert_aligned::<T>();
-                Some(unsafe { data.consume::<T>() })
+                Some(unsafe { data.deref::<T>() })
             }
             ComponentStorage::Sparse => {
                 let ptr = unsafe { cache.sparse }?;
@@ -151,7 +151,7 @@ unsafe impl<T: Component> QueryData for &T {
                 let row = map.get_map_row(entity)?;
                 let ptr = unsafe { map.get_data(row) };
                 ptr.debug_assert_aligned::<T>();
-                Some(unsafe { ptr.consume::<T>() })
+                Some(unsafe { ptr.deref::<T>() })
             }
         }
     }
@@ -295,7 +295,7 @@ unsafe impl<T: Component> QueryData for &mut T {
                 }
                 let data = unsafe { column.get_data_mut(row) };
                 data.debug_assert_aligned::<T>();
-                Some(unsafe { data.consume::<T>() })
+                Some(unsafe { data.deref::<T>() })
             }
             ComponentStorage::Sparse => {
                 let ptr = unsafe { cache.data.sparse }?;
@@ -306,7 +306,7 @@ unsafe impl<T: Component> QueryData for &mut T {
                 }
                 let ptr = unsafe { map.get_data_mut(row) };
                 ptr.debug_assert_aligned::<T>();
-                Some(unsafe { ptr.consume::<T>() })
+                Some(unsafe { ptr.deref::<T>() })
             }
         }
     }

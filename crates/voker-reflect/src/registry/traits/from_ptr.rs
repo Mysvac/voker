@@ -76,12 +76,12 @@ impl<T: Typed + Reflect> FromType<T> for ReflectFromPtr {
                 // or returned by `ReflectFromPtr::from_ptr`, both lay out the invariants
                 // required by `deref`
                 ptr.debug_assert_aligned::<T>();
-                unsafe { ptr.consume::<T>() as &dyn Reflect }
+                unsafe { ptr.deref::<T>() as &dyn Reflect }
             },
             from_ptr_mut: |ptr| {
                 // SAFETY: same as above
                 ptr.debug_assert_aligned::<T>();
-                unsafe { ptr.consume::<T>() as &mut dyn Reflect }
+                unsafe { ptr.deref::<T>() as &mut dyn Reflect }
             },
         }
     }

@@ -92,7 +92,7 @@ unsafe impl<T: Component> FetchComponents for &T {
                 let table_col = table.get_table_col(id)?;
                 let ptr = unsafe { table.get_data(table_row, table_col) };
                 ptr.debug_assert_aligned::<T>();
-                Some(unsafe { ptr.consume() })
+                Some(unsafe { ptr.deref::<T>() })
             }
             ComponentStorage::Sparse => {
                 let maps = &world.storages.maps;
@@ -101,7 +101,7 @@ unsafe impl<T: Component> FetchComponents for &T {
                 let map_row = map.get_map_row(entity)?;
                 let ptr = unsafe { map.get_data(map_row) };
                 ptr.debug_assert_aligned::<T>();
-                Some(unsafe { ptr.consume() })
+                Some(unsafe { ptr.deref::<T>() })
             }
         }
     }

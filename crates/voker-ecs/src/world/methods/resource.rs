@@ -50,7 +50,7 @@ impl World {
     pub fn insert_resource<T: Resource + Send>(&mut self, value: T) -> &mut T {
         let id = self.resources.register::<T>();
         voker_ptr::into_owning!(value);
-        unsafe { insert_internal(self, value, id).consume::<T>() }
+        unsafe { insert_internal(self, value, id).deref::<T>() }
     }
 
     /// Removes and returns a `Send` resource if it exists.
@@ -125,7 +125,7 @@ impl World {
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
-            Some(unsafe { ptr.consume::<T>() })
+            Some(unsafe { ptr.deref::<T>() })
         } else {
             None
         }
@@ -296,7 +296,7 @@ impl World {
         let id = self.resources.register::<T>();
 
         voker_ptr::into_owning!(value);
-        unsafe { insert_internal(self, value, id).consume::<T>() }
+        unsafe { insert_internal(self, value, id).deref::<T>() }
     }
 
     /// Removes and returns a main-thread resource if it exists.
@@ -393,7 +393,7 @@ impl World {
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
-            Some(unsafe { ptr.consume::<T>() })
+            Some(unsafe { ptr.deref::<T>() })
         } else {
             None
         }

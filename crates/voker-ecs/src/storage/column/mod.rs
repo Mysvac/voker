@@ -344,8 +344,8 @@ impl Column {
         let now = check.tick();
 
         unsafe {
-            Tick::slice_check(self.added.get_slice_mut().as_slice_mut(len), now);
-            Tick::slice_check(self.changed.get_slice_mut().as_slice_mut(len), now);
+            Tick::slice_check(self.added.get_slice_mut().as_mut(len), now);
+            Tick::slice_check(self.changed.get_slice_mut().as_mut(len), now);
         }
     }
 

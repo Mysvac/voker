@@ -32,8 +32,8 @@ use voker_ptr::Ptr;
 
 let x = 10_i32;
 let ptr = Ptr::from_ref(&x);
-ptr.debug_assert_aligned::<i32>();
-let rx = unsafe { ptr.as_ref::<i32>() };
+
+let rx = unsafe { ptr.deref::<i32>() };
 assert_eq!(*rx, 10);
 ```
 
@@ -45,6 +45,7 @@ use voker_ptr::OwningPtr;
 
 let mut value = ManuallyDrop::new(42_i32);
 let ptr = OwningPtr::from_value(&mut value);
+
 let out = unsafe { ptr.read::<i32>() };
 assert_eq!(out, 42);
 ```
@@ -56,8 +57,9 @@ use voker_ptr::ThinSliceMut;
 
 let mut data = [1, 2, 3];
 let mut thin = ThinSliceMut::from_mut(&mut data);
+
 unsafe {
     *thin.get_mut(1) = 20;
-    assert_eq!(thin.as_slice(3), &[1, 20, 3]);
+    assert_eq!(thin.as_ref(3), &[1, 20, 3]);
 }
 ```

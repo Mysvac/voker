@@ -17,7 +17,7 @@ impl Cloner {
         src.debug_assert_aligned::<T>();
         dst.debug_assert_aligned::<T>();
         unsafe {
-            let val = src.as_ref::<T>();
+            let val = src.deref::<T>();
             let dst = dst.as_ptr() as *mut T;
             core::ptr::write::<T>(dst, val.clone());
         }

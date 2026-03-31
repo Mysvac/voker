@@ -60,7 +60,8 @@ macro_rules! impl_ptr {
             #[inline]
             pub const unsafe fn byte_offset(self, count: isize) -> Self {
                 Self(
-                    // SAFETY: The caller upholds safety for `offset` and ensures the result is not null.
+                    // SAFETY: The caller upholds safety for `offset`
+                    // and ensures the result is not null.
                     unsafe { self.0.offset(count) },
                     PhantomData,
                 )
@@ -76,7 +77,8 @@ macro_rules! impl_ptr {
             #[inline]
             pub const unsafe fn byte_add(self, count: usize) -> Self {
                 Self(
-                    // SAFETY: The caller upholds safety for `add` and ensures the result is not null.
+                    // SAFETY: The caller upholds safety for `add`
+                    // and ensures the result is not null.
                     unsafe { self.0.add(count) },
                     PhantomData,
                 )
@@ -126,8 +128,7 @@ macro_rules! impl_ptr {
 /// let x = 8i32;
 /// let ptr = Ptr::from_ref(&x);
 ///
-/// ptr.debug_assert_aligned::<i32>();
-/// let rx = unsafe { ptr.as_ref::<i32>() };
+/// let rx: &i32 = unsafe { ptr.deref() };
 /// assert_eq!(*rx, 8);
 /// ```
 #[derive(Copy, Clone)]
@@ -143,22 +144,6 @@ impl<'a> Ptr<'a> {
     ///
     /// - The provided lifetime `'a` must be valid for the pointee.
     /// - `ptr` must point to a valid object of the intended pointee type.
-    ///
-    /// This function is `unsafe` because callers must uphold the above invariants;
-    /// violating them may lead to undefined behavior.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_ptr::Ptr;
-    /// # use core::ptr::NonNull;
-    /// let x = 8i32;
-    ///
-    /// let ptr: Ptr<'_> = unsafe {
-    ///     Ptr::new(NonNull::from_ref(&x).cast())
-    /// };
-    /// assert!(ptr.is_aligned::<i32>());
-    /// ```
     #[inline(always)]
     pub const unsafe fn new(ptr: NonNull<u8>) -> Ptr<'a> {
         Ptr(ptr, PhantomData)
@@ -166,7 +151,8 @@ impl<'a> Ptr<'a> {
 
     /// Creates a `Ptr` from a reference with same lifetime.
     ///
-    /// This is safe because the lifetime provided by the reference must be correct.
+    /// This is safe because the lifetime provided by the reference
+    /// must be correct.
     ///
     /// # Examples
     ///
@@ -182,7 +168,8 @@ impl<'a> Ptr<'a> {
 
     /// Creates a `Ptr` from a mutable reference with same lifetime.
     ///
-    /// This is safe because the lifetime provided by the reference must be correct.
+    /// This is safe because the lifetime provided by the reference
+    /// must be correct.
     ///
     /// The Rust's borrow checker ensures that mutable references
     /// cannot be used when `Ptr` is active.
@@ -200,20 +187,20 @@ impl<'a> Ptr<'a> {
     }
 
     /// Gets the underlying pointer, erasing the associated lifetime.
-    ///
-    /// If possible, it is encouraged to use [`as_ref`](Self::as_ref) over this function.
     #[inline(always)]
     pub const fn as_ptr(self) -> *const u8 {
         self.0.as_ptr()
     }
 
-    /// Convert this [`Ptr`] into a `&T` with the original lifetime `'a`.
+    /// Convert this [`Ptr`] into a `&T` with the original lifetime.
     ///
     /// The concrete pointee type is unknown at compile time.
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
-    /// to check alignment before calling.
+    /// It is recommended to use [`debug_assert_aligned`] to check
+    /// alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     ///
@@ -230,27 +217,11 @@ impl<'a> Ptr<'a> {
     ///
     /// ptr.debug_assert_aligned::<i32>();
     ///
-    /// let rx = unsafe { ptr.as_ref::<i32>() };
+    /// let rx = unsafe { ptr.deref::<i32>() };
     /// assert_eq!(*rx, 8);
     /// ```
     #[inline(always)]
-    pub const unsafe fn as_ref<T>(self) -> &'a T {
-        // SAFETY: Type correct, ptr aligned and pointee valid object.
-        unsafe { &*self.0.as_ptr().cast::<T>() }
-    }
-
-    /// Convert this [`Ptr`] into a `&T` with the original lifetime `'a`.
-    ///
-    /// As same as [`Ptr::as_ref`], use this when the returned reference
-    /// must keep the same lifetime as the pointer value itself.
-    ///
-    /// # Safety
-    ///
-    /// - `Ptr` points to a valid object.
-    /// - `T` must match the actual type of the pointee.
-    /// - `Ptr` must be properly aligned for `T`.
-    #[inline(always)]
-    pub const unsafe fn consume<T>(self) -> &'a T {
+    pub const unsafe fn deref<T>(self) -> &'a T {
         // SAFETY: Type correct, ptr aligned and pointee valid object.
         unsafe { &*self.0.as_ptr().cast::<T>() }
     }
@@ -305,7 +276,6 @@ impl<'a> From<PtrMut<'a>> for Ptr<'a> {
 /// let mut x = 8i32;
 /// let mut ptr = PtrMut::from_mut(&mut x);
 ///
-/// ptr.debug_assert_aligned::<i32>();
 /// let rx = unsafe { ptr.as_mut::<i32>() };
 /// *rx += 2;
 /// assert_eq!(*rx, 10);
@@ -323,22 +293,6 @@ impl<'a> PtrMut<'a> {
     /// - The data pointed to by this `ptr` must be valid for writes.
     /// - The provided lifetime `'a` must be valid for the pointee.
     /// - `ptr` must point to a valid object of the intended pointee type.
-    ///
-    /// This function is `unsafe` because callers must uphold the above invariants;
-    /// violating them may lead to undefined behavior.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_ptr::PtrMut;
-    /// # use core::ptr::NonNull;
-    /// let mut x = 8i32;
-    ///
-    /// let ptr: PtrMut<'_> = unsafe {
-    ///     PtrMut::new(NonNull::from_mut(&mut x).cast())
-    /// };
-    /// assert!(ptr.is_aligned::<i32>());
-    /// ```
     #[inline(always)]
     pub const unsafe fn new(ptr: NonNull<u8>) -> PtrMut<'a> {
         PtrMut(ptr, PhantomData)
@@ -346,7 +300,8 @@ impl<'a> PtrMut<'a> {
 
     /// Creates a `PtrMut` from a mutable reference with same lifetime.
     ///
-    /// This is safe because the lifetime provided by the reference must be correct.
+    /// This is safe because the lifetime provided by the reference
+    /// must be correct.
     ///
     /// The Rust's borrow checker ensures that mutable references
     /// cannot be used when `PtrMut` is active.
@@ -364,9 +319,6 @@ impl<'a> PtrMut<'a> {
     }
 
     /// Gets the underlying pointer, erasing the associated lifetime.
-    ///
-    /// If possible, it is encouraged to use
-    /// [`as_mut`](PtrMut::as_mut) or [`consume`](PtrMut::consume).
     #[inline(always)]
     pub const fn as_ptr(&self) -> *mut u8 {
         self.0.as_ptr()
@@ -382,8 +334,10 @@ impl<'a> PtrMut<'a> {
     /// The concrete pointee type is unknown at compile time.
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - Self must be properly aligned for type `T`.
@@ -416,8 +370,10 @@ impl<'a> PtrMut<'a> {
     /// The concrete pointee type is unknown at compile time.
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - Self must be properly aligned for type `T`.
@@ -441,10 +397,10 @@ impl<'a> PtrMut<'a> {
         unsafe { &mut *self.0.as_ptr().cast::<T>() }
     }
 
-    /// Gets a [`Ptr`] from self with a **smaller** lifetime.
+    /// Gets a [`Ptr`] from self with a borrowing lifetime.
     ///
-    /// It's safe because borrow checker ensure [`PtrMut`] cannot be used
-    /// when [`Ptr`] is active.
+    /// It's safe because borrow checker ensure [`PtrMut`]
+    /// cannot be used when [`Ptr`] is active.
     ///
     /// # Examples
     ///
@@ -463,7 +419,7 @@ impl<'a> PtrMut<'a> {
         Ptr(self.0, PhantomData)
     }
 
-    /// Gets a [`PtrMut`] from self with a **smaller** lifetime.
+    /// Gets a [`PtrMut`] from self with a borrowing lifetime.
     ///
     /// It's safe because borrow checker ensure the old [`PtrMut`]
     /// cannot be used when new [`PtrMut`] is active.
@@ -496,8 +452,10 @@ impl<'a> PtrMut<'a> {
     /// The concrete pointee type is unknown at compile time.
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - Self must be properly aligned for type `T`.
@@ -510,12 +468,12 @@ impl<'a> PtrMut<'a> {
     /// let mut x = 8;
     /// let mut ptr = PtrMut::from_mut(&mut x);
     ///
-    /// let rx = unsafe{ ptr.consume::<i32>() };
+    /// let rx: &mut i32 = unsafe{ ptr.deref() };
     /// *rx += 2;
     /// assert_eq!(*rx, 10);
     /// ```
     #[inline(always)]
-    pub const unsafe fn consume<T>(self) -> &'a mut T {
+    pub const unsafe fn deref<T>(self) -> &'a mut T {
         // SAFETY: Type correct, ptr aligned and pointee valid object.
         unsafe { &mut *self.0.as_ptr().cast::<T>() }
     }
@@ -603,9 +561,6 @@ impl<'a> OwningPtr<'a> {
     /// - The data pointed to should use wrapped by [`ManuallyDrop`].
     /// - The caller needs to drop the data correctly through `OwningPtr`.
     ///
-    /// This function is `unsafe` because callers must uphold the above invariants;
-    /// violating them may lead to undefined behavior.
-    ///
     /// # Examples
     ///
     /// ```
@@ -653,8 +608,10 @@ impl<'a> OwningPtr<'a> {
     ///
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - `ptr` must be properly aligned for type `T`.
@@ -666,9 +623,7 @@ impl<'a> OwningPtr<'a> {
     /// # use voker_ptr::OwningPtr;
     /// # use core::{ptr::NonNull, mem::ManuallyDrop};
     /// let mut x = ManuallyDrop::new("1234".to_string());
-    /// let ptr: OwningPtr<'_> = unsafe {
-    ///     OwningPtr::new(NonNull::from_mut(&mut x).cast())
-    /// };
+    /// let ptr = OwningPtr::from_value(&mut x);
     ///
     /// // do something
     ///
@@ -680,12 +635,15 @@ impl<'a> OwningPtr<'a> {
         unsafe { ptr::drop_in_place::<T>(self.0.as_ptr().cast::<T>()) }
     }
 
-    /// Consumes the [`OwningPtr`] to obtain ownership of the underlying data of type `T`.
+    /// Consumes the [`OwningPtr`] to obtain ownership of the
+    /// underlying data of type `T`.
     ///
     /// The caller must ensure the pointer is suitable for `T`.
     ///
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - `ptr` must be properly aligned for type `T`.
@@ -697,9 +655,7 @@ impl<'a> OwningPtr<'a> {
     /// # use voker_ptr::OwningPtr;
     /// # use core::{ptr::NonNull, mem::ManuallyDrop};
     /// let mut x = ManuallyDrop::new("1234".to_string());
-    /// let ptr: OwningPtr<'_> = unsafe {
-    ///     OwningPtr::new(NonNull::from_mut(&mut x).cast())
-    /// };
+    /// let ptr = OwningPtr::from_value(&mut x);
     ///
     /// // do something
     ///
@@ -713,7 +669,7 @@ impl<'a> OwningPtr<'a> {
 
     /// Writes `value` into the memory pointed to by this pointer.
     ///
-    /// This uses `ptr::write`, so it does not read or drop any existing value.
+    /// This uses `ptr::write`, so it does **not** read or drop any existing value.
     ///
     /// # Safety
     /// - `self` must be valid for writes of a `T`.
@@ -781,11 +737,7 @@ impl<'a> OwningPtr<'a> {
     #[inline(always)]
     pub fn make<T, F: FnOnce(OwningPtr<'_>) -> R, R>(val: T, f: F) -> R {
         let mut val = ManuallyDrop::new(val);
-        f(OwningPtr(
-            // SAFETY: the pointer is valid and aligned.
-            unsafe { NonNull::new_unchecked(&raw mut val as *mut u8) },
-            PhantomData,
-        ))
+        f(OwningPtr(NonNull::from_mut(&mut val).cast(), PhantomData))
     }
 
     /// Gets the underlying pointer, erasing the associated lifetime.
@@ -798,8 +750,8 @@ impl<'a> OwningPtr<'a> {
     ///
     /// Lifetime will be consistent with `&OwningPtr`, not generic `'a`.
     ///
-    /// It's safe because borrow checker ensure the old [`OwningPtr`] cannot be used
-    /// when new [`Ptr`] is active.
+    /// It's safe because borrow checker ensure the old [`OwningPtr`]
+    /// cannot be used when new [`Ptr`] is active.
     #[inline(always)]
     pub const fn borrow(&self) -> Ptr<'_> {
         Ptr(self.0, PhantomData)
@@ -809,8 +761,8 @@ impl<'a> OwningPtr<'a> {
     ///
     /// Lifetime will be consistent with `&mut OwningPtr`, not generic `'a`.
     ///
-    /// It's safe because borrow checker ensure the old [`OwningPtr`] cannot be used
-    /// when new [`PtrMut`] is active.
+    /// It's safe because borrow checker ensure the old [`OwningPtr`]
+    /// cannot be used when new [`PtrMut`] is active.
     #[inline(always)]
     pub const fn borrow_mut(&mut self) -> PtrMut<'_> {
         PtrMut(self.0, PhantomData)
@@ -824,8 +776,11 @@ impl<'a> OwningPtr<'a> {
     /// when returned reference is active.
     ///
     /// The caller must ensure the pointer is suitable for `T`.
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    ///
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - Self must be properly aligned for type `T`.
@@ -845,8 +800,11 @@ impl<'a> OwningPtr<'a> {
     /// when returned reference is active.
     ///
     /// The caller must ensure the pointer is suitable for `T`.
-    /// It is recommended to use [`debug_assert_aligned`](Self::debug_assert_aligned)
+    ///
+    /// It is recommended to use [`debug_assert_aligned`]
     /// to check alignment before calling.
+    ///
+    /// [`debug_assert_aligned`]: Self::debug_assert_aligned
     ///
     /// # Safety
     /// - Self must be properly aligned for type `T`.
@@ -894,30 +852,28 @@ mod tests {
 
     use super::{OwningPtr, Ptr, PtrMut};
 
-    static DROPS: AtomicUsize = AtomicUsize::new(0);
+    macro_rules! define_dc {
+        ($t:ident, $s:ident) => {
+            static $s: AtomicUsize = AtomicUsize::new(0);
 
-    struct DC;
-    impl Drop for DC {
-        fn drop(&mut self) {
-            DROPS.fetch_add(1, Ordering::SeqCst);
-        }
+            struct $t;
+            impl Drop for $t {
+                fn drop(&mut self) {
+                    $s.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+
+            $s.store(0, Ordering::SeqCst);
+        };
     }
 
     #[test]
-    fn ptr_read() {
-        let value = 9_i32;
-        let ptr = Ptr::from_ref(&value);
-        ptr.debug_assert_aligned::<i32>();
-
-        let read_back = unsafe { ptr.as_ref::<i32>() };
-        assert_eq!(*read_back, 9);
-    }
-
-    #[test]
-    fn ptr_consume() {
+    fn ptr_deref() {
         let value = 12_i32;
         let ptr = Ptr::from_ref(&value);
-        let read_back = unsafe { ptr.consume::<i32>() };
+
+        ptr.debug_assert_aligned::<i32>();
+        let read_back = unsafe { ptr.deref::<i32>() };
         assert_eq!(*read_back, 12);
     }
 
@@ -926,6 +882,7 @@ mod tests {
         let mut value = 10_i32;
         let mut ptr = PtrMut::from_mut(&mut value);
 
+        ptr.debug_assert_aligned::<i32>();
         let mut sub = ptr.reborrow();
         let slot = unsafe { sub.as_mut::<i32>() };
         *slot += 5;
@@ -944,42 +901,63 @@ mod tests {
 
     #[test]
     fn own_drop_once() {
-        DROPS.store(0, Ordering::SeqCst);
+        define_dc!(DC, COUNTER);
+
         let mut value = ManuallyDrop::new(DC);
         let ptr = OwningPtr::from_value(&mut value);
         unsafe { ptr.drop_as::<DC>() };
 
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1);
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     fn own_read_then_drop() {
-        DROPS.store(0, Ordering::SeqCst);
+        define_dc!(DC, COUNTER);
+
         let mut value = ManuallyDrop::new(DC);
         let ptr = OwningPtr::from_value(&mut value);
         let out = unsafe { ptr.read::<DC>() };
 
         // `read` transfers ownership without dropping in place.
-        assert_eq!(DROPS.load(Ordering::SeqCst), 0);
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 0);
         drop(out);
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1);
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     fn own_make_drop() {
-        DROPS.store(0, Ordering::SeqCst);
+        define_dc!(DC, COUNTER);
+
         OwningPtr::make(DC, |ptr| unsafe {
             ptr.drop_as::<DC>();
         });
 
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1);
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     fn own_macro() {
         let value = 7_i32;
+
         crate::into_owning!(value as ptr);
         let out = unsafe { ptr.read::<i32>() };
+
         assert_eq!(out, 7);
+    }
+
+    #[test]
+    fn own_macro_drop() {
+        define_dc!(DC, COUNTER);
+
+        {
+            let value = DC;
+            {
+                crate::into_owning!(value as ptr);
+                assert_eq!(COUNTER.load(Ordering::SeqCst), 0);
+                unsafe { ptr.drop_as::<DC>() };
+            }
+        }
+
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
     }
 }

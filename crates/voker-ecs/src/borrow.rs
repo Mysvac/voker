@@ -952,7 +952,7 @@ impl_deref_mut!(Mut<'w, T>, T,);
 impl<T: Debug> Debug for SliceRef<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("SliceRef")
-            .field(&unsafe { self.value.as_slice(self.ticks.length) })
+            .field(&unsafe { self.value.deref(self.ticks.length) })
             .finish()
     }
 }
@@ -961,7 +961,7 @@ impl<'w, T> SliceRef<'w, T> {
     /// Consumes self and returns the inner reference `&T` with the same lifetime.
     #[inline(always)]
     pub fn into_inner(self) -> &'w [T] {
-        unsafe { self.value.as_slice(self.ticks.length) }
+        unsafe { self.value.deref(self.ticks.length) }
     }
 
     /// Creates a copy with the **same** lifetime.
@@ -981,14 +981,14 @@ impl<'w, T> Deref for SliceRef<'w, T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        unsafe { self.value.as_slice(self.ticks.length) }
+        unsafe { self.value.deref(self.ticks.length) }
     }
 }
 
 impl<'w, T> AsRef<[T]> for SliceRef<'w, T> {
     #[inline(always)]
     fn as_ref(&self) -> &[T] {
-        unsafe { self.value.as_slice(self.ticks.length) }
+        unsafe { self.value.deref(self.ticks.length) }
     }
 }
 
@@ -1063,7 +1063,7 @@ impl<T> FusedIterator for SliceRefIterator<'_, T> {}
 impl<T: Debug> Debug for SliceMut<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("SliceMut")
-            .field(&unsafe { self.value.as_slice(self.ticks.length) })
+            .field(&unsafe { self.value.as_ref(self.ticks.length) })
             .finish()
     }
 }
@@ -1071,7 +1071,7 @@ impl<T: Debug> Debug for SliceMut<'_, T> {
 impl<'w, T> SliceMut<'w, T> {
     fn mark_all_changed(&mut self) {
         let this_run = self.ticks.this_run;
-        let slice = unsafe { self.ticks.changed.as_slice_mut(self.ticks.length) };
+        let slice = unsafe { self.ticks.changed.as_mut(self.ticks.length) };
         slice.iter_mut().for_each(|it| *it = this_run);
     }
 
@@ -1079,7 +1079,7 @@ impl<'w, T> SliceMut<'w, T> {
     #[inline]
     pub fn into_inner(mut self) -> &'w mut [T] {
         self.mark_all_changed();
-        unsafe { self.value.consume(self.ticks.length) }
+        unsafe { self.value.deref(self.ticks.length) }
     }
 
     /// Returns a shorter-lived version of self, with borrow checker guarantees.
@@ -1105,7 +1105,7 @@ impl<'w, T> Deref for SliceMut<'w, T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        unsafe { self.value.as_slice(self.ticks.length) }
+        unsafe { self.value.as_ref(self.ticks.length) }
     }
 }
 
@@ -1113,14 +1113,14 @@ impl<'w, T> DerefMut for SliceMut<'w, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.mark_all_changed();
-        unsafe { self.value.as_slice_mut(self.ticks.length) }
+        unsafe { self.value.as_mut(self.ticks.length) }
     }
 }
 
 impl<'w, T> AsRef<[T]> for SliceMut<'w, T> {
     #[inline(always)]
     fn as_ref(&self) -> &[T] {
-        unsafe { self.value.as_slice(self.ticks.length) }
+        unsafe { self.value.as_ref(self.ticks.length) }
     }
 }
 
@@ -1128,7 +1128,7 @@ impl<'w, T> AsMut<[T]> for SliceMut<'w, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.mark_all_changed();
-        unsafe { self.value.as_slice_mut(self.ticks.length) }
+        unsafe { self.value.as_mut(self.ticks.length) }
     }
 }
 
@@ -1224,7 +1224,7 @@ impl<'w> UntypedRef<'w> {
     pub unsafe fn with_type<T>(self) -> Ref<'w, T> {
         self.value.debug_assert_aligned::<T>();
         Ref {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }
@@ -1237,7 +1237,7 @@ impl<'w> UntypedRef<'w> {
     pub unsafe fn into_resource<T: Resource + Sync>(self) -> ResRef<'w, T> {
         self.value.debug_assert_aligned::<T>();
         ResRef {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }
@@ -1250,7 +1250,7 @@ impl<'w> UntypedRef<'w> {
     pub unsafe fn into_non_send<T: Resource>(self) -> NonSendRef<'w, T> {
         self.value.debug_assert_aligned::<T>();
         NonSendRef {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }
@@ -1302,7 +1302,7 @@ impl<'w> UntypedMut<'w> {
     pub unsafe fn with_type<T>(self) -> Mut<'w, T> {
         self.value.debug_assert_aligned::<T>();
         Mut {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }
@@ -1314,7 +1314,7 @@ impl<'w> UntypedMut<'w> {
     pub unsafe fn into_resource<T: Resource + Send>(self) -> ResMut<'w, T> {
         self.value.debug_assert_aligned::<T>();
         ResMut {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }
@@ -1327,7 +1327,7 @@ impl<'w> UntypedMut<'w> {
     pub unsafe fn into_non_send<T: Resource>(self) -> NonSendMut<'w, T> {
         self.value.debug_assert_aligned::<T>();
         NonSendMut {
-            value: unsafe { self.value.consume() },
+            value: unsafe { self.value.deref::<T>() },
             ticks: self.ticks,
         }
     }

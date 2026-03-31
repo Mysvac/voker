@@ -321,7 +321,7 @@ impl Table {
         let len = self.entity_count();
         unsafe {
             let col = self.get_column(table_col);
-            col.get_changed_slice().as_slice(len)
+            col.get_changed_slice().deref(len)
         }
     }
 
@@ -335,7 +335,7 @@ impl Table {
         let len = self.entity_count();
         unsafe {
             let col = self.get_column(table_col);
-            col.get_changed_slice().as_slice(len)
+            col.get_changed_slice().deref(len)
         }
     }
 

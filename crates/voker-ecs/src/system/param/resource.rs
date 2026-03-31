@@ -57,7 +57,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
             {
                 ptr.debug_assert_aligned::<T>();
                 Ok(Res {
-                    value: ptr.consume(),
+                    value: ptr.deref::<T>(),
                 })
             } else {
                 Err(UninitResource(DebugName::type_name::<T>()).into())
@@ -175,7 +175,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<Res<'_, T>> {
             };
             ptr.debug_assert_aligned::<T>();
             Ok(Some(Res {
-                value: ptr.consume(),
+                value: ptr.deref::<T>(),
             }))
         }
     }
@@ -289,7 +289,7 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
             {
                 ptr.debug_assert_aligned::<T>();
                 Ok(NonSend {
-                    value: ptr.consume(),
+                    value: ptr.deref::<T>(),
                 })
             } else {
                 Err(UninitResource(DebugName::type_name::<T>()).into())
@@ -415,7 +415,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSend<'_, T>> {
             };
             ptr.debug_assert_aligned::<T>();
             Ok(Some(NonSend {
-                value: ptr.consume(),
+                value: ptr.deref::<T>(),
             }))
         }
     }
