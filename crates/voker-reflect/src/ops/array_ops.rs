@@ -232,10 +232,7 @@ impl<T: Reflect> FromIterator<T> for DynamicArray {
     fn from_iter<I: IntoIterator<Item = T>>(values: I) -> Self {
         Self {
             info: None,
-            values: values
-                .into_iter()
-                .map(Reflect::into_boxed_reflect)
-                .collect(),
+            values: values.into_iter().map(Reflect::into_boxed_reflect).collect(),
         }
     }
 }
@@ -519,9 +516,7 @@ impl Array for DynamicArray {
 
     #[inline]
     fn get_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
-        self.values
-            .get_mut(index)
-            .map(core::ops::DerefMut::deref_mut)
+        self.values.get_mut(index).map(core::ops::DerefMut::deref_mut)
     }
 
     #[inline]

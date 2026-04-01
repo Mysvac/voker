@@ -94,18 +94,8 @@ impl EntityOwned<'_> {
         write_required: unsafe fn(&mut ComponentWriter),
     ) {
         let old_arche_id = self.location.arche_id;
-        let old_arche = unsafe {
-            self.world
-                .full_mut()
-                .archetypes
-                .get_unchecked_mut(old_arche_id)
-        };
-        let new_arche = unsafe {
-            self.world
-                .full_mut()
-                .archetypes
-                .get_unchecked_mut(new_arche_id)
-        };
+        let old_arche = unsafe { self.world.full_mut().archetypes.get_unchecked_mut(old_arche_id) };
+        let new_arche = unsafe { self.world.full_mut().archetypes.get_unchecked_mut(new_arche_id) };
         assert_eq!(old_arche.table_id(), self.location.table_id);
 
         let moved = unsafe { old_arche.remove_entity(self.location.arche_row) };
@@ -121,20 +111,10 @@ impl EntityOwned<'_> {
 
         if old_table_id != new_table_id {
             let table_row = self.location.table_row;
-            let old_table = unsafe {
-                self.world
-                    .data_mut()
-                    .storages
-                    .tables
-                    .get_unchecked_mut(old_table_id)
-            };
-            let new_table = unsafe {
-                self.world
-                    .data_mut()
-                    .storages
-                    .tables
-                    .get_unchecked_mut(new_table_id)
-            };
+            let old_table =
+                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(old_table_id) };
+            let new_table =
+                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(new_table_id) };
             let (moved, new_row) =
                 unsafe { old_table.move_to_and_forget_missing(table_row, new_table) };
             unsafe {
@@ -162,10 +142,7 @@ impl EntityOwned<'_> {
         }
 
         unsafe {
-            world
-                .entities
-                .update_location(self.entity, self.location)
-                .unwrap();
+            world.entities.update_location(self.entity, self.location).unwrap();
         }
     }
 }

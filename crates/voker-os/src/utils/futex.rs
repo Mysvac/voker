@@ -79,9 +79,7 @@ impl Futex {
     /// ```
     #[inline]
     pub fn try_lock(&self) -> bool {
-        self.state
-            .compare_exchange(false, true, Acquire, Relaxed)
-            .is_ok()
+        self.state.compare_exchange(false, true, Acquire, Relaxed).is_ok()
     }
 
     /// Lock self and busy waiting until it's successful.

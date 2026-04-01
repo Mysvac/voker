@@ -172,10 +172,7 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
         };
 
         // Prefer the type's registered serde serializer when available.
-        if let Some(p) = self
-            .registry
-            .get_type_trait::<ReflectSerialize>(self.value.type_id())
-        {
+        if let Some(p) = self.registry.get_type_trait::<ReflectSerialize>(self.value.type_id()) {
             return p.serialize(self.value, serializer);
         }
 

@@ -77,16 +77,12 @@ impl Schedules {
 
     /// Returns an iterator over all schedules. Iteration order is undefined.
     pub fn iter(&self) -> impl Iterator<Item = (&dyn ScheduleLabel, &Schedule)> {
-        self.mapper
-            .iter()
-            .map(|(label, schedule)| (&**label, schedule))
+        self.mapper.iter().map(|(label, schedule)| (&**label, schedule))
     }
 
     /// Returns an iterator over mutable references to all schedules. Iteration order is undefined.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&dyn ScheduleLabel, &mut Schedule)> {
-        self.mapper
-            .iter_mut()
-            .map(|(label, schedule)| (&**label, schedule))
+        self.mapper.iter_mut().map(|(label, schedule)| (&**label, schedule))
     }
 
     /// Inserts a system into the schedule identified by `label`.

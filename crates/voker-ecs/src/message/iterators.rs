@@ -67,9 +67,7 @@ impl<M: Message> FromWorld for MessageCursor<M> {
 
 impl<M: Message> Debug for MessageCursor<M> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("MessageCursor")
-            .field(&self.last_index)
-            .finish()
+        f.debug_tuple("MessageCursor").field(&self.last_index).finish()
     }
 }
 

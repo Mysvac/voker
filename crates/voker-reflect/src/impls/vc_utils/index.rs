@@ -114,9 +114,7 @@ where
     }
 
     fn drain(&mut self) -> Vec<Box<dyn Reflect>> {
-        Self::drain(self, ..)
-            .map(Reflect::into_boxed_reflect)
-            .collect()
+        Self::drain(self, ..).map(Reflect::into_boxed_reflect).collect()
     }
 
     fn retain(&mut self, f: &mut dyn FnMut(&dyn Reflect) -> bool) {

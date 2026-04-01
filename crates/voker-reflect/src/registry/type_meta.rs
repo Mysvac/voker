@@ -215,9 +215,7 @@ impl TypeMeta {
     pub fn trait_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = (TypeId, &mut dyn TypeTrait)> {
-        self.trait_table
-            .iter_mut()
-            .map(|(key, val)| (key, val.deref_mut()))
+        self.trait_table.iter_mut().map(|(key, val)| (key, val.deref_mut()))
     }
 }
 

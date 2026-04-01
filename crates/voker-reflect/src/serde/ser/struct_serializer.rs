@@ -47,10 +47,7 @@ impl<P: SerializeProcessor> Serialize for StructSerializer<'_, P> {
 
         let mut state = serializer.serialize_struct(type_ident, serde_len)?;
 
-        for name in struct_info
-            .iter()
-            .filter_map(|f| (!f.skip_serde()).then_some(f.name()))
-        {
+        for name in struct_info.iter().filter_map(|f| (!f.skip_serde()).then_some(f.name())) {
             // If fields match in type and count but a field is missing, panic directly.
             let value = self.struct_value.field(name).unwrap();
             state.serialize_field(

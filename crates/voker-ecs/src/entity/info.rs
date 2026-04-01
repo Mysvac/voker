@@ -88,10 +88,7 @@ impl Entities {
     /// # Complexity
     /// time: O(N)
     pub fn len(&self) -> usize {
-        self.infos
-            .iter()
-            .filter(|info| info.location.is_some())
-            .count()
+        self.infos.iter().filter(|info| info.location.is_some()).count()
     }
 
     /// Return true if there are no spawned entities.
@@ -279,9 +276,7 @@ impl Entities {
             }
             .into());
         }
-        info.location
-            .take()
-            .ok_or(DespawnError::NotSpawned(entity).into())
+        info.location.take().ok_or(DespawnError::NotSpawned(entity).into())
     }
 
     /// Marks an entity as despawned and returns its former location.

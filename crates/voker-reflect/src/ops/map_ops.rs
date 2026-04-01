@@ -667,8 +667,7 @@ impl Map for DynamicMap {
 
     #[inline]
     fn retain(&mut self, f: &mut dyn FnMut(&dyn Reflect, &mut dyn Reflect) -> bool) {
-        self.hash_table
-            .retain(move |(key, value)| f(&**key, &mut **value));
+        self.hash_table.retain(move |(key, value)| f(&**key, &mut **value));
     }
 
     #[inline]

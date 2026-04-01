@@ -82,8 +82,7 @@ impl Components {
             let descriptor = ComponentDescriptor::new::<T>();
             let component_id = ComponentId::new(this.infos.len() as u32);
 
-            this.infos
-                .push(ComponentInfo::new(component_id, descriptor));
+            this.infos.push(ComponentInfo::new(component_id, descriptor));
             this.mapper.insert(type_id, component_id);
 
             if let Some(required) = T::REQUIRED {

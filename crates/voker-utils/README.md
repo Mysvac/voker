@@ -1,6 +1,7 @@
 # voker-utils
 
-Platform-agnostic utility crate for collection primitives, hashing helpers, index containers, and small no_std-friendly helpers.
+Platform-agnostic utility crate for collection primitives,
+hashing helpers, index containers, and small no_std-friendly helpers.
 
 ## Crate Layout
 
@@ -29,8 +30,7 @@ Platform-agnostic utility crate for collection primitives, hashing helpers, inde
 - `cold_path`: Branch hint helper for cold paths.
 - `range_invoke`: Macro utility for repeated range-based invocation.
 
-## Usage Notes
+## Notes
 
 - The crate targets `no_std` + `alloc` usage patterns.
-- Data-structure APIs are intentionally low-level and tuned for internal/runtime scenarios.
 - For thread-safe and OS-dependent utilities, use `voker-os`.

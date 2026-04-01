@@ -64,9 +64,7 @@ impl fmt::Debug for LocalExecutor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // SAFETY: single thread access
         let len = unsafe { (&*self.queue.get()).len() };
-        f.debug_struct("LocalExecutor")
-            .field("tasks", &len)
-            .finish()
+        f.debug_struct("LocalExecutor").field("tasks", &len).finish()
     }
 }
 

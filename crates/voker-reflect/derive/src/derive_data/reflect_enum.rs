@@ -74,10 +74,8 @@ impl<'a> EnumVariant<'a> {
         };
 
         // See [`CustomAttributes::get_expression_with`]
-        let with_custom_attributes = self
-            .attrs
-            .custom_attributes
-            .get_expression_with(voker_reflect_path);
+        let with_custom_attributes =
+            self.attrs.custom_attributes.get_expression_with(voker_reflect_path);
         // See [`ReflectDocs::get_expression_with`]
         // If feature is diabled, this function will return a empty TokenStream, so it's safe.
         let with_docs = self.attrs.docs.get_expression_with();

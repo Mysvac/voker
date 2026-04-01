@@ -1258,9 +1258,7 @@ impl<'w> UntypedRef<'w> {
 
 impl Debug for UntypedRef<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("UntypedRef")
-            .field(&self.value.as_ptr())
-            .finish()
+        f.debug_tuple("UntypedRef").field(&self.value.as_ptr()).finish()
     }
 }
 
@@ -1335,9 +1333,7 @@ impl<'w> UntypedMut<'w> {
 
 impl Debug for UntypedMut<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("UntypedMut")
-            .field(&self.value.as_ptr())
-            .finish()
+        f.debug_tuple("UntypedMut").field(&self.value.as_ptr()).finish()
     }
 }
 

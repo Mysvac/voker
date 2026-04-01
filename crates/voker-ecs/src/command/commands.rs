@@ -91,9 +91,7 @@ unsafe impl SystemParam for Commands<'_> {
 
 impl Debug for Commands<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Commands")
-            .field("world", &self.world_id())
-            .finish()
+        f.debug_struct("Commands").field("world", &self.world_id()).finish()
     }
 }
 

@@ -108,15 +108,7 @@ impl<'a> TypeParser<'a> {
                 .unwrap_or(ident),
             Self::Foreign {
                 path, custom_path, ..
-            } => {
-                &custom_path
-                    .as_ref()
-                    .unwrap_or(path)
-                    .segments
-                    .last()
-                    .unwrap()
-                    .ident
-            }
+            } => &custom_path.as_ref().unwrap_or(path).segments.last().unwrap().ident,
         }
     }
 

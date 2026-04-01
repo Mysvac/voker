@@ -244,9 +244,7 @@ impl World {
             unsafe {
                 let data = this.storages.ress.get_unchecked_mut(id);
                 data.insert(value, this_run);
-                data.get_mut(last_run, this_run)
-                    .debug_checked_unwrap()
-                    .into_resource()
+                data.get_mut(last_run, this_run).debug_checked_unwrap().into_resource()
             }
         }
 
@@ -534,9 +532,7 @@ impl World {
             unsafe {
                 let data = this.storages.ress.get_unchecked_mut(id);
                 data.insert(value, this_run);
-                data.get_mut(last_run, this_run)
-                    .debug_checked_unwrap()
-                    .into_non_send()
+                data.get_mut(last_run, this_run).debug_checked_unwrap().into_non_send()
             }
         }
 

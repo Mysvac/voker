@@ -1,0 +1,18 @@
+style_edition = "2024"
+
+# Use field init shorthand where possible
+use_field_init_shorthand = true
+
+# Use Unix line endings (`\n`) for consistent diffs
+newline_style = "Unix"
+
+# Keep derive attributes separate for better diff clarity
+merge_derives = false
+
+# Wrap chained calls at 72 columns (default is 60)
+chain_width = 72
+
+# waiting for stability
+# merge_imports = false
+# fn_single_line = true
+# empty_item_single_line = true

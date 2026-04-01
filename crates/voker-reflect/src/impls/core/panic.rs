@@ -60,9 +60,7 @@ impl Reflect for &'static Location<'static> {
     }
 
     fn reflect_cmp(&self, other: &dyn Reflect) -> Option<core::cmp::Ordering> {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| Ord::cmp(self, other))
+        other.downcast_ref::<Self>().map(|other| Ord::cmp(self, other))
     }
 
     fn reflect_hash(&self) -> Option<u64> {

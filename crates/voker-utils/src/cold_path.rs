@@ -44,7 +44,7 @@
 /// jump, making the other branch the cache-friendly fallthrough path.
 ///
 /// However, `#[cold]` only applies to functions, not statements inside a function.
-/// [`cold_path`] is a stable alternative to the experimental `core::hint::cold_path`,
+/// [`cold_path`] is a stable alternative to the experimental [`core::hint::cold_path`],
 /// letting you mark cold paths anywhere. Use it like this:
 ///
 /// ```no_run

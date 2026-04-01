@@ -50,7 +50,7 @@ impl BuildHasher for FixedHashState {
         FIXED_HASH_STATE.build_hasher()
     }
 
-    #[inline]
+    #[inline(always)]
     fn hash_one<T: core::hash::Hash>(&self, x: T) -> u64
     where
         Self: Sized,

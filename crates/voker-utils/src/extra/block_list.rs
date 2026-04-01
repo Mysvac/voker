@@ -609,9 +609,7 @@ impl<'a, T> IntoIterator for &'a mut BlockList<T> {
 
 impl<T> fmt::Debug for BlockList<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BlockList")
-            .field("len", &self.len())
-            .finish()
+        f.debug_struct("BlockList").field("len", &self.len()).finish()
     }
 }
 

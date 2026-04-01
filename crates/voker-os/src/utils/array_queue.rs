@@ -251,8 +251,7 @@ impl<T> ArrayQueue<T> {
                     Ok(_) => {
                         // Read the value from the slot and update the stamp.
                         let msg = unsafe { slot.value.get().read().assume_init() };
-                        slot.stamp
-                            .store(head.wrapping_add(self.one_lap), Ordering::Release);
+                        slot.stamp.store(head.wrapping_add(self.one_lap), Ordering::Release);
                         return Some(msg);
                     }
                     Err(h) => {

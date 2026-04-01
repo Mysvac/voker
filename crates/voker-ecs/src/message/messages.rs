@@ -223,10 +223,7 @@ impl<M: Message> Messages<M> {
         self.messages_b.start_id = self.counter;
 
         // Drain the oldest messages first, then the newest
-        self.messages_a
-            .drain(..)
-            .chain(self.messages_b.drain(..))
-            .map(|i| i.1)
+        self.messages_a.drain(..).chain(self.messages_b.drain(..)).map(|i| i.1)
     }
 
     /// Rotates lifecycle and drains the sequence that was previously older.

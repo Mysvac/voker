@@ -749,8 +749,7 @@ impl dyn Enum {
     /// - The field cannot be downcast to type `T`
     #[inline]
     pub fn field_at_mut_as<T: Reflect>(&mut self, index: usize) -> Option<&mut T> {
-        self.field_at_mut(index)
-            .and_then(<dyn Reflect>::downcast_mut)
+        self.field_at_mut(index).and_then(<dyn Reflect>::downcast_mut)
     }
 }
 

@@ -30,10 +30,7 @@ impl World {
         func: impl FnOnce(&mut World, &mut Schedule) -> R,
     ) -> R {
         let label = label.intern();
-        let mut schedule = self
-            .schedules
-            .remove(label)
-            .unwrap_or_else(|| Schedule::new(label));
+        let mut schedule = self.schedules.remove(label).unwrap_or_else(|| Schedule::new(label));
 
         let value = func(self, &mut schedule);
 

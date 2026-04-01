@@ -2,11 +2,11 @@
 ///
 /// The number cannot exceed `12` .
 ///
-/// # Example
+/// # Examples
 ///
 /// ```ignore
 /// range_invoke!(my_macro,  4);
-/// // eq  to ↓
+/// // ↓
 /// my_macro!(0: []);
 /// my_macro!(1: [0: P0]);
 /// my_macro!(2: [0: P0, 1: P1]);

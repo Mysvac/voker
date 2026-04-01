@@ -24,9 +24,7 @@ pub struct Tables {
 
 impl Debug for Tables {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_map()
-            .entries(self.tables.iter().enumerate())
-            .finish()
+        f.debug_map().entries(self.tables.iter().enumerate()).finish()
     }
 }
 

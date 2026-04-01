@@ -14,9 +14,7 @@ pub struct CommandQueue {
 
 impl Debug for CommandQueue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("CommmandQueue")
-            .field("len", &self.queue.len())
-            .finish()
+        f.debug_struct("CommmandQueue").field("len", &self.queue.len()).finish()
     }
 }
 

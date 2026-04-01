@@ -204,8 +204,7 @@ impl DynamicStruct {
             self.fields[*index] = value;
         } else {
             self.fields.push(value);
-            self.field_indices
-                .insert(name.clone(), self.fields.len() - 1);
+            self.field_indices.insert(name.clone(), self.fields.len() - 1);
             self.field_names.push(name);
         }
     }
@@ -509,16 +508,12 @@ pub trait Struct: Reflect {
 impl Struct for DynamicStruct {
     #[inline]
     fn field(&self, name: &str) -> Option<&dyn Reflect> {
-        self.field_indices
-            .get(name)
-            .map(|index| &*self.fields[*index])
+        self.field_indices.get(name).map(|index| &*self.fields[*index])
     }
 
     #[inline]
     fn field_mut(&mut self, name: &str) -> Option<&mut dyn Reflect> {
-        self.field_indices
-            .get(name)
-            .map(|index| &mut *self.fields[*index])
+        self.field_indices.get(name).map(|index| &mut *self.fields[*index])
     }
 
     #[inline]
@@ -660,8 +655,7 @@ impl dyn Struct {
     /// ```
     #[inline]
     pub fn field_at_mut_as<T: Reflect>(&mut self, index: usize) -> Option<&mut T> {
-        self.field_at_mut(index)
-            .and_then(<dyn Reflect>::downcast_mut)
+        self.field_at_mut(index).and_then(<dyn Reflect>::downcast_mut)
     }
 }
 

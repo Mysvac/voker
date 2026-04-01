@@ -102,8 +102,7 @@ impl CustomAttributes {
     /// Returns the attribute of type `T`, if present.
     #[inline]
     pub fn get<T: Reflect>(&self) -> Option<&T> {
-        self.get_by_id(TypeId::of::<T>())
-            .and_then(<dyn Reflect>::downcast_ref)
+        self.get_by_id(TypeId::of::<T>()).and_then(<dyn Reflect>::downcast_ref)
     }
 
     /// Returns the attribute with the given `TypeId`, if present.
@@ -164,8 +163,7 @@ macro_rules! impl_custom_attributes_fn {
 
         /// Returns `true` if it contains the given attribute type.
         pub fn has_attribute<T: $crate::Reflect>(&self) -> bool {
-            self.custom_attributes()
-                .contains_by_id(::core::any::TypeId::of::<T>())
+            self.custom_attributes().contains_by_id(::core::any::TypeId::of::<T>())
         }
 
         /// Returns `true` if it contains the attribute with the given `TypeId`.

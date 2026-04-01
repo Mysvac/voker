@@ -154,9 +154,7 @@ mod tests {
 
         // Combined
         DROP_COUNTER.store(0, Ordering::SeqCst);
-        let entity = world
-            .spawn((DropTracker, Bar(3), Baz(String::from("123"))))
-            .entity;
+        let entity = world.spawn((DropTracker, Bar(3), Baz(String::from("123")))).entity;
         world.despawn(entity).unwrap();
         assert_eq!(DROP_COUNTER.load(Ordering::SeqCst), 1);
 
@@ -192,9 +190,7 @@ mod tests {
 
         // Combined
         DROP_COUNTER.store(0, Ordering::SeqCst);
-        let entity = world
-            .spawn((DropTracker, Bar(3), Baz(String::from("123"))))
-            .entity;
+        let entity = world.spawn((DropTracker, Bar(3), Baz(String::from("123")))).entity;
         world.despawn(entity).unwrap();
         assert_eq!(DROP_COUNTER.load(Ordering::SeqCst), 1);
 

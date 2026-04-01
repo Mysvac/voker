@@ -8,7 +8,7 @@
 //!
 //! ```no_run
 //! use quote::quote;
-//! use voker_path::full_path::AnyFP;
+//! use voker_macro_utils::full_path::AnyFP;
 //!
 //! let tokens = quote!(#AnyFP);
 //! assert_eq!(tokens.to_string(), ":: core :: any :: Any");

@@ -734,9 +734,7 @@ impl<'a, T, const N: usize> IntoIterator for &'a mut ArrayDeque<T, N> {
 impl<T: fmt::Debug, const N: usize> fmt::Debug for ArrayDeque<T, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (first, second) = self.as_slices();
-        f.debug_list()
-            .entries(first.iter().chain(second.iter()))
-            .finish()
+        f.debug_list().entries(first.iter().chain(second.iter())).finish()
     }
 }
 

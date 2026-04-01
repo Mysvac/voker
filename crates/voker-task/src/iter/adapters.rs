@@ -59,9 +59,7 @@ where
     F: FnMut(&B::Item) -> bool + Send + Clone,
 {
     fn next_batch(&mut self) -> Option<core::iter::Filter<B, F>> {
-        self.iter
-            .next_batch()
-            .map(|b| b.filter(self.predicate.clone()))
+        self.iter.next_batch().map(|b| b.filter(self.predicate.clone()))
     }
 }
 
@@ -213,14 +211,11 @@ where
     P: ParallelIterator<B> + Clone,
 {
     fn next_batch(&mut self) -> Option<B> {
-        self.curr
-            .as_mut()
-            .and_then(ParallelIterator::next_batch)
-            .or_else(|| {
-                let mut it = self.iter.clone();
-                let next_batch = it.next_batch();
-                self.curr = Some(it);
-                next_batch
-            })
+        self.curr.as_mut().and_then(ParallelIterator::next_batch).or_else(|| {
+            let mut it = self.iter.clone();
+            let next_batch = it.next_batch();
+            self.curr = Some(it);
+            next_batch
+        })
     }
 }

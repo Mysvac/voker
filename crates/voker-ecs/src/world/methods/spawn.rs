@@ -269,10 +269,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let bundle = self.inner.next()?;
-        let entity = self
-            .allocator
-            .next()
-            .unwrap_or_else(|| self.spawner.alloc());
+        let entity = self.allocator.next().unwrap_or_else(|| self.spawner.alloc());
 
         voker_ptr::into_owning!(bundle as data);
 

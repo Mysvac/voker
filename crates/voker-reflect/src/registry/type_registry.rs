@@ -522,9 +522,7 @@ impl TypeRegistryArc {
 
     /// Takes a write lock on the underlying [`TypeRegistry`].
     pub fn write(&self) -> RwLockWriteGuard<'_, TypeRegistry> {
-        self.internal
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.internal.write().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -578,16 +576,8 @@ mod tests {
         registry.register::<foo::MyType>();
         registry.register::<bar::MyType>();
 
-        assert!(
-            registry
-                .get_with_type_path(foo::MyType::type_path())
-                .is_some()
-        );
-        assert!(
-            registry
-                .get_with_type_path(bar::MyType::type_path())
-                .is_some()
-        );
+        assert!(registry.get_with_type_path(foo::MyType::type_path()).is_some());
+        assert!(registry.get_with_type_path(bar::MyType::type_path()).is_some());
         assert!(registry.is_ambiguous("MyType"));
         assert!(registry.get_with_type_name("MyType").is_none());
     }

@@ -86,9 +86,6 @@ impl MessageRegistry {
         let unsafe_world = world.unsafe_world();
         let registry = unsafe { &unsafe_world.data_mut().message_registry };
         let world_mut = unsafe { unsafe_world.data_mut() };
-        registry
-            .messages
-            .iter()
-            .for_each(|meta| (meta.update)(world_mut));
+        registry.messages.iter().for_each(|meta| (meta.update)(world_mut));
     }
 }

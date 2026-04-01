@@ -28,7 +28,7 @@ pub use manifest::crate_path;
 /// # Examples
 ///
 /// ```no_run
-/// let voker_ecs = voker_path::crate_path!(voker_ecs);
+/// let voker_ecs = voker_macro_utils::crate_path!(voker_ecs);
 /// ```
 #[macro_export]
 macro_rules! crate_path {

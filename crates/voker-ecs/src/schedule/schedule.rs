@@ -375,9 +375,7 @@ impl Schedule {
         schedule.keys.extend(dag.toposort().unwrap());
         let topo: &[SystemKey] = &schedule.keys;
 
-        schedule
-            .systems
-            .extend(topo.iter().map(|&key| buffer.take_system(key)));
+        schedule.systems.extend(topo.iter().map(|&key| buffer.take_system(key)));
         debug_assert_eq!(schedule.keys.len(), schedule.systems.len());
 
         schedule.incoming.resize(topo.len(), 0);

@@ -74,10 +74,7 @@ impl<P: SerializeProcessor> Serialize for EnumSerializer<'_, P> {
                     serde_len,
                 )?;
 
-                for name in info
-                    .iter()
-                    .filter_map(|f| (!f.skip_serde()).then_some(f.name()))
-                {
+                for name in info.iter().filter_map(|f| (!f.skip_serde()).then_some(f.name())) {
                     // If fields match in type and count but a field is missing, panic directly.
                     let value = self.enum_value.field(name).unwrap();
                     state.serialize_field(
@@ -118,9 +115,7 @@ impl<P: SerializeProcessor> Serialize for EnumSerializer<'_, P> {
                         serde_len,
                     )?;
 
-                    for index in info
-                        .iter()
-                        .filter_map(|f| (!f.skip_serde()).then_some(f.index()))
+                    for index in info.iter().filter_map(|f| (!f.skip_serde()).then_some(f.index()))
                     {
                         let value = self.enum_value.field_at(index).unwrap();
                         state.serialize_field(&SerializeDriver::new_internal(

@@ -292,9 +292,7 @@ macro_rules! impl_reflect_for_fixedhashset {
             }
 
             fn drain(&mut self) -> ::alloc::vec::Vec<::alloc::boxed::Box<dyn $crate::Reflect>> {
-                self.drain()
-                    .map($crate::Reflect::into_boxed_reflect)
-                    .collect()
+                self.drain().map($crate::Reflect::into_boxed_reflect).collect()
             }
 
             fn retain(&mut self, f: &mut dyn FnMut(&dyn $crate::Reflect) -> bool) {

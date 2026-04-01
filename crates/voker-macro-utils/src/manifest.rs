@@ -58,7 +58,7 @@ struct Manifest {
 /// # Examples
 ///
 /// ```ignore
-/// let ecs_path = voker_path::crate_path("voker_ecs");
+/// let ecs_path = voker_macro_utils::crate_path("voker_ecs");
 /// ```
 pub fn crate_path(path: &'static str) -> syn::Path {
     Manifest::shared(|manifest| manifest.find_crate_path(path))

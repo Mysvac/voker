@@ -418,10 +418,7 @@ impl FreeCount {
     #[inline]
     fn disable_for_state(&self) -> FreeCountState {
         // Generation change is irrelevant here since we're modifying the value anyway
-        FreeCountState(
-            self.0
-                .fetch_or(FreeCountState::DISABLING_BIT, Ordering::Acquire),
-        )
+        FreeCountState(self.0.fetch_or(FreeCountState::DISABLING_BIT, Ordering::Acquire))
     }
 
     /// Stores a new state value.

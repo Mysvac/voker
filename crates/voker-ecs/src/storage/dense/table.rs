@@ -162,9 +162,7 @@ impl Table {
                         col.realloc(current, new_capacity);
                     });
                 } else {
-                    this.columns
-                        .iter_mut()
-                        .for_each(|col| col.alloc(new_capacity));
+                    this.columns.iter_mut().for_each(|col| col.alloc(new_capacity));
                 }
             }
 
@@ -575,18 +573,15 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
-                            col.swap_forget_not_last(src, last);
-                        } else {
-                            col.swap_drop_not_last(src, last);
-                        }
-                    });
+                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
+                    if let Some(table_col) = other.get_table_col(id) {
+                        let other_col = other.get_column_mut(table_col);
+                        col.move_item_to(other_col, src, dst);
+                        col.swap_forget_not_last(src, last);
+                    } else {
+                        col.swap_drop_not_last(src, last);
+                    }
+                });
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
             } else {
@@ -595,17 +590,14 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
-                        } else {
-                            col.drop_item(last);
-                        }
-                    });
+                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
+                    if let Some(table_col) = other.get_table_col(id) {
+                        let other_col = other.get_column_mut(table_col);
+                        col.move_item_to(other_col, src, dst);
+                    } else {
+                        col.drop_item(last);
+                    }
+                });
 
                 (MovedEntityRow::in_table(None, table_row), new_row)
             }
@@ -635,16 +627,13 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
-                        }
-                        col.swap_forget_not_last(src, last);
-                    });
+                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
+                    if let Some(table_col) = other.get_table_col(id) {
+                        let other_col = other.get_column_mut(table_col);
+                        col.move_item_to(other_col, src, dst);
+                    }
+                    col.swap_forget_not_last(src, last);
+                });
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
             } else {
@@ -653,16 +642,13 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
-                        }
-                        col.forget_item(src);
-                    });
+                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
+                    if let Some(table_col) = other.get_table_col(id) {
+                        let other_col = other.get_column_mut(table_col);
+                        col.move_item_to(other_col, src, dst);
+                    }
+                    col.forget_item(src);
+                });
 
                 (MovedEntityRow::in_table(None, table_row), new_row)
             }

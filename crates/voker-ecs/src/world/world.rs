@@ -186,8 +186,6 @@ impl World {
     ///
     /// Falls back to [`crate::error::panic`] when the resource is absent.
     pub fn default_error_handler(&self) -> DefaultErrorHandler {
-        self.resource::<DefaultErrorHandler>()
-            .copied()
-            .unwrap_or_default()
+        self.resource::<DefaultErrorHandler>().copied().unwrap_or_default()
     }
 }

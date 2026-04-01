@@ -345,10 +345,7 @@ mod tests {
 
         graph.insert_edge(Node(6), Node(2));
 
-        let sccs = graph
-            .iter_sccs()
-            .map(|scc| scc.to_vec())
-            .collect::<Vec<_>>();
+        let sccs = graph.iter_sccs().map(|scc| scc.to_vec()).collect::<Vec<_>>();
 
         assert_eq!(
             sccs,

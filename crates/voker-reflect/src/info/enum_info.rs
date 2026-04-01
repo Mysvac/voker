@@ -68,9 +68,7 @@ impl EnumInfo {
 
     /// Returns an iterator over the variants in **declaration order**.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &VariantInfo> {
-        self.variant_names
-            .iter()
-            .map(|name| self.variants.get(name).unwrap()) // variants names should be valid
+        self.variant_names.iter().map(|name| self.variants.get(name).unwrap()) // variants names should be valid
     }
 
     /// Returns the list of variant names in declaration order.

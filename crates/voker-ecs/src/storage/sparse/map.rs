@@ -35,9 +35,7 @@ unsafe impl Send for Map {}
 
 impl Debug for Map {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Map")
-            .field("entities", &self.mapper.keys())
-            .finish()
+        f.debug_struct("Map").field("entities", &self.mapper.keys()).finish()
     }
 }
 

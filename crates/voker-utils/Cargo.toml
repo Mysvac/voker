@@ -15,12 +15,10 @@ serde_core = { version = "1", default-features = false, features = ["alloc"] }
 
 indexmap = { version = "2.13", default-features = false, features = ["serde"] }
 
+fastvec = { version = "2.0", default-features = false, features = ["arrayvec", "fastvec", "smallvec"] }
+
 foldhash = { version = "0.2.0", default-features = false }
-hashbrown = { version = "0.16.1", features = [
-  "equivalent",
-  "raw-entry",
-  "serde",
-], default-features = false }
+hashbrown = { version = "0.16.1", default-features = false, features = ["equivalent", "raw-entry", "serde"] }
 
 [lints]
 workspace = true

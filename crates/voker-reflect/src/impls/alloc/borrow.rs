@@ -57,9 +57,7 @@ impl Reflect for Cow<'static, str> {
     }
 
     fn reflect_cmp(&self, other: &dyn Reflect) -> Option<Ordering> {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| Ord::cmp(self, other))
+        other.downcast_ref::<Self>().map(|other| Ord::cmp(self, other))
     }
 
     fn reflect_hash(&self) -> Option<u64> {
@@ -190,10 +188,7 @@ impl<T: FromReflect + Typed + Clone> List for Cow<'static, [T]> {
     }
 
     fn drain(&mut self) -> Vec<Box<dyn Reflect>> {
-        self.to_mut()
-            .drain(..)
-            .map(Reflect::into_boxed_reflect)
-            .collect()
+        self.to_mut().drain(..).map(Reflect::into_boxed_reflect).collect()
     }
 }
 

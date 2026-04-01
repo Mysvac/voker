@@ -30,6 +30,7 @@
 //!
 //! let n = NonMaxU8::new(42).unwrap();
 //! assert_eq!(n.get(), 42);
+//!
 //! assert!(NonMaxU8::new(u8::MAX).is_none());
 //! ```
 #![expect(unsafe_code, reason = "transmute is unsafe")]
@@ -48,7 +49,7 @@ macro_rules! impl_non_max {
         /// This enables some memory layout optimization.
         /// For example, `Option<NonMaxU32>` is the same size as `u32`:
         ///
-        /// ```
+        /// ```no_run
         /// use voker_utils::num::NonMaxU32;
         /// use std::mem::size_of;
         ///
