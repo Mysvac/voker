@@ -1,11 +1,11 @@
 use crate::sync::atomic::{AtomicUsize, Ordering};
 use crate::time::Duration;
-use crate::utils::{ArrayQueue, ListQueue};
+use crate::utils::{ArrayQueue, SegQueue};
 
 use super::error::{RecvError, RecvTimeoutError, SendError, TryRecvError, TrySendError};
 
 pub(super) struct ListChannel<T> {
-    queue: ListQueue<T>,
+    queue: SegQueue<T>,
     senders: AtomicUsize,
     receivers: AtomicUsize,
 }
@@ -14,7 +14,7 @@ impl<T> ListChannel<T> {
     #[inline]
     pub fn new() -> Self {
         Self {
-            queue: ListQueue::default(),
+            queue: SegQueue::new(),
             senders: AtomicUsize::new(1),
             receivers: AtomicUsize::new(1),
         }

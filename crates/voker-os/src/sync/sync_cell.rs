@@ -1,6 +1,5 @@
-#![expect(unsafe_code, reason = "SyncCell requires unsafe code.")]
-
 //! A reimplementation of the currently unstable [`core::sync::Exclusive`]
+#![expect(unsafe_code, reason = "SyncCell requires unsafe code.")]
 
 use core::pin::Pin;
 

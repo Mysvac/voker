@@ -1,8 +1,10 @@
+//! Copyright (c) 2019 The Crossbeam Project Developers
+//!
 //! See <https://docs.rs/crate/crossbeam-queue/latest>
 //!
-//! - Version: 0.3.12
-//! - Date: 2026/01/01
-#![expect(unsafe_code, reason = "original implementation need unsafe codes")]
+//! - Version: 0.8.4
+//! - Date: 2026/04/01
+#![expect(unsafe_code, reason = "from crossbeam-queue")]
 
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;
@@ -10,11 +12,8 @@ use core::fmt;
 use core::mem::{self, MaybeUninit};
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
+use super::{Backoff, CachePadded};
 use crate::sync::atomic::{self, AtomicUsize, Ordering};
-use crate::utils::{Backoff, CachePadded};
-
-// -----------------------------------------------------------------------------
-// Internal Type
 
 /// A slot in a queue.
 struct Slot<T> {
@@ -28,17 +27,17 @@ struct Slot<T> {
     value: UnsafeCell<MaybeUninit<T>>,
 }
 
-// -----------------------------------------------------------------------------
-// ArrayQueue
-
 /// A bounded multi-producer multi-consumer queue.
 ///
-/// This queue allocates a fixed-capacity buffer on construction, which is used to store pushed
-/// elements. The queue cannot hold more elements than the buffer allows. Attempting to push an
-/// element into a full queue will fail. Having a buffer allocated upfront makes this queue
-/// a bit faster than [`ListQueue`].
+/// This queue allocates a fixed-capacity buffer on construction, which
+/// is used to store pushed elements. The queue cannot hold more elements
+/// than the buffer allows. Attempting to push an element into a full queue
+/// will fail. Alternatively, [`force_push`] makes it possible for this
+/// queue to be used as a ring-buffer. Having a buffer allocated upfront
+/// makes this queue a bit faster than [`SegQueue`].
 ///
-/// [`ListQueue`]: super::ListQueue
+/// [`force_push`]: ArrayQueue::force_push
+/// [`SegQueue`]: super::SegQueue
 ///
 /// # Examples
 ///
@@ -78,6 +77,7 @@ pub struct ArrayQueue<T> {
 
 unsafe impl<T: Send> Sync for ArrayQueue<T> {}
 unsafe impl<T: Send> Send for ArrayQueue<T> {}
+
 impl<T> UnwindSafe for ArrayQueue<T> {}
 impl<T> RefUnwindSafe for ArrayQueue<T> {}
 
@@ -126,21 +126,10 @@ impl<T> ArrayQueue<T> {
         }
     }
 
-    /// Attempts to push an element into the queue.
-    ///
-    /// If the queue is full, the element is returned back as an error.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_os::utils::ArrayQueue;
-    ///
-    /// let q = ArrayQueue::new(1);
-    ///
-    /// assert_eq!(q.push(10), Ok(()));
-    /// assert_eq!(q.push(20), Err(20));
-    /// ```
-    pub fn push(&self, value: T) -> Result<(), T> {
+    fn push_or_else<F>(&self, mut value: T, f: F) -> Result<(), T>
+    where
+        F: Fn(T, usize, usize, &Slot<T>) -> Result<T, T>,
+    {
         let backoff = Backoff::new();
         let mut tail = self.tail.load(Ordering::Relaxed);
 
@@ -167,29 +156,28 @@ impl<T> ArrayQueue<T> {
             // If the tail and the stamp match, we may attempt to push.
             if tail == stamp {
                 // Try moving the tail.
-                if let Err(t) = self.tail.compare_exchange_weak(
+                match self.tail.compare_exchange_weak(
                     tail,
                     new_tail,
                     Ordering::SeqCst,
                     Ordering::Relaxed,
                 ) {
-                    tail = t;
-                    backoff.spin();
-                } else {
-                    // Write the value into the slot and update the stamp.
-                    unsafe {
-                        slot.value.get().write(MaybeUninit::new(value));
+                    Ok(_) => {
+                        // Write the value into the slot and update the stamp.
+                        unsafe {
+                            slot.value.get().write(MaybeUninit::new(value));
+                        }
+                        slot.stamp.store(tail + 1, Ordering::Release);
+                        return Ok(());
                     }
-                    slot.stamp.store(tail + 1, Ordering::Release);
-                    return Ok(());
+                    Err(t) => {
+                        tail = t;
+                        backoff.spin();
+                    }
                 }
             } else if stamp.wrapping_add(self.one_lap) == tail + 1 {
-                let head = self.head.load(Ordering::SeqCst);
-
-                if head.wrapping_add(self.one_lap) == tail {
-                    return Err(value);
-                }
-
+                atomic::fence(Ordering::SeqCst);
+                value = f(value, tail, new_tail, slot)?;
                 backoff.spin();
                 tail = self.tail.load(Ordering::Relaxed);
             } else {
@@ -198,6 +186,75 @@ impl<T> ArrayQueue<T> {
                 tail = self.tail.load(Ordering::Relaxed);
             }
         }
+    }
+
+    /// Attempts to push an element into the queue.
+    ///
+    /// If the queue is full, the element is returned back as an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let q = ArrayQueue::new(1);
+    ///
+    /// assert_eq!(q.push(10), Ok(()));
+    /// assert_eq!(q.push(20), Err(20));
+    /// ```
+    pub fn push(&self, value: T) -> Result<(), T> {
+        self.push_or_else(value, |v, tail, _, _| {
+            let head = self.head.load(Ordering::Relaxed);
+
+            // If the head lags one lap behind the tail as well...
+            if head.wrapping_add(self.one_lap) == tail {
+                // ...then the queue is full.
+                Err(v)
+            } else {
+                Ok(v)
+            }
+        })
+    }
+
+    /// Attempts to push an element using an exclusive reference of the queue.
+    ///
+    /// Atomic operations and checks are omitted
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let mut q = ArrayQueue::new(1);
+    ///
+    /// assert_eq!(q.push_mut(10), Ok(()));
+    /// assert_eq!(q.push_mut(20), Err(20));
+    /// ```
+    pub fn push_mut(&mut self, value: T) -> Result<(), T> {
+        let tail = *self.tail.get_mut();
+        let head = *self.head.get_mut();
+
+        if head.wrapping_add(self.one_lap) == tail {
+            return Err(value);
+        }
+
+        let index = tail & (self.one_lap - 1);
+        let lap = tail & !(self.one_lap - 1);
+        let new_tail = if index + 1 < self.capacity() {
+            tail + 1
+        } else {
+            lap.wrapping_add(self.one_lap)
+        };
+
+        *self.tail.get_mut() = new_tail;
+
+        let slot = unsafe { self.buffer.get_unchecked_mut(index) };
+        unsafe {
+            slot.value.get().write(MaybeUninit::new(value));
+        }
+        *slot.stamp.get_mut() = tail + 1;
+
+        Ok(())
     }
 
     /// Attempts to pop an element from the queue.
@@ -276,6 +333,53 @@ impl<T> ArrayQueue<T> {
                 head = self.head.load(Ordering::Relaxed);
             }
         }
+    }
+
+    /// Attempts to pop an element using an exclusive reference of the queue.
+    ///
+    /// Due to having an exclusive reference, atomic operations and checks are omitted
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ArrayQueue;
+    ///
+    /// let mut q = ArrayQueue::new(1);
+    /// assert_eq!(q.push(10), Ok(()));
+    ///
+    /// assert_eq!(q.pop_mut(), Some(10));
+    /// assert!(q.pop_mut().is_none());
+    /// ```
+    pub fn pop_mut(&mut self) -> Option<T> {
+        let head = *self.head.get_mut();
+        let tail = *self.tail.get_mut();
+
+        // If the tail equals the head, that means the channel is empty.
+        if tail == head {
+            return None;
+        }
+        let index = head & (self.one_lap - 1);
+        let lap = head & !(self.one_lap - 1);
+
+        // Inspect the corresponding slot.
+        debug_assert!(index < self.buffer.len());
+
+        let new = if index + 1 < self.capacity() {
+            // Same lap, incremented index.
+            // Set to `{ lap: lap, index: index + 1 }`.
+            head + 1
+        } else {
+            // One lap forward, index wraps around to zero.
+            // Set to `{ lap: lap.wrapping_add(1), index: 0 }`.
+            lap.wrapping_add(self.one_lap)
+        };
+
+        let slot = unsafe { self.buffer.get_unchecked_mut(index) };
+
+        let msg = unsafe { slot.value.get().read().assume_init() };
+        *slot.stamp.get_mut() = head.wrapping_add(self.one_lap);
+        *self.head.get_mut() = new;
+        Some(msg)
     }
 
     /// Returns the capacity of the queue.

@@ -1,11 +1,9 @@
 #![expect(unsafe_code, reason = "SpinLock requires unsafe code.")]
 
-use core::{
-    cell::UnsafeCell,
-    fmt,
-    ops::{Deref, DerefMut},
-    panic::{RefUnwindSafe, UnwindSafe},
-};
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::ops::{Deref, DerefMut};
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use crate::utils::Futex;
 
@@ -228,8 +226,8 @@ impl<T: ?Sized + fmt::Display> fmt::Display for SpinLockGuard<'_, T> {
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::fmt::Debug;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use core::fmt::Debug;
+    use core::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, mpsc::channel};
     use std::{hint, mem, thread};
 

@@ -4,6 +4,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
+use core::ops::BitOrAssign;
 use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::{fmt, ptr};
 
@@ -135,11 +136,6 @@ impl<T> IdleQueue<T> {
     ///
     /// If the idle queue has reached its capacity (`max_num`), the block is
     /// immediately dropped instead of being added.
-    ///
-    /// We choose to drop it instead oldest block, because the input block's data
-    /// is typically already in cache, whereas evicting the oldest block would
-    /// require loading its data from memory.
-    /// (In addition, the function implementation is also simpler.)
     #[inline]
     fn push(&self, ptr: *mut Block<T>) {
         let boxed = unsafe { Box::from_raw(ptr) };
@@ -152,17 +148,36 @@ impl<T> IdleQueue<T> {
         ::core::mem::drop(blocks);
     }
 
+    /// Pushes a fully detached block into the idle queue.
+    #[inline]
+    fn push_mut(&mut self, ptr: *mut Block<T>) {
+        let boxed = unsafe { Box::from_raw(ptr) };
+        let blocks = self.blocks.get_mut();
+        if blocks.len() < self.max_num {
+            blocks.push(boxed);
+        }
+    }
+
     /// Get a empty block from idle queue.
     ///
     /// If the idle queue is empty, this function will create
     /// a new block through `Block::new`.
-    ///
-    /// We choose to reuse newest block, which can improves cache efficiency.
     #[inline]
     fn get(&self) -> *mut Block<T> {
         // minimize the lock holding time.
-        let boxed = { self.blocks.lock().pop() };
-        // ↑ `{ }` is redundant, only used to clarify intent.
+        let boxed = self.blocks.lock().pop();
+        if let Some(mut boxed) = boxed {
+            boxed.reset();
+            Box::leak(boxed)
+        } else {
+            Box::leak(<Block<T>>::new())
+        }
+    }
+
+    /// Get a empty block from idle queue.
+    #[inline]
+    fn get_mut(&mut self) -> *mut Block<T> {
+        let boxed = self.blocks.get_mut().pop();
         if let Some(mut boxed) = boxed {
             boxed.reset();
             Box::leak(boxed)
@@ -179,8 +194,7 @@ impl<T> IdleQueue<T> {
 ///
 /// Problems:
 /// - Ring-buffer implementations are fast but cannot grow.
-/// - Segment-queue implementations avoid a fixed size but do not reuse segments,
-///   causing high allocation overhead and poor cache locality.
+/// - Segment-queue implementations avoid a fixed size but do not reuse segments.
 ///
 /// This implementation:
 /// - Uses a block-based linked list (similar to a segment queue) and adds a recycler
@@ -350,9 +364,6 @@ impl<T> ListQueue<T> {
     /// a fresh block is fetched from the idle pool (or allocated)
     /// and linked as the new tail.
     ///
-    /// Concurrent producers may contend briefly on a per-block push lock,
-    /// but there is no global queue lock.
-    ///
     /// # Examples
     ///
     /// ```
@@ -391,6 +402,46 @@ impl<T> ListQueue<T> {
         block.tail_state.1.fetch_or(1 << index, Release);
     }
 
+    /// Pushes an element to the queue with exclusive mutable access.
+    ///
+    /// Avoids atomic operations and synchronization, assuming
+    /// no other threads access the queue concurrently.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ListQueue;
+    ///
+    /// let mut q = ListQueue::default();
+    ///
+    /// q.push_mut(10);
+    /// q.push_mut(20);
+    /// ```
+    pub fn push_mut(&mut self, value: T) {
+        let tail = self.tail_id.get_mut();
+
+        // SAFETY: `guard.0` point to valid data.
+        let block = unsafe { &mut *tail.0 };
+
+        let index = block.tail_state.0;
+        debug_assert!(index < BLOCK_SIZE);
+
+        // SAFETY: valid index and pointer
+        unsafe {
+            ptr::write(block.slots.as_mut_ptr().add(index) as *mut T, value);
+        }
+
+        if index + 1 == BLOCK_SIZE {
+            let new_block = self.idle.get_mut();
+            block.next = new_block;
+            tail.0 = new_block;
+            tail.1 = tail.1.wrapping_add(1);
+        }
+
+        block.tail_state.0 = index + 1;
+        block.tail_state.1.get_mut().bitor_assign(1 << index);
+    }
+
     /// Pop a value from the queue.
     ///
     /// Returns `Some(T)` when an element is available, or `None` when the queue
@@ -399,9 +450,6 @@ impl<T> ListQueue<T> {
     /// Pop operates on the head block; if the head block becomes empty
     /// as a result of the pop it will be detached and returned to the idle pool
     /// (or dropped if the idle pool is full).
-    ///
-    /// Concurrent consumers may briefly contend on a per-block pop lock,
-    /// but there is no global queue lock.
     ///
     /// # Examples
     ///
@@ -452,6 +500,67 @@ impl<T> ListQueue<T> {
             ::core::mem::drop(guard);
 
             self.idle.push(old_ptr);
+        }
+
+        Some(value)
+    }
+
+    /// Pops the head element from the queue using an exclusive reference.
+    ///
+    /// Avoids atomic operations and synchronization, assuming
+    /// no other threads access the queue concurrently.
+    ///
+    /// If the queue is empty, `None` is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_os::utils::ListQueue;
+    ///
+    /// let mut q = ListQueue::default();
+    ///
+    /// q.push(10);
+    /// q.push(20);
+    /// assert_eq!(q.pop_mut(), Some(10));
+    /// assert_eq!(q.pop_mut(), Some(20));
+    /// assert!(q.pop_mut().is_none());
+    /// ```
+    pub fn pop_mut(&mut self) -> Option<T> {
+        let head = self.head_id.get_mut();
+        debug_assert!(!head.0.is_null());
+
+        // SAFETY: `guard.0` point to valid data.
+        let block = unsafe { &mut *head.0 };
+
+        let index = block.head_cache.0;
+        debug_assert!(index < BLOCK_SIZE);
+
+        let bit_flag = 1_u64 << index;
+        if block.head_cache.1 & bit_flag == 0 {
+            // slow path, update cache
+            block.head_cache.1 = *block.tail_state.1.get_mut();
+            if block.head_cache.1 & bit_flag == 0 {
+                return None;
+            }
+        }
+
+        // SAFETY: valid index and pointer
+        let value = unsafe { ptr::read(block.slots.as_ptr().add(index) as *mut T) };
+
+        let new_index = index + 1;
+
+        block.head_cache.0 = new_index;
+
+        if new_index == BLOCK_SIZE {
+            let old_ptr = block as *mut Block<T>;
+            let next_ptr = block.next;
+            // index + 1 == BLOCK_SIZE, so tail_index == BLOCK_SIZE.
+            // next_ptr must be set by `push` function.
+            debug_assert!(!next_ptr.is_null());
+            head.0 = next_ptr;
+            head.1 = head.1.wrapping_add(1);
+
+            self.idle.push_mut(old_ptr);
         }
 
         Some(value)

@@ -9,7 +9,8 @@ use crate::sync::atomic::{AtomicBool, Ordering};
 /// and generates smaller code.
 ///
 /// But it only ensures that the expression is executed once,
-/// does not guarantee that other threads can see the result of the expression in concurrent scenarios.  
+/// does not guarantee that other threads can see the result
+/// of the expression in concurrent scenarios.  
 ///
 /// (In other words, other threads may see `flag = false`
 /// while the processing of the expression itself has not yet completed.)
@@ -68,7 +69,9 @@ impl Default for OnceFlag {
 ///
 /// Based on [`OnceFlag`] instead of [`Once`](crate::sync::Once), more efficient.
 ///
-/// But strictly speaking, it is only safe in single thread.
+/// But it only ensures that the expression is executed once,
+/// does not guarantee that other threads can see the result
+/// of the expression in concurrent scenarios.
 ///
 /// # Example
 ///

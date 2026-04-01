@@ -12,8 +12,9 @@
 //!
 //! # Queue Structures
 //!
-//! - [`ArrayQueue`]: A bounded MPMC queue backed by a fixed-size ring buffer.
-//! - [`ListQueue`]: An unbounded queue backed by linked blocks with idle-block reuse.
+//! - [`ArrayQueue`]: A bounded lock-free queue backed by a fixed-size ring buffer.
+//! - [`SegQueue`]: An unbounded lock-free queue backed by a linked list.
+//! - [`ListQueue`]: An unbounded queue backed by linked blocks with separate locks.
 //! - [`Parallel`]: A per-thread local aggregator for collecting and draining thread-local values.
 //!
 //! # Execution Helpers
@@ -31,6 +32,7 @@ mod futex;
 mod list_queue;
 mod once_flag;
 mod parallel;
+mod seq_queue;
 mod spin_lock;
 
 // -----------------------------------------------------------------------------
@@ -43,6 +45,7 @@ pub use futex::Futex;
 pub use list_queue::ListQueue;
 pub use once_flag::OnceFlag;
 pub use parallel::Parallel;
+pub use seq_queue::SegQueue;
 pub use spin_lock::{SpinLock, SpinLockGuard};
 
 // -----------------------------------------------------------------------------

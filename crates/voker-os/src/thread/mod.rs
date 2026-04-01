@@ -64,22 +64,22 @@ pub fn thread_hash() -> u64 {
 // -----------------------------------------------------------------------------
 // available_parallelism
 
-use core::num::NonZero;
+use core::num::NonZeroUsize;
 
 /// Returns an estimate of the default amount of parallelism a program should use.
 ///
 /// Similar to [`std::thread::available_parallelism`], but in no_std
 /// environments (or when the std call fails) this returns `1`.
-pub fn available_parallelism() -> NonZero<usize> {
+pub fn available_parallelism() -> NonZeroUsize {
     crate::cfg::switch! {
         crate::cfg::std => {
             #[expect(unsafe_code, reason = "`1` is non-zero")]
             std::thread::available_parallelism()
-                .unwrap_or(unsafe{ NonZero::new_unchecked(1) })
+                .unwrap_or(unsafe{ NonZeroUsize::new_unchecked(1) })
         }
         _ => {
             #[expect(unsafe_code, reason = "`1` is non-zero")]
-            unsafe{ NonZero::new_unchecked(1) }
+            unsafe{ NonZeroUsize::new_unchecked(1) }
         }
     }
 }

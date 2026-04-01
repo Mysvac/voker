@@ -1,6 +1,4 @@
-//! A reimplementation of the currently unstable [`std::cell::SyncUnsafeCell`]
-//!
-//! [`std::cell::SyncUnsafeCell`]: https://doc.rust-lang.org/nightly/std/cell/struct.SyncUnsafeCell.html
+//! A reimplementation of the currently unstable [`core::cell::SyncUnsafeCell`]
 #![expect(unsafe_code, reason = "SyncUnsafeCell requires unsafe code.")]
 
 use core::cell::UnsafeCell;
@@ -99,6 +97,7 @@ impl<T> From<T> for SyncUnsafeCell<T> {
 
 impl<T> SyncUnsafeCell<[T]> {
     /// Returns a `&[SyncUnsafeCell<T>]` from a `&SyncUnsafeCell<[T]>`.
+    ///
     /// # Examples
     ///
     /// ```

@@ -1,7 +1,9 @@
-//! See <https://docs.rs/crate/crossbeam-utils/latest>
+//! Copyright (c) 2019 The Crossbeam Project Developers
 //!
-//! - Version: 0.8.21
-//! - Date: 2026/01/01
+//! See <https://docs.rs/crate/crossbeam-queue/latest>
+//!
+//! - Version: 0.8.4
+//! - Date: 2026/04/01
 
 use core::cell::Cell;
 use core::fmt;
@@ -44,7 +46,7 @@ impl Backoff {
         }
 
         if self.step.get() < SPIN_LIMIT {
-            self.step.set(self.step.get() + 1);
+            self.step.update(|v| v + 1);
         }
     }
 
@@ -60,14 +62,14 @@ impl Backoff {
     /// [`spin`]: Backoff::spin
     #[inline]
     pub fn snooze(&self) {
-        if self.step.get() < SPIN_LIMIT {
+        if self.step.get() <= SPIN_LIMIT {
             let step: u32 = 1 << { self.step.get() << 1 };
 
             for _ in 0..step {
                 core::hint::spin_loop();
             }
 
-            self.step.set(self.step.get() + 1);
+            self.step.update(|v| v + 1);
         } else {
             #[cfg(not(feature = "std"))]
             for _ in 0..1024_u32 {

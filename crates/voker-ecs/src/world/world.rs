@@ -3,6 +3,7 @@
 use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::sync::atomic::Ordering;
+use voker_os::utils::CachePadded;
 
 use voker_os::sync::atomic::AtomicU32;
 
@@ -29,7 +30,7 @@ use crate::world::WorldId;
 /// deferred commands, and message lifecycle infrastructure.
 pub struct World {
     id: WorldId,
-    this_run: AtomicU32,
+    this_run: CachePadded<AtomicU32>,
     last_run: Tick,
     last_check: Tick,
     thread_hash: u64,
@@ -71,7 +72,7 @@ impl World {
     pub fn alloc() -> Box<World> {
         Box::new(Self {
             id: WorldId::alloc(),
-            this_run: AtomicU32::new(1),
+            this_run: CachePadded::new(AtomicU32::new(1)),
             last_run: Tick::new(0),
             last_check: Tick::new(0),
             thread_hash: voker_os::thread::thread_hash(),

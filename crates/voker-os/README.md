@@ -8,9 +8,9 @@ Rust's standard library is organized into three layers for maximum portability:
 - **alloc**: Memory allocation APIs and common containers (`String`, `Vec`, etc.)
 - **std**: OS-level APIs (files, threads, networking, etc.)
 
-Game engine code should primarily target the `core` layer for maximum portability, while maintaining compatibility with `alloc` (which may require providing a custom allocator for embedded targets).
-
-While Rust provides extensive [cross-platform support] through `std`, it cannot cover every possible target—especially custom embedded systems or specialized game consoles. This crate provides the necessary abstractions to bridge that gap.
+While Rust provides extensive [cross-platform support] through `std`,
+it cannot cover every possible target—especially custom embedded systems or specialized game consoles.
+This crate provides the necessary abstractions to bridge that gap.
 
 [cross-platform support]: https://doc.rust-lang.org/nightly/rustc/platform-support.html
 
