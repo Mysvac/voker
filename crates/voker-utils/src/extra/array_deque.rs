@@ -4,8 +4,8 @@
 //! It is useful for short-lived queues where capacity is known at compile time.
 #![expect(unsafe_code, reason = "original implementation")]
 
-use core::fmt;
-use core::iter::FusedIterator;
+use core::fmt::Debug;
+use core::iter::{Chain, FusedIterator};
 use core::mem::MaybeUninit;
 use core::ptr;
 use core::slice;
@@ -56,193 +56,56 @@ pub struct ArrayDeque<T, const N: usize> {
     len: usize,
 }
 
-impl<T, const N: usize> Drop for ArrayDeque<T, N> {
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-impl<T, const N: usize> Default for ArrayDeque<T, N> {
-    /// Create an empty `ArrayDeque` with uninitialized backing storage.
-    ///
-    /// This uses `MaybeUninit` to avoid initializing the array elements.
-    /// The returned queue has `len == 0` and `tail == 0`.
-    #[inline(always)]
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// -----------------------------------------------------------------------------
+// drop
 
 impl<T, const N: usize> ArrayDeque<T, N> {
     #[inline]
-    fn drop_inner(&mut self) {
-        if self.len == N {
-            unsafe {
-                ptr::drop_in_place(ptr::slice_from_raw_parts_mut::<T>(
-                    self.slots.as_mut_ptr() as *mut T,
-                    N,
-                ));
-            }
-            return;
-        }
-        let begin = (self.tail + N - self.len) % N;
-        if self.tail > begin {
-            unsafe {
-                ptr::drop_in_place(ptr::slice_from_raw_parts_mut::<T>(
-                    self.slots.as_mut_ptr().add(begin) as *mut T,
-                    self.len,
-                ));
-            }
-        } else {
-            unsafe {
-                ptr::drop_in_place(ptr::slice_from_raw_parts_mut::<T>(
-                    self.slots.as_mut_ptr() as *mut T,
-                    self.tail,
-                ));
-                ptr::drop_in_place(ptr::slice_from_raw_parts_mut::<T>(
-                    self.slots.as_mut_ptr().add(begin) as *mut T,
-                    N - begin,
-                ));
-            }
-        }
-    }
-
-    /// Returns a pair of slices containing the deque contents in front-to-back order.
-    ///
-    /// The returned slices represent the logical order of elements:
-    ///
-    /// - The first slice contains the first contiguous region.
-    /// - The second slice contains the wrapped region, if any.
-    ///
-    /// When the internal storage is not wrapped, all elements are in the first slice
-    /// and the second slice is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
-    /// let mut deque: ArrayDeque<i32, 5> = ArrayDeque::new();
-    /// deque.push_back(0).unwrap();
-    /// deque.push_back(1).unwrap();
-    /// deque.push_back(2).unwrap();
-    ///
-    /// let expected = [0, 1, 2];
-    /// let (front, back) = deque.as_slices();
-    /// assert_eq!(&expected[..front.len()], front);
-    /// assert_eq!(&expected[front.len()..], back);
-    /// ```
-    #[inline]
-    pub fn as_slices(&self) -> (&[T], &[T]) {
-        if self.len == 0 {
-            return (&[], &[]);
-        }
-
-        let begin = (self.tail + N - self.len) % N;
-        let ptr = self.slots.as_ptr() as *const T;
-
-        if begin < self.tail {
-            unsafe { (slice::from_raw_parts(ptr.add(begin), self.len), &[]) }
-        } else {
-            unsafe {
-                (
-                    slice::from_raw_parts(ptr.add(begin), N - begin),
-                    slice::from_raw_parts(ptr, self.tail),
-                )
-            }
-        }
-    }
-
-    /// Returns a pair of mutable slices containing the deque contents in front-to-back order.
-    ///
-    /// The two mutable slices are non-overlapping and together cover all elements.
-    /// If the deque is not wrapped, the second slice is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
-    /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
-    /// deque.push_back(1).unwrap();
-    /// deque.push_back(2).unwrap();
-    /// deque.push_back(3).unwrap();
-    ///
-    /// let (front, back) = deque.as_mut_slices();
-    /// for x in front {
-    ///     *x *= 10;
-    /// }
-    /// for x in back {
-    ///     *x *= 10;
-    /// }
-    ///
-    /// assert_eq!(deque.pop_front(), Some(10));
-    /// assert_eq!(deque.pop_front(), Some(20));
-    /// assert_eq!(deque.pop_front(), Some(30));
-    /// ```
-    #[inline]
-    pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
-        if self.len == 0 {
-            return (&mut [], &mut []);
-        }
-
-        let begin = (self.tail + N - self.len) % N;
-        let ptr = self.slots.as_mut_ptr() as *mut T;
-
-        if begin < self.tail {
-            unsafe { (slice::from_raw_parts_mut(ptr.add(begin), self.len), &mut []) }
-        } else {
-            unsafe {
-                (
-                    slice::from_raw_parts_mut(ptr.add(begin), N - begin),
-                    slice::from_raw_parts_mut(ptr, self.tail),
-                )
-            }
-        }
-    }
-
-    /// Removes all elements from the deque.
-    ///
-    /// This method drops all elements currently in the deque and resets
-    /// its internal state to empty. The capacity remains unchanged.
-    pub fn clear(&mut self) {
+    fn drop_data(&mut self) {
         if core::mem::needs_drop::<T>() && self.len != 0 {
-            self.drop_inner();
-        }
-        self.tail = 0;
-        self.len = 0;
-    }
-
-    /// Creates an empty `ArrayDeque` with uninitialized backing storage.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
-    /// let deque: ArrayDeque<i32, 10> = ArrayDeque::new();
-    /// assert!(deque.is_empty());
-    /// assert!(!deque.is_full());
-    /// assert_eq!(deque.len(), 0);
-    /// ```
-    ///
-    /// Note that the capacity `0` is valid.
-    #[inline(always)]
-    #[must_use]
-    pub const fn new() -> Self {
-        const {
-            assert!(
-                N <= (usize::MAX >> 2),
-                "the capacity cannot exceed `usize::MAX / 4`"
-            );
-        }
-        Self {
-            slots: unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() },
-            tail: 0,
-            len: 0,
+            if self.len == N {
+                unsafe {
+                    ptr::drop_in_place::<[T]>(ptr::slice_from_raw_parts_mut(
+                        self.slots.as_mut_ptr() as *mut T,
+                        N,
+                    ));
+                }
+                return;
+            }
+            let begin = (self.tail + N - self.len) % N;
+            if self.tail > begin {
+                unsafe {
+                    ptr::drop_in_place::<[T]>(ptr::slice_from_raw_parts_mut(
+                        self.slots.as_mut_ptr().add(begin) as *mut T,
+                        self.len,
+                    ));
+                }
+            } else {
+                unsafe {
+                    ptr::drop_in_place::<[T]>(ptr::slice_from_raw_parts_mut(
+                        self.slots.as_mut_ptr() as *mut T,
+                        self.tail,
+                    ));
+                    ptr::drop_in_place::<[T]>(ptr::slice_from_raw_parts_mut(
+                        self.slots.as_mut_ptr().add(begin) as *mut T,
+                        N - begin,
+                    ));
+                }
+            }
         }
     }
+}
 
+impl<T, const N: usize> Drop for ArrayDeque<T, N> {
+    fn drop(&mut self) {
+        self.drop_data();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// methods
+
+impl<T, const N: usize> ArrayDeque<T, N> {
     /// Returns `true` if the buffer is full (len == capacity).
     ///
     /// When the deque is full, any attempt to push additional elements
@@ -251,8 +114,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 2> = ArrayDeque::new();
     /// assert!(!deque.is_full());
     ///
@@ -273,8 +135,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// assert!(deque.is_empty());
     ///
@@ -291,8 +152,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// assert_eq!(deque.len(), 0);
     ///
@@ -305,6 +165,163 @@ impl<T, const N: usize> ArrayDeque<T, N> {
         self.len
     }
 
+    /// Returns the capacity of deque.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque = ArrayDeque::<i32, 5>::new();
+    /// assert_eq!(deque.capacity(), 5);
+    /// ```
+    #[inline(always)]
+    pub const fn capacity(&self) -> usize {
+        N
+    }
+
+    /// Returns a pair of slices containing the deque contents in front-to-back order.
+    ///
+    /// The returned slices represent the logical order of elements:
+    ///
+    /// - The first slice contains the first contiguous region.
+    /// - The second slice contains the wrapped region, if any.
+    ///
+    /// When the internal storage is not wrapped, all elements are in the first slice
+    /// and the second slice is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque: ArrayDeque<i32, 5> = ArrayDeque::new();
+    /// deque.push_back(0).unwrap();
+    /// deque.push_back(1).unwrap();
+    /// deque.push_back(2).unwrap();
+    ///
+    /// let expected = [0, 1, 2];
+    /// let (front, back) = deque.as_slices();
+    /// assert_eq!(&expected[..front.len()], front);
+    /// assert_eq!(&expected[front.len()..], back);
+    /// ```
+    #[inline]
+    pub const fn as_slices(&self) -> (&[T], &[T]) {
+        if self.len == 0 {
+            return (&[], &[]);
+        }
+
+        let begin = (self.tail + N - self.len) % N;
+        let ptr = self.slots.as_ptr() as *const T;
+
+        unsafe {
+            if begin < self.tail {
+                (slice::from_raw_parts(ptr.add(begin), self.len), &[])
+            } else {
+                (
+                    slice::from_raw_parts(ptr.add(begin), N - begin),
+                    slice::from_raw_parts(ptr, self.tail),
+                )
+            }
+        }
+    }
+
+    /// Returns a pair of mutable slices containing the deque contents in front-to-back order.
+    ///
+    /// The two mutable slices are non-overlapping and together cover all elements.
+    /// If the deque is not wrapped, the second slice is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
+    /// deque.push_back(1).unwrap();
+    /// deque.push_back(2).unwrap();
+    /// deque.push_back(3).unwrap();
+    ///
+    /// let (front, back) = deque.as_mut_slices();
+    /// for x in front {
+    ///     *x *= 10;
+    /// }
+    /// for x in back {
+    ///     *x *= 10;
+    /// }
+    ///
+    /// assert_eq!(deque.pop_front(), Some(10));
+    /// assert_eq!(deque.pop_front(), Some(20));
+    /// assert_eq!(deque.pop_front(), Some(30));
+    /// ```
+    #[inline]
+    pub const fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
+        if self.len == 0 {
+            return (&mut [], &mut []);
+        }
+
+        let begin = (self.tail + N - self.len) % N;
+        let ptr = self.slots.as_mut_ptr() as *mut T;
+
+        unsafe {
+            if begin < self.tail {
+                (slice::from_raw_parts_mut(ptr.add(begin), self.len), &mut [])
+            } else {
+                (
+                    slice::from_raw_parts_mut(ptr.add(begin), N - begin),
+                    slice::from_raw_parts_mut(ptr, self.tail),
+                )
+            }
+        }
+    }
+
+    /// Removes all elements from the deque.
+    ///
+    /// This method drops all elements currently in the deque and resets
+    /// its internal state to empty. The capacity remains unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
+    /// deque.push_back(1).unwrap();
+    /// assert_eq!(deque.len(), 1);
+    ///
+    /// deque.clear();
+    /// assert_eq!(deque.len(), 0);
+    /// ```
+    pub fn clear(&mut self) {
+        self.drop_data();
+        self.tail = 0;
+        self.len = 0;
+    }
+
+    /// Creates an empty `ArrayDeque` with uninitialized backing storage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let deque = ArrayDeque::<i32, 10>::new();
+    /// assert!(deque.is_empty());
+    /// # assert!(!deque.is_full());
+    /// # assert_eq!(deque.len(), 0);
+    /// ```
+    ///
+    /// Note that the capacity `0` is valid.
+    #[must_use]
+    #[inline(always)]
+    pub const fn new() -> Self {
+        const {
+            assert!(
+                N <= (usize::MAX >> 2),
+                "the capacity cannot exceed `usize::MAX / 4`"
+            );
+        }
+        Self {
+            slots: unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() },
+            tail: 0,
+            len: 0,
+        }
+    }
+
     /// Returns a reference to the front element, if present.
     ///
     /// This method does not remove the element from the deque.
@@ -312,8 +329,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// assert_eq!(deque.front(), None);
     ///
@@ -336,7 +352,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// Returns a mutable reference to the front element, if present.
     ///
     /// This method does not remove the element from the deque.
-    pub fn front_mut(&mut self) -> Option<&mut T> {
+    pub const fn front_mut(&mut self) -> Option<&mut T> {
         if !self.is_empty() {
             let front = (self.tail + N - self.len) % N;
             unsafe { Some(&mut *self.slots.as_mut_ptr().add(front).cast::<T>()) }
@@ -352,8 +368,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// assert_eq!(deque.back(), None);
     ///
@@ -367,7 +382,10 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     pub const fn back(&self) -> Option<&T> {
         if !self.is_empty() {
             let back = (self.tail + N - 1) % N;
-            unsafe { Some(&*self.slots.as_ptr().add(back).cast::<T>()) }
+            unsafe {
+                let ptr = self.slots.as_ptr();
+                Some(&*ptr.add(back).cast::<T>())
+            }
         } else {
             None
         }
@@ -376,10 +394,13 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// Returns a mutable reference to the back element, if present.
     ///
     /// This method does not remove the element from the deque.
-    pub fn back_mut(&mut self) -> Option<&mut T> {
+    pub const fn back_mut(&mut self) -> Option<&mut T> {
         if !self.is_empty() {
             let back = (self.tail + N - 1) % N;
-            unsafe { Some(&mut *self.slots.as_mut_ptr().add(back).cast::<T>()) }
+            unsafe {
+                let ptr = self.slots.as_mut_ptr();
+                Some(&mut *ptr.add(back).cast::<T>())
+            }
         } else {
             None
         }
@@ -388,7 +409,20 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// Returns a reference to the element at logical index `index`.
     ///
     /// Index `0` corresponds to the front element.
-    pub fn get(&self, index: usize) -> Option<&T> {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
+    /// deque.push_back(1).unwrap();
+    /// deque.push_back(2).unwrap();
+    ///
+    /// assert_eq!(deque.get(0), Some(&1));
+    /// assert_eq!(deque.get(1), Some(&2));
+    /// assert_eq!(deque.get(2), None);
+    /// ```
+    pub const fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len {
             return None;
         }
@@ -403,7 +437,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// Returns a mutable reference to the element at logical index `index`.
     ///
     /// Index `0` corresponds to the front element.
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+    pub const fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len {
             return None;
         }
@@ -416,49 +450,22 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     }
 
     /// Returns `true` if the deque contains an element equal to `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque: ArrayDeque<i32, 3> = [10, 40, 30].into();
+    ///
+    /// assert!(deque.contains(&30));
+    /// assert!(!deque.contains(&50));
+    /// ```
     pub fn contains(&self, value: &T) -> bool
     where
         T: PartialEq,
     {
-        let (first, second) = self.as_slices();
-        first.contains(value) || second.contains(value)
-    }
-
-    /// Returns an iterator over references to elements in front-to-back order.
-    ///
-    /// This is equivalent to iterating over `self.as_slices().0` then
-    /// `self.as_slices().1`.
-    pub fn iter(&self) -> Iter<'_, T> {
-        let (first, second) = self.as_slices();
-        Iter {
-            inner: first.iter().chain(second.iter()),
-        }
-    }
-
-    /// Returns an iterator over mutable references in front-to-back order.
-    ///
-    /// This is equivalent to iterating over `self.as_mut_slices().0` then
-    /// `self.as_mut_slices().1`.
-    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
-        let (first, second) = self.as_mut_slices();
-        IterMut {
-            inner: first.iter_mut().chain(second.iter_mut()),
-        }
-    }
-
-    /// Pushes an element to the front of the deque without checking capacity.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that `!self.is_full()`.
-    /// Calling this method when the deque is full results in undefined behavior.
-    #[inline(always)]
-    pub const unsafe fn push_front_unchecked(&mut self, element: T) {
-        let begin = (self.tail + (N << 1) - self.len - 1) % N;
-        unsafe {
-            ptr::write(self.slots.as_mut_ptr().add(begin) as *mut T, element);
-        }
-        self.len += 1;
+        let (a, b) = self.as_slices();
+        a.contains(value) || b.contains(value)
     }
 
     /// Pushes an element to the front of the deque.
@@ -469,8 +476,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 2> = ArrayDeque::new();
     ///
     /// assert_eq!(deque.push_front(1), Ok(()));
@@ -483,28 +489,28 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// ```
     #[inline]
     pub const fn push_front(&mut self, element: T) -> Result<(), T> {
-        if !self.is_full() {
-            unsafe {
-                self.push_front_unchecked(element);
-            }
-            Ok(())
-        } else {
-            Err(element)
+        if self.is_full() {
+            return Err(element);
         }
+        unsafe {
+            self.push_front_unchecked(element);
+        }
+        Ok(())
     }
 
-    /// Pushes an element to the back of the deque without checking capacity.
+    /// Pushes an element to the front of the deque without checking capacity.
     ///
     /// # Safety
-    ///
     /// The caller must ensure that `!self.is_full()`.
     /// Calling this method when the deque is full results in undefined behavior.
-    #[inline(always)]
-    pub const unsafe fn push_back_unchecked(&mut self, element: T) {
+    #[inline]
+    pub const unsafe fn push_front_unchecked(&mut self, element: T) {
+        let begin = (self.tail + (N << 1) - self.len - 1) % N;
         unsafe {
-            ptr::write(self.slots.as_mut_ptr().add(self.tail) as *mut T, element);
+            let ptr = self.slots.as_mut_ptr();
+            let dst = ptr.add(begin) as *mut T;
+            ptr::write(dst, element);
         }
-        self.tail = (self.tail + 1) % N;
         self.len += 1;
     }
 
@@ -516,8 +522,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 2> = ArrayDeque::new();
     ///
     /// assert_eq!(deque.push_back(1), Ok(()));
@@ -530,14 +535,29 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// ```
     #[inline]
     pub const fn push_back(&mut self, element: T) -> Result<(), T> {
-        if !self.is_full() {
-            unsafe {
-                self.push_back_unchecked(element);
-            }
-            Ok(())
-        } else {
-            Err(element)
+        if self.is_full() {
+            return Err(element);
         }
+        unsafe {
+            self.push_back_unchecked(element);
+        }
+        Ok(())
+    }
+
+    /// Pushes an element to the back of the deque without checking capacity.
+    ///
+    /// # Safety
+    /// The caller must ensure that `!self.is_full()`.
+    /// Calling this method when the deque is full results in undefined behavior.
+    #[inline]
+    pub const unsafe fn push_back_unchecked(&mut self, element: T) {
+        unsafe {
+            let ptr = self.slots.as_mut_ptr();
+            let dst = ptr.add(self.tail) as *mut T;
+            ptr::write(dst, element);
+        }
+        self.tail = (self.tail + 1) % N;
+        self.len += 1;
     }
 
     /// Removes and returns the front element of the deque.
@@ -547,8 +567,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// deque.push_back(1).unwrap();
     /// deque.push_back(2).unwrap();
@@ -559,14 +578,17 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// ```
     #[inline]
     pub const fn pop_front(&mut self) -> Option<T> {
-        if !self.is_empty() {
-            let begin = (self.tail + N - self.len) % N;
-            let value = unsafe { ptr::read(self.slots.as_mut_ptr().add(begin) as *mut T) };
-            self.len -= 1;
-            Some(value)
-        } else {
-            None
+        if self.is_empty() {
+            return None;
         }
+        let begin = (self.tail + N - self.len) % N;
+        self.len -= 1;
+        let value = unsafe {
+            let ptr = self.slots.as_mut_ptr();
+            let src: *mut T = ptr.add(begin) as *mut T;
+            ptr::read::<T>(src)
+        };
+        Some(value)
     }
 
     /// Removes and returns the back element of the deque.
@@ -576,8 +598,7 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use voker_utils::extra::ArrayDeque;
-    ///
+    /// # use voker_utils::extra::ArrayDeque;
     /// let mut deque: ArrayDeque<i32, 4> = ArrayDeque::new();
     /// deque.push_back(1).unwrap();
     /// deque.push_back(2).unwrap();
@@ -588,65 +609,111 @@ impl<T, const N: usize> ArrayDeque<T, N> {
     /// ```
     #[inline]
     pub const fn pop_back(&mut self) -> Option<T> {
-        if !self.is_empty() {
-            self.tail = (self.tail + N - 1) % N;
-            let value = unsafe { ptr::read(self.slots.as_mut_ptr().add(self.tail) as *mut T) };
-            self.len -= 1;
-            Some(value)
-        } else {
-            None
+        if self.is_empty() {
+            return None;
         }
+        self.tail = (self.tail + N - 1) % N;
+        self.len -= 1;
+        let value = unsafe {
+            let ptr = self.slots.as_mut_ptr();
+            let src = ptr.add(self.tail) as *mut T;
+            ptr::read::<T>(src)
+        };
+        Some(value)
+    }
+
+    /// Returns an iterator over references to elements in front-to-back order.
+    ///
+    /// This is equivalent to iterating over `self.as_slices().0` then
+    /// `self.as_slices().1`.
+    ///
+    /// ```
+    /// # use voker_utils::extra::ArrayDeque;
+    /// let mut deque = ArrayDeque::<i32, 4>::new();
+    ///
+    /// deque.push_back(1);
+    /// deque.push_back(2);
+    /// deque.push_back(3);
+    ///
+    /// let vec: Vec<_> = deque.iter().copied().collect();
+    /// assert_eq!(vec, [1, 2, 3]);
+    /// ```
+    pub fn iter(&self) -> Iter<'_, T> {
+        let (a, b) = self.as_slices();
+        Iter {
+            inner: a.iter().chain(b.iter()),
+        }
+    }
+
+    /// Returns an iterator over mutable references in front-to-back order.
+    ///
+    /// This is equivalent to iterating over `self.as_mut_slices().0` then
+    /// `self.as_mut_slices().1`.
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        let (a, b) = self.as_mut_slices();
+        IterMut {
+            inner: a.iter_mut().chain(b.iter_mut()),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Trait
+
+impl<T, const N: usize> Default for ArrayDeque<T, N> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Debug, const N: usize> Debug for ArrayDeque<T, N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let (first, second) = self.as_slices();
+        f.debug_list().entries(first.iter().chain(second.iter())).finish()
     }
 }
 
 impl<T: Clone, const N: usize> Clone for ArrayDeque<T, N> {
     fn clone(&self) -> Self {
         let mut out = Self::new();
-        for item in self.iter() {
-            unsafe {
-                out.push_back_unchecked(item.clone());
-            }
-        }
+        self.iter().for_each(|item| unsafe {
+            out.push_back_unchecked(item.clone());
+        });
         out
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.clear();
+
+        source.iter().for_each(|item| unsafe {
+            self.push_back_unchecked(item.clone());
+        });
     }
 }
 
 impl<T, const N: usize> From<[T; N]> for ArrayDeque<T, N> {
+    #[inline]
     fn from(value: [T; N]) -> Self {
         let mut deque = Self::new();
-        for item in value {
-            unsafe {
-                deque.push_back_unchecked(item);
-            }
+        let dst = &raw mut deque.slots as *mut [T; N];
+        unsafe {
+            ptr::write(dst, value);
         }
+        deque.len = N;
+        deque.tail = 0;
+
         deque
     }
 }
 
-impl<T, const N: usize> FromIterator<T> for ArrayDeque<T, N> {
-    /// Builds a deque from an iterator.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the iterator yields more than `N` items.
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut deque = Self::new();
-        for item in iter {
-            assert!(
-                !deque.is_full(),
-                "ArrayDeque::from_iter overflow: capacity is {N}"
-            );
-            unsafe {
-                deque.push_back_unchecked(item);
-            }
-        }
-        deque
-    }
-}
+// -----------------------------------------------------------------------------
+// Iter & IterMut & IntoIter
 
 /// Shared iterator for `ArrayDeque`.
+#[derive(Debug)]
 pub struct Iter<'a, T> {
-    inner: core::iter::Chain<slice::Iter<'a, T>, slice::Iter<'a, T>>,
+    inner: Chain<slice::Iter<'a, T>, slice::Iter<'a, T>>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
@@ -665,8 +732,9 @@ impl<T> ExactSizeIterator for Iter<'_, T> {}
 impl<T> FusedIterator for Iter<'_, T> {}
 
 /// Mutable iterator for `ArrayDeque`.
+#[derive(Debug)]
 pub struct IterMut<'a, T> {
-    inner: core::iter::Chain<slice::IterMut<'a, T>, slice::IterMut<'a, T>>,
+    inner: Chain<slice::IterMut<'a, T>, slice::IterMut<'a, T>>,
 }
 
 impl<'a, T> Iterator for IterMut<'a, T> {
@@ -685,6 +753,7 @@ impl<T> ExactSizeIterator for IterMut<'_, T> {}
 impl<T> FusedIterator for IterMut<'_, T> {}
 
 /// Owning iterator for `ArrayDeque`.
+#[derive(Debug, Clone)]
 pub struct IntoIter<T, const N: usize> {
     deque: ArrayDeque<T, N>,
 }
@@ -728,13 +797,6 @@ impl<'a, T, const N: usize> IntoIterator for &'a mut ArrayDeque<T, N> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
-    }
-}
-
-impl<T: fmt::Debug, const N: usize> fmt::Debug for ArrayDeque<T, N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (first, second) = self.as_slices();
-        f.debug_list().entries(first.iter().chain(second.iter())).finish()
     }
 }
 
@@ -968,11 +1030,5 @@ mod tests {
         let cloned = deque.clone();
         let got: Vec<_> = cloned.into_iter().collect();
         assert_eq!(got, [1, 2, 3, 4]);
-    }
-
-    #[test]
-    #[should_panic(expected = "ArrayDeque::from_iter overflow")]
-    fn from_iter_overflow_panics() {
-        let _deque: ArrayDeque<i32, 2> = [1, 2, 3].into_iter().collect();
     }
 }

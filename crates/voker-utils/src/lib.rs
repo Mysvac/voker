@@ -17,7 +17,6 @@ pub mod extra;
 pub mod hash;
 pub mod index;
 pub mod num;
-
 pub mod vec;
 
 // -----------------------------------------------------------------------------

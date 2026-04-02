@@ -4,7 +4,7 @@
 #![expect(unsafe_code, reason = "original implementation")]
 
 use alloc::boxed::Box;
-use core::fmt;
+use core::fmt::Debug;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -18,7 +18,7 @@ use crate::vec::ArrayVec;
 
 const BLOCK_SIZE: usize = 13;
 
-const MAX_IDLE: usize = 4;
+const MAX_IDLE: usize = 2;
 
 // -----------------------------------------------------------------------------
 // Block
@@ -42,22 +42,15 @@ struct Block<T> {
 }
 
 impl<T> Block<T> {
-    /// Create a empty block.
-    #[cold]
+    #[inline(never)]
     fn new() -> Box<Self> {
-        Box::new(
-            const {
-                Block::<T> {
-                    head: 0,
-                    tail: 0,
-                    // SAFETY: Convert full uninit to internal uninit is safe.
-                    data: unsafe {
-                        <MaybeUninit<[MaybeUninit<T>; BLOCK_SIZE]>>::uninit().assume_init()
-                    },
-                    next: ptr::null_mut(),
-                }
-            },
-        )
+        Box::new(Block::<T> {
+            head: 0,
+            tail: 0,
+            // SAFETY: Convert full uninit to internal uninit is safe.
+            data: unsafe { <MaybeUninit<[MaybeUninit<T>; BLOCK_SIZE]>>::uninit().assume_init() },
+            next: ptr::null_mut(),
+        })
     }
 
     #[inline(always)]
@@ -73,15 +66,13 @@ impl<T> Block<T> {
 /// Only elements in range [head_index, tail_index) are valid.
 impl<T> Drop for Block<T> {
     fn drop(&mut self) {
-        if !core::mem::needs_drop::<T>() {
-            return;
-        }
-        if self.head < self.tail {
+        if core::mem::needs_drop::<T>() && self.head < self.tail {
             unsafe {
-                ptr::drop_in_place(ptr::slice_from_raw_parts_mut::<T>(
-                    self.data.as_mut_ptr().add(self.head) as *mut T,
-                    self.tail - self.head,
-                ));
+                let len = self.tail - self.head;
+                let ptr = self.data.as_mut_ptr();
+                let data = ptr.add(self.head) as *mut T;
+                let to_drop = ptr::slice_from_raw_parts_mut(data, len);
+                ptr::drop_in_place::<[T]>(to_drop);
             }
         }
     }
@@ -90,7 +81,7 @@ impl<T> Drop for Block<T> {
 // -----------------------------------------------------------------------------
 // BlockList
 
-/// A queue implemented as a linked list of fixed-size blocks.
+/// A list queue implemented as a linked list of fixed-size blocks.
 ///
 /// `BlockList` provides an efficient queue implementation that:
 ///
@@ -102,17 +93,17 @@ impl<T> Drop for Block<T> {
 ///
 /// ```
 /// # use voker_utils::extra::BlockList;
-/// let mut queue = BlockList::new();
-/// assert!(queue.is_empty());
+/// let mut list = BlockList::new();
+/// assert!(list.is_empty());
 ///
-/// queue.push_back(1);
-/// queue.push_back(2);
+/// list.push_back(1);
+/// list.push_back(2);
 ///
-/// assert_eq!(queue.pop_front(), Some(1));
-/// assert_eq!(queue.len(), 1);
+/// assert_eq!(list.pop_front(), Some(1));
+/// assert_eq!(list.len(), 1);
 ///
-/// assert_eq!(queue.pop_front(), Some(2));
-/// assert_eq!(queue.pop_front(), None);
+/// assert_eq!(list.pop_front(), Some(2));
+/// assert_eq!(list.pop_front(), None);
 /// ```
 pub struct BlockList<T> {
     head_ptr: *mut Block<T>,
@@ -121,6 +112,9 @@ pub struct BlockList<T> {
     idle: ArrayVec<Box<Block<T>>, MAX_IDLE>,
     _marker: PhantomData<T>,
 }
+
+// -----------------------------------------------------------------------------
+// Methods
 
 unsafe impl<T: Sync> Sync for BlockList<T> {}
 unsafe impl<T: Send> Send for BlockList<T> {}
@@ -153,7 +147,7 @@ impl<T> BlockList<T> {
 
     #[inline]
     fn idle_block(&mut self, ptr: *mut Block<T>) {
-        // SAFERT: valid ptr, created through `Box::new`.
+        // SAFETY: valid ptr, created through `Box::new`.
         let boxed = unsafe { Box::from_raw(ptr) };
         if !self.idle.is_full() {
             // SAFETY: !is_full()
@@ -163,34 +157,9 @@ impl<T> BlockList<T> {
         }
     }
 
-    /// Creates an empty `BlockList`.
-    ///
-    /// This function does not allocate any memory.
-    /// The first allocation occurs when the first element is pushed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_utils::extra::BlockList;
-    ///
-    /// let queue: BlockList<i32> = BlockList::new();
-    /// assert!(queue.is_empty());
-    /// ```
-    #[inline]
-    pub const fn new() -> Self {
-        Self {
-            head_ptr: ptr::null_mut(),
-            tail_ptr: ptr::null_mut(),
-            block_num: 0,
-            idle: ArrayVec::new(),
-            _marker: PhantomData,
-        }
-    }
-
     /// Create a non-idle block , set head_ptr and tail_ptr.
     ///
     /// # Safety
-    ///
     /// Self is uninit (head_ptr and tail_ptr is null).
     #[cold]
     #[inline(never)]
@@ -203,20 +172,144 @@ impl<T> BlockList<T> {
         self.tail_ptr = ptr;
     }
 
-    /// Appends an element to the back of the queue.
+    /// Creates an empty `BlockList`.
     ///
-    /// If the current tail block is full, a new block will be allocated
-    /// (or reused from the idle pool) and linked to the queue.
+    /// This function does not allocate any memory.
+    /// The first allocation occurs when the first element is pushed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_utils::extra::BlockList;
+    ///
+    /// let list: BlockList<i32> = BlockList::new();
+    /// assert!(list.is_empty());
+    /// ```
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            head_ptr: ptr::null_mut(),
+            tail_ptr: ptr::null_mut(),
+            block_num: 0,
+            idle: ArrayVec::new(),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns `true` if the list contains no elements.
+    ///
+    /// O(1) time complexity.
     ///
     /// # Examples
     ///
     /// ```
     /// # use voker_utils::extra::BlockList;
-    /// let mut queue = BlockList::new();
+    /// let mut list = BlockList::new();
     ///
-    /// queue.push_back(1);
-    /// queue.push_back(2);
-    /// assert_eq!(queue.len(), 2);
+    /// assert!(list.is_empty());
+    /// list.push_back(1);
+    /// assert!(!list.is_empty());
+    /// list.pop_front();
+    /// assert!(list.is_empty());
+    /// ```
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        if self.head_ptr.is_null() {
+            return true;
+        }
+        let block = unsafe { &*self.head_ptr };
+        block.tail == block.head
+    }
+
+    /// Returns the number of elements in the list.
+    ///
+    /// O(1) time complexity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::BlockList;
+    /// let mut list = BlockList::new();
+    ///
+    /// list.push_back(1);
+    /// list.push_back(2);
+    /// list.push_back(3);
+    /// assert_eq!(list.len(), 3);
+    /// ```
+    #[inline]
+    pub fn len(&self) -> usize {
+        if self.head_ptr.is_null() {
+            return 0;
+        }
+        debug_assert!(!self.tail_ptr.is_null());
+        let head_index = unsafe { (*self.head_ptr).head };
+        let tail_index = unsafe { (*self.tail_ptr).tail };
+        self.block_num * BLOCK_SIZE + tail_index - head_index
+    }
+
+    /// Clears the list, removing all values.
+    ///
+    /// After calling `clear`, the list will be empty.
+    /// Blocks that become empty are moved to the idle pool for reuse.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::BlockList;
+    /// let mut list = BlockList::new();
+    ///
+    /// list.push_back(1);
+    /// list.push_back(2);
+    ///
+    /// list.clear();
+    /// assert!(list.is_empty());
+    /// assert_eq!(list.len(), 0);
+    /// ```
+    #[inline]
+    pub fn clear(&mut self) {
+        while self.pop_front().is_some() {}
+    }
+
+    /// Returns true if the BlockList contains an element equal to the given value.
+    ///
+    /// This operation should compute linearly in O(n) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::BlockList;
+    /// let mut list = BlockList::new();
+    ///
+    /// list.push_back(0);
+    /// list.push_back(1);
+    /// list.push_back(2);
+    ///
+    /// assert_eq!(list.contains(&0), true);
+    /// assert_eq!(list.contains(&10), false);
+    /// ```
+    pub fn contains(&self, x: &T) -> bool
+    where
+        T: PartialEq,
+    {
+        self.iter().any(|y| PartialEq::eq(x, y))
+    }
+
+    /// Appends an element to the back of the list.
+    ///
+    /// If the current tail block is full, a new block will be allocated
+    /// (or reused from the idle pool) and linked to the queue.
+    ///
+    /// O(1) time complexity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::BlockList;
+    /// let mut list = BlockList::new();
+    ///
+    /// list.push_back(1);
+    /// list.push_back(2);
+    /// assert_eq!(list.len(), 2);
     /// ```
     pub fn push_back(&mut self, value: T) {
         if self.tail_ptr.is_null() {
@@ -245,26 +338,27 @@ impl<T> BlockList<T> {
         }
     }
 
-    /// Removes and returns the element from the front of the queue.
+    /// Removes and returns the element from the front of the list.
     ///
-    /// Returns `None` if the queue is empty.
-    /// If a block becomes empty after popping, it is moved to the idle pool
-    /// for potential reuse (up to `MAX_IDLE` blocks).
+    /// Returns `None` if the list is empty.
+    ///
+    /// O(1) time complexity.
     ///
     /// # Examples
     ///
     /// ```
     /// # use voker_utils::extra::BlockList;
-    /// let mut queue = BlockList::new();
+    /// let mut list = BlockList::new();
     ///
-    /// queue.push_back(1);
-    /// queue.push_back(2);
-    /// assert_eq!(queue.pop_front(), Some(1));
-    /// assert_eq!(queue.pop_front(), Some(2));
-    /// assert_eq!(queue.pop_front(), None);
+    /// list.push_back(1);
+    /// list.push_back(2);
+    /// assert_eq!(list.pop_front(), Some(1));
+    /// assert_eq!(list.pop_front(), Some(2));
+    /// assert_eq!(list.pop_front(), None);
     /// ```
     pub fn pop_front(&mut self) -> Option<T> {
         if self.head_ptr.is_null() {
+            crate::cold_path();
             return None;
         }
 
@@ -299,8 +393,22 @@ impl<T> BlockList<T> {
     }
 
     /// Returns a reference to the front element without removing it.
+    ///
+    /// O(1) time complexity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_utils::extra::BlockList;
+    /// let mut list = BlockList::new();
+    /// list.push_back(1);
+    ///
+    /// assert_eq!(list.front(), Some(&1));
+    /// assert_eq!(list.len(), 1);
+    /// ```
     pub fn front(&self) -> Option<&T> {
         if self.head_ptr.is_null() {
+            crate::cold_path();
             return None;
         }
 
@@ -313,8 +421,11 @@ impl<T> BlockList<T> {
     }
 
     /// Returns a mutable reference to the front element without removing it.
+    ///
+    /// O(1) time complexity.
     pub fn front_mut(&mut self) -> Option<&mut T> {
         if self.head_ptr.is_null() {
+            crate::cold_path();
             return None;
         }
 
@@ -326,58 +437,21 @@ impl<T> BlockList<T> {
         unsafe { Some(&mut *block.data.as_mut_ptr().add(block.head).cast::<T>()) }
     }
 
-    /// Returns `true` if the queue contains no elements.
-    ///
-    /// O(1) time complexity.
+    /// Returns an iterator over shared references in list order.
     ///
     /// # Examples
     ///
     /// ```
     /// # use voker_utils::extra::BlockList;
-    /// let mut queue = BlockList::new();
+    /// let mut list = BlockList::new();
     ///
-    /// assert!(queue.is_empty());
-    /// queue.push_back(1);
-    /// assert!(!queue.is_empty());
-    /// queue.pop_front();
-    /// assert!(queue.is_empty());
+    /// list.push_back(1);
+    /// list.push_back(2);
+    /// list.push_back(3);
+    ///
+    /// let vec: Vec<_> = list.iter().copied().collect();
+    /// assert_eq!(vec, [1, 2, 3]);
     /// ```
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        if self.head_ptr.is_null() {
-            return true;
-        }
-        let block = unsafe { &*self.head_ptr };
-        block.tail == block.head
-    }
-
-    /// Returns the number of elements in the queue.
-    ///
-    /// O(1) time complexity.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_utils::extra::BlockList;
-    /// let mut queue = BlockList::new();
-    ///
-    /// queue.push_back(1);
-    /// queue.push_back(2);
-    /// queue.push_back(3);
-    /// assert_eq!(queue.len(), 3);
-    /// ```
-    #[inline]
-    pub fn len(&self) -> usize {
-        if self.head_ptr.is_null() {
-            return 0;
-        }
-        debug_assert!(!self.tail_ptr.is_null());
-        let head_index = unsafe { (*self.head_ptr).head };
-        let tail_index = unsafe { (*self.tail_ptr).tail };
-        self.block_num * BLOCK_SIZE + tail_index - head_index
-    }
-
-    /// Returns an iterator over shared references in queue order.
     pub fn iter(&self) -> Iter<'_, T> {
         if self.head_ptr.is_null() {
             return Iter {
@@ -398,7 +472,7 @@ impl<T> BlockList<T> {
         }
     }
 
-    /// Returns an iterator over mutable references in queue order.
+    /// Returns an iterator over mutable references in list order.
     pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         if self.head_ptr.is_null() {
             return IterMut {
@@ -418,38 +492,28 @@ impl<T> BlockList<T> {
             _marker: PhantomData,
         }
     }
-
-    /// Clears the queue, removing all values.
-    ///
-    /// After calling `clear`, the queue will be empty.
-    /// Blocks that become empty are moved to the idle pool for reuse.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_utils::extra::BlockList;
-    /// let mut queue = BlockList::new();
-    ///
-    /// queue.push_back(1);
-    /// queue.push_back(2);
-    ///
-    /// queue.clear();
-    /// assert!(queue.is_empty());
-    /// assert_eq!(queue.len(), 0);
-    /// ```
-    #[inline]
-    pub fn clear(&mut self) {
-        loop {
-            if self.pop_front().is_none() {
-                return;
-            }
-        }
-    }
 }
+
+// -----------------------------------------------------------------------------
+// Trait
 
 impl<T> Default for BlockList<T> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<T> Debug for BlockList<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("BlockList").field("len", &self.len()).finish()
+    }
+}
+
+impl<T> Extend<T> for BlockList<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        iter.into_iter().for_each(|item| {
+            self.push_back(item);
+        });
     }
 }
 
@@ -466,9 +530,9 @@ impl<T: Clone> Clone for BlockList<T> {
 impl<T> FromIterator<T> for BlockList<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut out = Self::new();
-        for item in iter {
+        iter.into_iter().for_each(|item| {
             out.push_back(item);
-        }
+        });
         out
     }
 }
@@ -478,6 +542,9 @@ impl<T, const N: usize> From<[T; N]> for BlockList<T> {
         value.into_iter().collect()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Iter & IterMut & IntoIter
 
 /// Shared iterator for [`BlockList`].
 pub struct Iter<'a, T> {
@@ -604,12 +671,6 @@ impl<'a, T> IntoIterator for &'a mut BlockList<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
-    }
-}
-
-impl<T> fmt::Debug for BlockList<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BlockList").field("len", &self.len()).finish()
     }
 }
 

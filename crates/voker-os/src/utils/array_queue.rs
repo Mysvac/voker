@@ -32,12 +32,8 @@ struct Slot<T> {
 /// This queue allocates a fixed-capacity buffer on construction, which
 /// is used to store pushed elements. The queue cannot hold more elements
 /// than the buffer allows. Attempting to push an element into a full queue
-/// will fail. Alternatively, [`force_push`] makes it possible for this
-/// queue to be used as a ring-buffer. Having a buffer allocated upfront
-/// makes this queue a bit faster than [`SegQueue`].
-///
-/// [`force_push`]: ArrayQueue::force_push
-/// [`SegQueue`]: super::SegQueue
+/// will fail. Having a buffer allocated upfront makes this queue a bit
+/// faster than [`SegQueue`](super::SegQueue).
 ///
 /// # Examples
 ///
