@@ -1,21 +1,18 @@
-
 // -----------------------------------------------------------------------------
 // Modules
 
 mod task;
-mod scope_executor;
 mod task_pool;
 
 // -----------------------------------------------------------------------------
 // Internal API
 
-use super::local_executor::LocalExecutor;
+use super::thread_executor::{ThreadExecutor, ThreadExecutorTicker};
 
 // -----------------------------------------------------------------------------
 // Exports
 
 pub use task::Task;
-pub use scope_executor::{ScopeExecutor, ScopeExecutorTicker};
 pub use task_pool::{Scope, TaskPool, TaskPoolBuilder};
 
 // -----------------------------------------------------------------------------
@@ -53,18 +50,3 @@ taskpool! {
     /// See [`TaskPool`] documentation for details on Bevy tasks.
     (IO_TASK_POOL, IoTaskPool)
 }
-
-/// A function used to tick the global tasks pools on the main thread.
-/// This will run a maximum of 100 local tasks per executor per call to this function.
-///
-/// # Warning
-///
-/// This function *must* be called on the main thread, or the task pools will not be updated appropriately.
-/// 
-/// # Behavior
-/// 
-/// In wasm, this function do nothing.
-pub fn tick_local_executor_on_main_thread() {
-    // do-nothing
-}
-

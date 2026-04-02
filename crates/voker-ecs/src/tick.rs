@@ -223,7 +223,7 @@ impl CheckTicks {
 /// Types implementing this trait can report when they were inserted and when
 /// they were most recently modified.
 ///
-/// See [`voker_ecs::borrow`](crate::borrow) for more infomation.
+/// See [`voker_ecs::borrow`](crate::borrow) for more information.
 pub trait DetectChanges {
     /// Returns `true` if this value was added after the system last ran.
     fn is_added(&self) -> bool;

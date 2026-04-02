@@ -21,12 +21,12 @@ impl XorShift64Star {
     /// Return `XorShift64Star` with fixed seed.
     /// 
     /// Typically used to initialize in constant context.
-    #[inline(always)]
     pub const fn fixed() -> Self {
         Self { state: Cell::new(FIXED_STATE) }
     }
 
-    pub fn random_state(&self) {
+    /// Randomize internal state.
+    pub fn randomize(&self) {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
         // Any non-zero seed will do -- this uses the hash of a global counter.
@@ -40,6 +40,7 @@ impl XorShift64Star {
         self.state.set(seed);
     }
 
+    #[inline]
     fn next(&self) -> u64 {
         let mut x = self.state.get();
         debug_assert_ne!(x, 0);

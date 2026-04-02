@@ -1,11 +1,5 @@
 //! This module provides the implementation of `GlobalExecutor`,
 //! which is used exclusively in multi-threaded mode.
-//! 
-//! The executor system employs a three-tier design:
-//! 
-//! - `GlobalExecutor`: Global, work-stealing executor shared across all threads in a pool
-//! - `LocalExecutor`: Per-thread executor for thread-local tasks
-//! - `ScopeExecutor`: Per-thread executor for scoped tasks or cross-thread transfers
 #![expect(unsafe_code, reason = "original implementation")]
 
 use core::cell::{Cell, UnsafeCell};
@@ -191,10 +185,6 @@ struct Lounge {
 
 impl Lounge {
     /// Registers a waker for a transitioning worker (Working → Sleeping)
-    /// 
-    /// # Panics
-    /// - If the seat already has a waker (invalid state transition)
-    /// - If id is out of bounds (should never happen with correct bindings)
     fn insert(&mut self, id: usize, waker: &Waker) {
         debug_assert!(id < self.wakers.len());
 
@@ -328,10 +318,12 @@ impl Worker {
             ::core::mem::drop(guard);
 
             while let Some(runnable) = deque.pop_front() {
-                // dst must be not empty.
-                dst.push(runnable).unwrap();
+                let ret = dst.push(runnable);
+                debug_assert!(ret.is_ok());
+                unsafe { ret.unwrap_unchecked(); }
             }
         }
+        
         let src: &ListQueue<Runnable> = &self.state().queue;
         let dst: &ArrayQueue<Runnable> = self.queue();
 
@@ -353,8 +345,9 @@ impl Worker {
             let len = (src.len() + 1) >> 1;
             for _ in 0..len {
                 if let Some(runnable) = src.pop() {
-                    // dst must be not empty.
-                    dst.push(runnable).unwrap();
+                    let ret = dst.push(runnable);
+                    debug_assert!(ret.is_ok());
+                    unsafe { ret.unwrap_unchecked(); }
                 } else {
                     return;
                 }
@@ -385,7 +378,6 @@ impl Worker {
 
         None
     }
-
 
     /// Returns a reference to the bound executor state
     /// 
@@ -431,7 +423,7 @@ impl Worker {
         }
 
         state.is_waking.store(lounge.is_waking(), Ordering::Release);
-
+        // Working/Waking -> sleeping, try steal again
         true
     }
 
@@ -545,7 +537,6 @@ impl Worker {
         // Run until stop signal completes
         run_forever.or(stop_signal).await
     }
-
 }
 
 // -----------------------------------------------------------------------------
@@ -606,7 +597,7 @@ impl<'a> GlobalExecutor<'a> {
                 if !seat.occupied.swap(true, Ordering::AcqRel) {
                     worker.queue.set(&seat.queue);
                     worker.seat_index.set(index);
-                    worker.xor_shift.random_state();
+                    worker.xor_shift.randomize();
                     return;
                 }
             }
@@ -657,14 +648,14 @@ impl<'a> GlobalExecutor<'a> {
     /// If called on main thread, it will directly poll the global
     /// queue without work stealing.
     #[inline]
-    pub async fn run<T>(&self, future: impl Future<Output = T>) -> T {
+    pub async fn run<T>(&self, stop_signal: impl Future<Output = T>) -> T {
         LOCAL_WORKER.with(|local_worker|{
             // SAFETY: The thread-local worker lives as long as the thread,
             // which outlives this async call. The transmute extends the lifetime
             // for the duration of the async block.
             let local_worker: &'static Worker =
                 unsafe{ core::mem::transmute::<&Worker, &'static Worker>(local_worker) };
-            local_worker.run(&self.state, future)
+            local_worker.run(&self.state, stop_signal)
         }).await
     }
 }

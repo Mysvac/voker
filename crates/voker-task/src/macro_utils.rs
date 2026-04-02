@@ -7,13 +7,18 @@ macro_rules! taskpool {
         pub struct $type(TaskPool);
 
         impl $type {
-            #[doc = concat!(" Gets the global [`", stringify!($type), "`] instance, or initializes it with `f`.")]
+            #[doc = concat!(
+                " Gets the global [`", stringify!($type), "`] instance,",
+                " or initializes it with `f`.",
+            )]
             pub fn get_or_init(f: impl FnOnce() -> TaskPool) -> &'static Self {
                 $static.get_or_init(|| Self(f()))
             }
 
-            #[doc = concat!(" Attempts to get the global [`", stringify!($type), "`] instance, \
-                or returns `None` if it is not initialized.")]
+            #[doc = concat!(
+                " Attempts to get the global [`", stringify!($type), "`] instance, ",
+                "or returns `None` if it is not initialized.",
+            )]
             pub fn try_get() -> Option<&'static Self> {
                 $static.get()
             }

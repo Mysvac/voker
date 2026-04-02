@@ -17,7 +17,6 @@ web = [
 std = [
     "voker-os/std",
     "dep:async-channel",
-    "dep:atomic-waker",
     "futures-lite/std",
     "async-task/std",
 ]
@@ -37,9 +36,9 @@ voker-os = { path = "../voker-os", default-features = false }
 # -------------------- External  --------------------
 
 async-task = { version = "4.7", default-features = false }
-futures-lite = { version = "2.6", default-features = false, features = [ "alloc"] }
+atomic-waker = { version = "1", default-features = false }
 
-atomic-waker = { version = "1", default-features = false, optional = true }
+futures-lite = { version = "2.6", default-features = false, features = [ "alloc"] }
 
 async-channel = { version = "2.5", optional = true }
 async-io = { version = "2.6", optional = true }
@@ -47,7 +46,7 @@ async-io = { version = "2.6", optional = true }
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64")))'.dependencies]
 async-channel = { version = "2.5", optional = true, features = [ "portable-atomic" ] }
 async-task = { version = "4.7", default-features = false, features = [ "portable-atomic" ] }
-atomic-waker = { version = "1", default-features = false, features = [ "portable-atomic" ], optional = true }
+atomic-waker = { version = "1", default-features = false, features = [ "portable-atomic" ] }
 
 [lints]
 workspace = true

@@ -6,8 +6,8 @@ The primary use case involves spawning tasks from a single thread and having tha
 await their completion. This library is game-oriented and makes no guarantees about
 task fairness or execution order.
 
-> The overall design is inspired by `bevy_tasks`, but we've implemented our own executors
-> rather than relying on `async_executor`.
+> The overall design is inspired by `bevy_tasks`, but we've implemented
+> our own executors rather than relying on `async_executor`.
 
 ## Task Pool
 
@@ -30,10 +30,10 @@ We provide four distinct interfaces for different scenarios:
 
 - **[`TaskPool::scope`]**: Handles `Send + !'static` tasks, blocking the current thread until
   all tasks complete. Tasks can be submitted either to the pool's global executor or the
-  current thread's `ScopeExecutor`. The scope executor, driven by `Scope`, ensures tasks
+  current thread's `ThreadExecutor`. The scope executor, driven by `Scope`, ensures tasks
   execute on the current thread (unlike the global executor's multi-thread distribution).
 
-- **[`TaskPool::scope_with_executor`]**: Handles `Send + !'static` tasks, primarily for
+- **[`TaskPool::scope_with`]**: Handles `Send + !'static` tasks, primarily for
   dispatching tasks from the current thread to the main thread. This function can spawn
   tasks into any specified scope executor, not just the current thread's. However, `Scope`
   can only drive its own thread's scope executor and must await task completion.
@@ -98,27 +98,11 @@ let task = pool.spawn_local(async move {
     value_for_task.get()
 });
 
-pool.with_local_executor(|executor| {
-    while executor.try_tick() {}
-});
+let ticker = TaskPool::local_ticker();
+while ticker.try_tick() {}
 
 assert_eq!(block_on(task), 7);
 assert_eq!(value.get(), 7);
-```
-
-### Process a slice in parallel
-
-```rust
-use voker_task::{ParallelSlice, TaskPool};
-
-let pool = TaskPool::new();
-let values = (0..12).collect::<Vec<u32>>();
-
-let chunk_sums = values.par_chunk_map(&pool, 4, |_index, chunk| {
-    chunk.iter().copied().sum::<u32>()
-});
-
-assert_eq!(chunk_sums, vec![6, 22, 38]);
 ```
 
 ## Platform Support
@@ -134,7 +118,7 @@ Enable the `web` feature when targeting WebAssembly to activate WASM-specific si
 ## Single-Threaded Mode
 
 In `no_std` or WebAssembly (WASM) environments, the library operates in single-threaded mode
-with only a `LocalExecutor`. All tasks execute on the current thread, blocking it during execution.
+with only a `ThreadExecutor`. All tasks execute on the current thread, blocking it during execution.
 
 - In WASM, tasks use `wasm_bindgen_futures::spawn_local` under the hood and task handles are
   receiver-backed (`async_channel`). `detach` is effectively a no-op, and dropping the handle
@@ -145,29 +129,15 @@ with only a `LocalExecutor`. All tasks execute on the current thread, blocking i
 ## Multi-Threaded Model
 
 In standard (non-WASM) environments with `std` enabled, the library operates in multi-threaded
-mode with three executor types:
+mode with two executor types:
 
-- **`LocalExecutor`**: Thread-local storage for `!Send` tasks. Worker threads loop automatically;
-  the main thread requires explicit ticking.
-- **`ScopeExecutor`**: Thread-local storage allowing tasks to be spawned from other threads but
+- **`ThreadExecutor`**: Thread-local storage allowing tasks to be spawned from other threads but
   executed only on the owning thread. Requires manual ticking or `Scope`-driven automatic ticking.
 - **`GlobalExecutor`**: Pool-level executor (one per `TaskPool`, not per thread) with a thread-safe
   task queue. Each worker thread has a `Worker` bound to its pool's global executor. Workers
   continuously execute tasks, maintaining local queues and supporting work-stealing from both
   the global queue and other workers' local queues. The main thread's `Worker` and `LocalExecutor`
   don't auto-execute or steal work.
-
-## Parallel Operations
-
-Parallel operations use `GlobalExecutor` in multi-threaded mode and degrade to serial execution
-in single-threaded mode.
-
-- **[`ParallelSlice`]**: Partitions slices into chunks for multi-threaded `map` operations.
-- **[`ParallelIterator`]**: Implements chunk-based parallel iteration, distributing work across
-  threads and aggregating results locally.
-
-> Note: Parallel operations incur partitioning and scheduling overhead and are unsuitable for
-> small datasets.
 
 ## Feature Flags
 

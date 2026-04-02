@@ -48,14 +48,14 @@ pub enum ExecutorKind {
 
 use crate::resource::Resource;
 use voker_os::sync::Arc;
-use voker_task::ScopeExecutor;
+use voker_task::ThreadExecutor;
 
 /// Handle to the main-thread task executor.
 ///
 /// Stored as a resource to make main-thread execution facilities available
 /// to ECS systems and scheduling utilities.
 #[derive(Clone)]
-pub struct MainThreadExecutor(pub Arc<ScopeExecutor<'static>>);
+pub struct MainThreadExecutor(pub Arc<ThreadExecutor<'static>>);
 
 impl Resource for MainThreadExecutor {
     const MUTABLE: bool = false;

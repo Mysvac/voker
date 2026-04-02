@@ -188,7 +188,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
         if non_send {
             voker_utils::cold_path();
-            self.scope.spawn_on_external(task);
+            self.scope.spawn_remote(task);
         } else {
             self.scope.spawn(task);
         }
@@ -267,7 +267,7 @@ impl SystemExecutor for MultiThreadedExecutor {
         let external_executor = main_thread_executor.as_deref();
 
         let task_pool = ComputeTaskPool::get_or_init(TaskPool::default);
-        task_pool.scope_with_executor(false, external_executor, |scope| {
+        task_pool.scope_with(false, external_executor, |scope| {
             let context = Context::new(world, self, schedule, scope, handler);
             context.tick();
         });

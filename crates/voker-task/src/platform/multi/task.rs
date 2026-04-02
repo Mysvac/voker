@@ -34,6 +34,17 @@ impl<T> Unpin for Task<T> {}
 
 impl<T> Task<T> {
     /// Detaches the task to let it keep running in the background.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// # use voker_task::TaskPool;
+    /// let mut pool = TaskPool::new();
+    /// 
+    /// pool.spawn(async {
+    ///     println!("hello world");
+    /// }).detach();
+    /// ```
     #[inline(always)]
     pub fn detach(self) {
         self.0.detach();
@@ -56,6 +67,9 @@ impl<T> Task<T> {
     ///
     /// Unlike poll, it doesn't resolve the final value,
     /// it just checks if the task has finished.
+    /// 
+    /// Note that in a multithreaded environment, this task
+    /// can change finish immediately after calling this function.
     #[inline(always)]
     pub fn is_finished(&self) -> bool {
         self.0.is_finished()

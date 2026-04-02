@@ -4,24 +4,20 @@
 
 mod task;
 mod xor_shift;
-mod scope_executor;
 mod task_pool;
 mod global_executor;
 
 // -----------------------------------------------------------------------------
 // Internal API
 
+use super::{ThreadExecutor, ThreadExecutorTicker};
 use xor_shift::XorShift64Star;
-
 use global_executor::GlobalExecutor;
-
-use super::local_executor::LocalExecutor;
 
 // -----------------------------------------------------------------------------
 // Exports
 
 pub use task::Task;
-pub use scope_executor::{ScopeExecutor, ScopeExecutorTicker};
 pub use task_pool::{TaskPool, TaskPoolBuilder, Scope};
 
 // -----------------------------------------------------------------------------
@@ -66,34 +62,4 @@ taskpool! {
     ///
     /// See [`TaskPool`] documentation for details.
     (IO_TASK_POOL, IoTaskPool)
-}
-
-/// A function used to tick the global tasks pools on the main thread.
-/// 
-/// This will run a maximum of 100 local tasks per executor per call to this function.
-///
-/// # Warning
-///
-/// This function *must* be called on the main thread, or the task pools will not be updated appropriately.
-pub fn tick_local_executor_on_main_thread() {
-    COMPUTE_TASK_POOL
-        .get()
-        .unwrap()
-        .with_local_executor(|compute_local_executor| {
-            ASYNC_COMPUTE_TASK_POOL
-                .get()
-                .unwrap()
-                .with_local_executor(|async_local_executor| {
-                    IO_TASK_POOL
-                        .get()
-                        .unwrap()
-                        .with_local_executor(|io_local_executor| {
-                            for _ in 0..100 {
-                                compute_local_executor.try_tick();
-                                async_local_executor.try_tick();
-                                io_local_executor.try_tick();
-                            }
-                        });
-                });
-        });
 }

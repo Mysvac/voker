@@ -1,10 +1,10 @@
-use alloc::fmt;
 use alloc::boxed::Box;
+use alloc::fmt;
+use core::any::Any;
 use core::future::Future;
+use core::panic::{AssertUnwindSafe, UnwindSafe};
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use core::panic::{AssertUnwindSafe, UnwindSafe};
-use core::any::Any;
 
 // -----------------------------------------------------------------------------
 // Task
@@ -16,9 +16,9 @@ use core::any::Any;
 /// In web mode the future is spawned onto the browser event loop via
 /// `wasm_bindgen_futures::spawn_local`, and completion is forwarded through
 /// an `async_channel::Receiver`.
-/// 
+///
 /// Dropping the handle does not cancel the underlying web task.
-/// 
+///
 /// To cancel a task gracefully and wait until it is fully destroyed,
 /// use the [`Task::cancel()`] method.
 ///
@@ -45,7 +45,7 @@ use core::any::Any;
 /// // Wait for the task's output.
 /// assert_eq!(future::block_on(task), 3);
 /// ```
-/// 
+///
 /// [`Runnable`]: async_task::Runnable
 /// [`Runnable::run()`]: async_task::Runnable::run
 #[must_use = "Task handles should be awaited for results in web mode."]
@@ -154,7 +154,7 @@ struct CatchUnwind<F: UnwindSafe>(F);
 
 impl<F: Future + UnwindSafe> Future for CatchUnwind<F> {
     type Output = Result<F::Output, Box<dyn Any + Send + 'static>>;
-    
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         #[expect(unsafe_code, reason = "project inner pinned here is safe")]
         let inner_future = unsafe {

@@ -12,8 +12,8 @@ pub mod cfg {
         #[cfg(feature = "std")] => std,
         #[cfg(all(target_arch = "wasm32", feature = "web"))] => web,
         #[cfg(all(feature = "std", feature = "async_io"))] => async_io,
-        #[cfg(all(feature = "std", not(feature = "web")))] => multi_thread,
-        #[cfg(any(not(feature = "std"), feature = "web"))] => single_thread,
+        #[cfg(any(not(feature = "std"), feature = "web"))] => single_threaded,
+        #[cfg(all(feature = "std", not(feature = "web")))] => multi_threaded,
     }
 }
 
@@ -34,9 +34,6 @@ mod macro_utils;
 
 mod platform;
 
-mod iter;
-mod slice;
-
 pub mod futures;
 
 // -----------------------------------------------------------------------------
@@ -44,14 +41,10 @@ pub mod futures;
 
 pub use cond_send::{BoxedFuture, CondSendFuture};
 
-pub use platform::tick_local_executor_on_main_thread;
 pub use platform::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
 pub use platform::{Scope, TaskPool, TaskPoolBuilder};
-pub use platform::{ScopeExecutor, ScopeExecutorTicker};
 pub use platform::{Task, block_on};
-
-pub use iter::ParallelIterator;
-pub use slice::{ParallelSlice, ParallelSliceMut};
+pub use platform::{ThreadExecutor, ThreadExecutorTicker};
 
 // -----------------------------------------------------------------------------
 // Re-Exports
