@@ -112,7 +112,7 @@ impl StringExpr {
             let inner = exprs.into_iter().map(StringExpr::into_borrowed);
 
             Self::Owned(quote! {
-                #macro_utils_::__concat(&[ #(#inner),* ])
+                #macro_utils_::concat(&[ #(#inner),* ])
             })
         }
     }

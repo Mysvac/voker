@@ -33,7 +33,7 @@ use crate::registry::FromType;
 /// let mut registry = TypeRegistry::new();
 /// registry.register::<MyStruct>();
 ///
-/// let processor = registry.get_type_trait::<ReflectDeserialize>(TypeId::of::<MyStruct>()).unwrap();
+/// let processor = registry.get_type_data::<ReflectDeserialize>(TypeId::of::<MyStruct>()).unwrap();
 ///
 /// let mut deserializer = ron::Deserializer::from_str(input).unwrap();
 ///

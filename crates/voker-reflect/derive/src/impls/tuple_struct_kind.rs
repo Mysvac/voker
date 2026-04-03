@@ -60,7 +60,7 @@ pub(crate) fn impl_tuple_struct(info: &ReflectStruct) -> TokenStream {
         crate::utils::empty()
     };
 
-    // trait: GetTypeTraits
+    // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
         impl_trait_get_type_meta(meta, get_registry_dependencies(info))
     } else {

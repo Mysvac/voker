@@ -9,7 +9,7 @@ use crate::info::{impl_custom_attributes_fn, impl_with_custom_attributes};
 use crate::info::{impl_docs_fn, impl_generic_fn, impl_type_fn};
 use crate::ops::Enum;
 
-/// A container for compile-time enum info, size = 120 (exclude `docs`).
+/// A container for compile-time enum info.
 ///
 /// # Examples
 ///

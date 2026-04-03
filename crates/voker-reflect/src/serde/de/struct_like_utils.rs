@@ -164,7 +164,7 @@ where
         if let Some(value) = buffer.remove(field_name) {
             dynamic.extend_boxed(field_name, value);
         } else if field.skip_serde() {
-            if let Some(ctor) = registry.get_type_trait::<ReflectDefault>(field.type_id()) {
+            if let Some(ctor) = registry.get_type_data::<ReflectDefault>(field.type_id()) {
                 dynamic.extend_boxed(field_name, ctor.default());
                 continue;
             } else {
@@ -208,7 +208,7 @@ where
         let field_name = field.name();
 
         if field.skip_serde() {
-            if let Some(ctor) = registry.get_type_trait::<ReflectDefault>(field.type_id()) {
+            if let Some(ctor) = registry.get_type_data::<ReflectDefault>(field.type_id()) {
                 dynamic.extend_boxed(field_name, ctor.default());
                 continue;
             } else {

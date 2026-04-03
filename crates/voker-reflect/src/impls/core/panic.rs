@@ -77,8 +77,8 @@ impl Reflect for &'static Location<'static> {
 impl GetTypeMeta for &'static Location<'static> {
     fn get_type_meta() -> TypeMeta {
         let mut meta = TypeMeta::with_capacity::<Self>(2);
-        meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }
 }

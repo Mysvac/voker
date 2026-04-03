@@ -49,7 +49,7 @@ pub(crate) fn impl_unit(meta: &ReflectMeta) -> proc_macro2::TokenStream {
         crate::utils::empty()
     };
 
-    // trait: GetTypeTraits
+    // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
         impl_trait_get_type_meta(meta, crate::utils::empty())
     } else {

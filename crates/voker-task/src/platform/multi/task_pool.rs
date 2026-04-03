@@ -216,9 +216,9 @@ thread_local! {
 /// [`Scope::spawn`] behaves like [`TaskPool::spawn`]: tasks are submitted to the global
 /// executor and automatically distributed across worker threads.
 ///
-/// [`Scope::spawn_local`] is analogous to [`TaskPool::spawn_local`] but forces the task
+/// [`Scope::spawn_scope`] is analogous to [`TaskPool::spawn_local`] which forces the task
 /// to stay on the current thread. Unlike the pool version, tasks spawned with
-/// `Scope::spawn_local` are automatically polled regardless of which thread calls it
+/// `Scope::spawn_scope` are automatically polled regardless of which thread calls it
 /// (no explicit ticking required).
 ///
 /// [`Scope::spawn_remote`] submits tasks to a specific remote thread (the second argument

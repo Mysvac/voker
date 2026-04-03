@@ -96,7 +96,7 @@ where
     fn get_mut(&mut self, key: &dyn Reflect) -> Option<&mut dyn Reflect> {
         key.downcast_ref::<K>()
             .and_then(move |key| Self::get_mut(self, key))
-            .map(Reflect::as_reflect_mut)
+            .map(Reflect::as_mut_reflect)
     }
 
     #[inline]
@@ -202,9 +202,9 @@ where
 {
     fn get_type_meta() -> TypeMeta {
         let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectDefault>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta
     }
 

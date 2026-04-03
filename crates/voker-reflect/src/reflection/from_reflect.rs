@@ -73,7 +73,7 @@ use crate::ops::ReflectRef;
 /// [`DynamicStruct`]: crate::ops::DynamicStruct
 /// [crate-level documentation]: crate
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` does not implement `FromReflect` so cannot be created through reflection",
+    message = "`{Self}` does not implement `FromReflect`",
     note = "consider annotating `{Self}` with `#[derive(Reflect)]`"
 )]
 pub trait FromReflect: Reflect + Sized {
@@ -94,7 +94,6 @@ pub trait FromReflect: Reflect + Sized {
     /// - On failure, returns the original `Box<dyn Reflect>` unchanged.
     fn take_from_reflect(reflect: Box<dyn Reflect>) -> Result<Self, Box<dyn Reflect>> {
         if reflect.is::<Self>() {
-            // TODO: use `dowmcast_unchecked` when stablized
             #[expect(unsafe_code, reason = "already checked")]
             Ok(unsafe { *reflect.downcast::<Self>().unwrap_unchecked() })
         } else {

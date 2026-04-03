@@ -7,7 +7,7 @@ use crate::derive::{impl_auto_register, impl_reflect, impl_type_path};
 
 impl_reflect! {
     #[reflect(type_path = "core::sync::atomic::Ordering")]
-    #[reflect(clone, debug, hash, eq, auto_register)]
+    #[reflect(clone, debug, hash, eq)]
     pub enum Ordering {
         Relaxed,
         Release,
@@ -77,13 +77,13 @@ macro_rules! impl_reflect_for_atomic {
         impl $crate::registry::GetTypeMeta for $ty {
             fn get_type_meta() -> $crate::registry::TypeMeta {
                 let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_trait::<$crate::registry::ReflectFromPtr>(
+                type_meta.insert_data::<$crate::registry::ReflectFromPtr>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
-                type_meta.insert_trait::<$crate::registry::ReflectFromReflect>(
+                type_meta.insert_data::<$crate::registry::ReflectFromReflect>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
-                type_meta.insert_trait::<$crate::registry::ReflectDefault>(
+                type_meta.insert_data::<$crate::registry::ReflectDefault>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
                 type_meta

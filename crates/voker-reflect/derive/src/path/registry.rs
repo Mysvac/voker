@@ -30,35 +30,35 @@ pub(crate) fn type_registry_(voker_reflect_path: &syn::Path) -> TokenStream {
 }
 
 #[inline]
-pub(crate) fn type_trait_default_(voker_reflect_path: &syn::Path) -> TokenStream {
+pub(crate) fn reflect_default_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectDefault
     }
 }
 
 #[inline]
-pub(crate) fn type_trait_from_ptr_(voker_reflect_path: &syn::Path) -> TokenStream {
+pub(crate) fn reflect_from_ptr_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectFromPtr
     }
 }
 
 #[inline]
-pub(crate) fn type_trait_from_reflect_(voker_reflect_path: &syn::Path) -> TokenStream {
+pub(crate) fn reflect_from_reflect_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectFromReflect
     }
 }
 
 #[inline]
-pub(crate) fn type_trait_serialize_(voker_reflect_path: &syn::Path) -> TokenStream {
+pub(crate) fn reflect_serialize_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectSerialize
     }
 }
 
 #[inline]
-pub(crate) fn type_trait_deserialize_(voker_reflect_path: &syn::Path) -> TokenStream {
+pub(crate) fn reflect_deserialize_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectDeserialize
     }

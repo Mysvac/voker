@@ -11,8 +11,7 @@ use crate::info::{TypeInfo, TypePath};
 /// # Examples
 ///
 /// ```
-/// use voker_reflect::{Reflect, info::{Typed, TypeInfo}};
-///
+/// # use voker_reflect::{Reflect, info::{Typed, TypeInfo}};
 /// #[derive(Reflect)]
 /// struct A{ /* ... */ }
 ///
@@ -27,12 +26,11 @@ use crate::info::{TypeInfo, TypePath};
 /// For non-generic type:
 ///
 /// ```
-/// use voker_reflect::{
-///     Reflect,
-///     info::{Typed, TypeInfo, StructInfo, NamedField},
-///     impls::NonGenericTypeInfoCell
-/// };
-///
+/// # use voker_reflect::{
+/// #     Reflect,
+/// #     info::{Typed, TypeInfo, StructInfo, NamedField},
+/// #     impls::NonGenericTypeInfoCell
+/// # };
 /// #[derive(Reflect)]
 /// #[reflect(Typed = false)]
 /// struct NonGenericStruct {
@@ -56,12 +54,11 @@ use crate::info::{TypeInfo, TypePath};
 /// For generic types:
 ///
 /// ```
-/// use voker_reflect::{
-///     Reflect,
-///     info::{Typed, TypeInfo, TupleStructInfo, UnnamedField},
-///     impls::GenericTypeInfoCell
-/// };
-///
+/// # use voker_reflect::{
+/// #     Reflect,
+/// #     info::{Typed, TypeInfo, TupleStructInfo, UnnamedField},
+/// #     impls::GenericTypeInfoCell
+/// # };
 /// #[derive(Reflect)]
 /// #[reflect(Typed = false)]
 /// struct GenericTupleStruct<T>(T);
@@ -83,16 +80,16 @@ use crate::info::{TypeInfo, TypePath};
 pub trait Typed: TypePath {
     /// A static accessor to compile-time type information.
     ///
+    /// Note: Use [`DynamicTyped`] for dynamic dispatch.
+    ///
     /// # Examples
     ///
     /// ```
-    /// use voker_reflect::{Reflect, info::Typed};
+    /// # use voker_reflect::{Reflect, info::Typed};
     /// #[derive(Reflect)]
     /// struct A{ /* ... */ }
     /// let info = <A as Typed>::type_info();
     /// ```
-    ///
-    /// Note: Use [`DynamicTyped`] for dynamic dispatch.
     fn type_info() -> &'static TypeInfo;
 }
 

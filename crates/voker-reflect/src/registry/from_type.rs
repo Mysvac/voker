@@ -1,9 +1,9 @@
 use crate::info::Typed;
 
-/// Trait used to generate [`TypeTrait`] for trait reflection.
+/// Trait used to generate [`TypeData`] for trait reflection.
 ///
 /// This is used by the `#[derive(Reflect)]` macro to generate an implementation
-/// of [`TypeTrait`] to pass to [`TypeMeta::insert_trait`].
+/// of [`TypeData`] to pass to [`TypeMeta::insert_data`].
 ///
 /// # Example
 ///
@@ -11,11 +11,11 @@ use crate::info::Typed;
 /// # use voker_reflect::registry::{TypeMeta, ReflectDefault, FromType};
 /// let mut meta = TypeMeta::of::<String>();
 ///
-/// meta.insert_trait::<ReflectDefault>(FromType::<String>::from_type());
+/// meta.insert_data::<ReflectDefault>(FromType::<String>::from_type());
 /// ```
 ///
-/// [`TypeTrait`]: crate::registry::TypeTrait
-/// [`TypeMeta::insert_trait`]: crate::registry::TypeMeta::insert_trait
+/// [`TypeData`]: crate::registry::TypeData
+/// [`TypeMeta::insert_data`]: crate::registry::TypeMeta::insert_data
 pub trait FromType<T: Typed> {
     fn from_type() -> Self;
 }

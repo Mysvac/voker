@@ -14,7 +14,7 @@ use crate::registry::{ReflectDefault, TypeRegistry};
 
 pub(super) trait TupleLikeInfo {
     fn name(&self) -> &'static str;
-    fn field_at<E: Error>(&self, index: usize) -> Result<&UnnamedField, E>;
+    fn field<E: Error>(&self, index: usize) -> Result<&UnnamedField, E>;
     fn field_len(&self) -> usize;
 }
 
@@ -23,8 +23,8 @@ impl TupleLikeInfo for TupleInfo {
         self.type_path()
     }
 
-    fn field_at<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
-        match <Self>::field_at(self, index) {
+    fn field<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
+        match <Self>::field(self, index) {
             Some(info) => Ok(info),
             None => Err(make_custom_error(format!(
                 "no field at index `{}` on tuple `{}`",
@@ -45,8 +45,8 @@ impl TupleLikeInfo for TupleStructInfo {
         self.type_path()
     }
 
-    fn field_at<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
-        match <Self>::field_at(self, index) {
+    fn field<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
+        match <Self>::field(self, index) {
             Some(info) => Ok(info),
             None => Err(make_custom_error(format!(
                 "no field at index `{}` on tuple-struct `{}`",
@@ -67,8 +67,8 @@ impl TupleLikeInfo for TupleVariantInfo {
         <Self>::name(self)
     }
 
-    fn field_at<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
-        match <Self>::field_at(self, index) {
+    fn field<E: Error>(&self, index: usize) -> Result<&UnnamedField, E> {
+        match <Self>::field(self, index) {
             Some(info) => Ok(info),
             None => Err(make_custom_error(format!(
                 "no field at index `{}` on tuple variant `{}`",
@@ -105,10 +105,10 @@ where
     let mut dynamic = DynamicTuple::with_capacity(len);
 
     for index in 0..len {
-        let field = info.field_at::<V::Error>(index)?;
+        let field = info.field::<V::Error>(index)?;
 
         if field.skip_serde() {
-            if let Some(ctor) = registry.get_type_trait::<ReflectDefault>(field.type_id()) {
+            if let Some(ctor) = registry.get_type_data::<ReflectDefault>(field.type_id()) {
                 dynamic.extend_boxed(ctor.default());
                 continue;
             } else {

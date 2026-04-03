@@ -160,7 +160,7 @@ impl<'a> Accessor<'a> {
         }
     }
 
-    // Returns a reference to  inner value as a `&dyn Display`
+    // Returns a reference to inner value as a `&dyn Display`
     fn display_value(&self) -> &dyn fmt::Display {
         match self {
             Self::FieldName(value) => value,

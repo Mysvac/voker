@@ -105,7 +105,7 @@ impl StructVariantInfo {
     pub fn new(name: &'static str, fields: &[NamedField]) -> Self {
         Self {
             name,
-            fields: fields.to_vec().into_boxed_slice(),
+            fields: Box::from(fields),
             field_names: fields.iter().map(NamedField::name).collect(),
             custom_attributes: None,
             #[cfg(feature = "reflect_docs")]
@@ -201,7 +201,7 @@ impl TupleVariantInfo {
         // Not inline: Consistent with StructVariantInfo
         Self {
             name,
-            fields: fields.to_vec().into_boxed_slice(),
+            fields: Box::from(fields),
             custom_attributes: None,
             #[cfg(feature = "reflect_docs")]
             docs: None,
@@ -216,7 +216,7 @@ impl TupleVariantInfo {
 
     /// Get the field at the given index.
     #[inline]
-    pub fn field_at(&self, index: usize) -> Option<&UnnamedField> {
+    pub fn field(&self, index: usize) -> Option<&UnnamedField> {
         self.fields.get(index)
     }
 
@@ -396,7 +396,6 @@ impl VariantInfo {
     /// So you can use this without worrying about compilation options.
     ///
     /// See examples in [`TypeInfo`](crate::info::TypeInfo) .
-    #[cfg_attr(not(feature = "reflect_docs"), inline(always))]
     pub const fn docs(&self) -> Option<&str> {
         #[cfg(not(feature = "reflect_docs"))]
         return None;

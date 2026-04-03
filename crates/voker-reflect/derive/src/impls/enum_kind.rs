@@ -59,7 +59,7 @@ pub(crate) fn impl_enum(info: &ReflectEnum) -> TokenStream {
         crate::utils::empty()
     };
 
-    // trait: GetTypeTraits
+    // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
         impl_trait_get_type_meta(meta, get_registry_dependencies(info))
     } else {
@@ -401,7 +401,7 @@ fn get_enum_clone_impl(info: &ReflectEnum) -> TokenStream {
                             #member: #accessor,
                         });
                         clone_tokens.extend(quote! {
-                            #member: #macro_utils_::__reflect_clone_field::<#field_ty>(#accessor)?,
+                            #member: #macro_utils_::reflect_clone_field::<#field_ty>(#accessor)?,
                         });
                     }
                     match_tokens.extend(quote! {

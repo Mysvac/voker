@@ -80,10 +80,11 @@ mod variant_info;
 // -----------------------------------------------------------------------------
 // Internal API
 
-use attributes::{impl_custom_attributes_fn, impl_with_custom_attributes};
+use attributes::impl_with_custom_attributes;
 use docs_macro::impl_docs_fn;
 use generics::impl_generic_fn;
 
+pub(crate) use attributes::impl_custom_attributes_fn;
 pub(crate) use type_path::impl_type_fn;
 
 // -----------------------------------------------------------------------------

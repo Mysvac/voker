@@ -7,7 +7,6 @@ use crate::info::TypeInfo;
 /// Helper struct for managing a stack of [`TypeInfo`] instances.
 ///
 /// This is useful for tracking the type hierarchy when serializing and deserializing types.
-#[derive(Default, Clone)]
 pub(super) struct TypeInfoStack {
     stack: Vec<&'static TypeInfo>,
 }

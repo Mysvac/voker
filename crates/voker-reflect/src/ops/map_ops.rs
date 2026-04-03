@@ -4,9 +4,9 @@ use core::fmt;
 
 use voker_utils::hash::{HashTable, hash_table};
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
+use crate::info::TypeInfo;
 use crate::ops::{ApplyError, ReflectCloneError};
 
 // -----------------------------------------------------------------------------
@@ -20,7 +20,7 @@ use crate::ops::{ApplyError, ReflectCloneError};
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicMap` can optionally represent a specific map type through its
@@ -72,33 +72,8 @@ pub struct DynamicMap {
     hash_table: HashTable<(Box<dyn Reflect>, Box<dyn Reflect>)>,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicMap {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicMap"
-    }
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicMap"
-    }
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicMap"
-    }
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicMap {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicMap);
+impl_dynamic_type_info!(DynamicMap);
 
 impl DynamicMap {
     /// Creates an empty `DynamicMap`.
@@ -140,7 +115,7 @@ impl DynamicMap {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_map(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_map(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {

@@ -4,7 +4,7 @@ use crate::info::{Generics, Type, TypePath, UnnamedField};
 use crate::info::{impl_docs_fn, impl_generic_fn, impl_type_fn};
 use crate::ops::Tuple;
 
-/// A container for compile-time unnamed struct info, size = 80 (exclude `docs`).
+/// A container for compile-time unnamed struct info.
 ///
 /// At present, `ListInfo` does not have `CustomAttributes`.
 /// If necessary, it may be added in the future.
@@ -48,7 +48,7 @@ impl TupleInfo {
 
     /// Returns the [`UnnamedField`] at the given index, if present.
     #[inline]
-    pub fn field_at(&self, index: usize) -> Option<&UnnamedField> {
+    pub fn field(&self, index: usize) -> Option<&UnnamedField> {
         self.fields.get(index)
     }
 

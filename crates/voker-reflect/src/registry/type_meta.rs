@@ -4,16 +4,15 @@ use core::ops::{Deref, DerefMut};
 
 use voker_utils::extra::TypeIdMap;
 
-use crate::Reflect;
 use crate::info::{Type, TypeInfo, Typed};
-use crate::registry::{TypeRegistry, TypeTrait};
+use crate::registry::{TypeData, TypeRegistry};
 
 // -----------------------------------------------------------------------------
 // TypeMeta
 
 /// Runtime storage for type metadata, registered into the [`TypeRegistry`].
 ///
-/// This includes a [`TypeInfo`] and a [`TypeTrait`] table.
+/// This includes a [`TypeInfo`] and a [`TypeData`] table.
 ///
 /// An instance of `TypeMeta` can be created using the [`TypeMeta::of`]
 /// method, but is more often automatically generated using
@@ -25,9 +24,9 @@ use crate::registry::{TypeRegistry, TypeTrait};
 /// ```
 /// # use voker_reflect::registry::{TypeMeta, ReflectDefault, FromType};
 /// let mut meta = TypeMeta::of::<String>();
-/// meta.insert_trait::<ReflectDefault>(FromType::<String>::from_type());
+/// meta.insert_data::<ReflectDefault>(FromType::<String>::from_type());
 ///
-/// let f = meta.get_trait::<ReflectDefault>().unwrap();
+/// let f = meta.get_data::<ReflectDefault>().unwrap();
 /// let s = f.default().take::<String>().unwrap();
 ///
 /// assert_eq!(s, "");
@@ -43,13 +42,13 @@ pub struct TypeMeta {
     // We temporarily believe that a little extra memory is worth it.
     ty: &'static Type,
     type_info: &'static TypeInfo,
-    trait_table: TypeIdMap<Box<dyn TypeTrait>>,
+    data_table: TypeIdMap<Box<dyn TypeData>>,
 }
 
 impl TypeMeta {
     /// Create a empty [`TypeMeta`] from a type.
     ///
-    /// If you know the number of [`TypeTrait`] in advance,
+    /// If you know the number of [`TypeData`] in advance,
     /// consider use [`TypeMeta::with_capacity`] for better performence,
     ///
     /// # Examples
@@ -65,7 +64,7 @@ impl TypeMeta {
         Self {
             ty,
             type_info,
-            trait_table: TypeIdMap::new(),
+            data_table: TypeIdMap::new(),
         }
     }
 
@@ -77,7 +76,7 @@ impl TypeMeta {
         Self {
             ty,
             type_info,
-            trait_table: TypeIdMap::with_capacity(capacity),
+            data_table: TypeIdMap::with_capacity(capacity),
         }
     }
 
@@ -97,6 +96,14 @@ impl TypeMeta {
 
     crate::info::impl_type_fn!();
 
+    /// Returns the [`CustomAttributes`](crate::info::CustomAttributes) .
+    #[inline]
+    pub fn custom_attributes(&self) -> &'static crate::info::CustomAttributes {
+        self.type_info.custom_attributes()
+    }
+
+    crate::info::impl_custom_attributes_fn!();
+
     /// Returns the [`Generics`](crate::info::Generics) .
     #[inline]
     pub const fn generics(&self) -> &'static crate::info::Generics {
@@ -112,122 +119,89 @@ impl TypeMeta {
         self.type_info.docs()
     }
 
-    /// Returns the [`CustomAttributes`](crate::info::CustomAttributes) .
+    /// Insert a new [`TypeData`].
     #[inline]
-    pub fn custom_attributes(&self) -> &'static crate::info::CustomAttributes {
-        self.type_info.custom_attributes()
+    pub fn insert_data<T: TypeData>(&mut self, data: T) {
+        self.insert_data_by_id(TypeId::of::<T>(), Box::new(data));
     }
 
-    /// Returns the attribute of type `T`, if present.
-    pub fn get_attribute<T: Reflect>(&self) -> Option<&'static T> {
-        self.custom_attributes().get::<T>()
+    /// Insert a new [`TypeData`].
+    pub fn insert_data_by_id(&mut self, id: TypeId, val: Box<dyn TypeData>) {
+        self.data_table.insert(id, val);
     }
 
-    /// Returns the attribute with the given `TypeId`, if present.
-    pub fn get_attribute_by_id(
-        &self,
-        type_id: ::core::any::TypeId,
-    ) -> Option<&'static dyn Reflect> {
-        self.custom_attributes().get_by_id(type_id)
-    }
-
-    /// Returns `true` if it contains the given attribute type.
-    pub fn has_attribute<T: Reflect>(&self) -> bool {
-        self.custom_attributes().contains::<T>()
-    }
-
-    /// Returns `true` if it contains the attribute with the given `TypeId`.
-    pub fn has_attribute_by_id(&self, type_id: ::core::any::TypeId) -> bool {
-        self.custom_attributes().contains_by_id(type_id)
-    }
-
-    /// Insert a new [`TypeTrait`].
-    #[inline(always)]
-    pub fn insert_trait<T: TypeTrait>(&mut self, data: T) {
-        self.insert_trait_by_id(TypeId::of::<T>(), Box::new(data));
-    }
-
-    /// Block code inline.
-    #[inline(never)]
-    fn insert_trait_by_id(&mut self, id: TypeId, val: Box<dyn TypeTrait>) {
-        self.trait_table.insert(id, val);
-    }
-
-    /// Removes a [`TypeTrait`] from the meta.
+    /// Removes a [`TypeData`] from the meta.
     #[inline]
-    pub fn remove_trait<T: TypeTrait>(&mut self) -> Option<Box<T>> {
-        self.remove_trait_by_id(TypeId::of::<T>())
+    pub fn remove_data<T: TypeData>(&mut self) -> Option<Box<T>> {
+        self.remove_data_by_id(TypeId::of::<T>())
             .map(|v| <Box<dyn Any>>::downcast::<T>(v).unwrap())
     }
 
-    /// Removes a [`TypeTrait`] from the meta.
-    pub fn remove_trait_by_id(&mut self, type_id: TypeId) -> Option<Box<dyn TypeTrait>> {
-        self.trait_table.remove(type_id)
+    /// Removes a [`TypeData`] from the meta.
+    pub fn remove_data_by_id(&mut self, type_id: TypeId) -> Option<Box<dyn TypeData>> {
+        self.data_table.remove(type_id)
     }
 
-    /// Get a [`TypeTrait`] reference, or return `None` if it's doesn't exist.
+    /// Get a [`TypeData`] reference, or return `None` if it's doesn't exist.
     #[inline]
-    pub fn get_trait<T: TypeTrait>(&self) -> Option<&T> {
-        self.get_trait_by_id(TypeId::of::<T>())
-            .and_then(<dyn TypeTrait>::downcast_ref)
+    pub fn get_data<T: TypeData>(&self) -> Option<&T> {
+        self.get_data_by_id(TypeId::of::<T>())
+            .and_then(<dyn TypeData>::downcast_ref)
     }
 
-    /// Get a [`TypeTrait`] reference, or return `None` if it's doesn't exist.
-    pub fn get_trait_by_id(&self, type_id: TypeId) -> Option<&dyn TypeTrait> {
-        self.trait_table.get(type_id).map(Deref::deref)
+    /// Get a [`TypeData`] reference, or return `None` if it's doesn't exist.
+    pub fn get_data_by_id(&self, type_id: TypeId) -> Option<&dyn TypeData> {
+        self.data_table.get(type_id).map(Deref::deref)
     }
 
-    /// Get a mutable [`TypeTrait`] reference, or return `None` if it's doesn't exist.
+    /// Get a mutable [`TypeData`] reference, or return `None` if it's doesn't exist.
     #[inline]
-    pub fn get_trait_mut<T: TypeTrait>(&mut self) -> Option<&mut T> {
-        self.get_trait_mut_by_id(TypeId::of::<T>())
-            .and_then(<dyn TypeTrait>::downcast_mut)
+    pub fn get_data_mut<T: TypeData>(&mut self) -> Option<&mut T> {
+        self.get_data_mut_by_id(TypeId::of::<T>())
+            .and_then(<dyn TypeData>::downcast_mut)
     }
 
-    /// Get a mutable [`TypeTrait`] reference, or return `None` if it's doesn't exist.
-    pub fn get_trait_mut_by_id(&mut self, type_id: TypeId) -> Option<&mut dyn TypeTrait> {
-        self.trait_table.get_mut(type_id).map(DerefMut::deref_mut)
+    /// Get a mutable [`TypeData`] reference, or return `None` if it's doesn't exist.
+    pub fn get_data_mut_by_id(&mut self, type_id: TypeId) -> Option<&mut dyn TypeData> {
+        self.data_table.get_mut(type_id).map(DerefMut::deref_mut)
     }
 
-    /// Return true if specific [`TypeTrait`] is exist.
+    /// Return true if specific [`TypeData`] is exist.
     #[inline]
-    pub fn has_trait<T: TypeTrait>(&self) -> bool {
-        self.has_trait_by_id(TypeId::of::<T>())
+    pub fn has_data<T: TypeData>(&self) -> bool {
+        self.has_data_by_id(TypeId::of::<T>())
     }
 
-    /// Return true if specific [`TypeTrait`] is exist.
-    pub fn has_trait_by_id(&self, type_id: TypeId) -> bool {
-        self.trait_table.contains(type_id)
+    /// Return true if specific [`TypeData`] is exist.
+    pub fn has_data_by_id(&self, type_id: TypeId) -> bool {
+        self.data_table.contains(type_id)
     }
 
-    /// Return the number of [`TypeTrait`].
-    #[inline]
-    pub fn trait_count(&self) -> usize {
-        self.trait_table.len()
+    /// Return the number of [`TypeData`].
+    pub fn data_count(&self) -> usize {
+        self.data_table.len()
     }
 
-    /// An iterator visiting all `TypeId - &dyn TypeTrait` pairs in arbitrary order.
-    pub fn trait_iter(&self) -> impl ExactSizeIterator<Item = (TypeId, &dyn TypeTrait)> {
-        self.trait_table.iter().map(|(key, val)| (key, val.deref()))
+    /// An iterator visiting all `TypeId - &dyn TypeData` pairs in arbitrary order.
+    pub fn iter_data(&self) -> impl ExactSizeIterator<Item = (TypeId, &dyn TypeData)> {
+        self.data_table.iter().map(|(key, val)| (key, val.deref()))
     }
 
-    /// An iterator visiting all `TypeId - &mut dyn TypeTrait` pairs in arbitrary order.
-    pub fn trait_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = (TypeId, &mut dyn TypeTrait)> {
-        self.trait_table.iter_mut().map(|(key, val)| (key, val.deref_mut()))
+    /// An iterator visiting all `TypeId - &mut dyn TypeData` pairs in arbitrary order.
+    pub fn iter_data_mut(&mut self) -> impl ExactSizeIterator<Item = (TypeId, &mut dyn TypeData)> {
+        self.data_table.iter_mut().map(|(key, val)| (key, val.deref_mut()))
     }
 }
 
 impl Clone for TypeMeta {
     fn clone(&self) -> Self {
-        let mut new_map = TypeIdMap::with_capacity(self.trait_count());
-        for (id, type_trait) in self.trait_table.iter() {
-            new_map.insert(id, (**type_trait).clone_type_trait());
+        let mut new_map = TypeIdMap::with_capacity(self.data_count());
+        for (id, type_data) in self.data_table.iter() {
+            new_map.insert(id, (**type_data).clone_type_data());
         }
 
         Self {
-            trait_table: new_map,
+            data_table: new_map,
             type_info: self.type_info,
             ty: self.ty,
         }
@@ -237,8 +211,8 @@ impl Clone for TypeMeta {
 impl core::fmt::Debug for TypeMeta {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TypeMeta")
-            .field("type_info", &self.type_info)
-            .field("trait_table", &self.trait_table)
+            .field("info", &self.type_info)
+            .field("data", &self.data_table)
             .finish()
     }
 }
@@ -251,7 +225,7 @@ impl core::fmt::Debug for TypeMeta {
 ///
 /// This trait is automatically implemented for items using
 /// [`#[derive(Reflect)]`](crate::derive::Reflect).
-/// The macro also allows [`TypeTrait`] to be more easily registered.
+/// The macro also allows [`TypeData`] to be more easily registered.
 ///
 /// # Implementation
 ///
@@ -266,7 +240,7 @@ impl core::fmt::Debug for TypeMeta {
 /// let meta = A::get_type_meta();
 /// ```
 ///
-/// Add additional [`TypeTrait`]:
+/// Add additional [`TypeData`]:
 ///
 /// ```
 /// use voker_reflect::{derive::{Reflect, reflect_trait}, registry::GetTypeMeta};
@@ -279,11 +253,11 @@ impl core::fmt::Debug for TypeMeta {
 /// impl MyDisplay for A{}
 ///
 /// #[derive(Reflect)]
-/// #[reflect(type_trait = MyDisplayFromReflect)]
+/// #[reflect(type_data = MyDisplayFromReflect)]
 /// struct A;
 ///
 /// let meta = A::get_type_meta();
-/// assert!(meta.has_trait::<MyDisplayFromReflect>());
+/// assert!(meta.has_data::<MyDisplayFromReflect>());
 /// ```
 ///
 /// See [`derive::reflect_trait`](crate::derive::reflect_trait) for more details.
@@ -308,19 +282,19 @@ impl core::fmt::Debug for TypeMeta {
 /// impl GetTypeMeta for A {
 ///     fn get_type_meta() -> TypeMeta {
 ///         let mut meta = TypeMeta::of::<Self>();
-///         meta.insert_trait::<MyDisplayFromReflect>(FromType::<Self>::from_type());
+///         meta.insert_data::<MyDisplayFromReflect>(FromType::<Self>::from_type());
 ///         meta
 ///     }
 /// }
 ///
 /// let meta = A::get_type_meta();
-/// assert!(meta.has_trait::<MyDisplayFromReflect>());
+/// assert!(meta.has_data::<MyDisplayFromReflect>());
 /// ```
 ///
-/// [`TypeTrait`]: crate::registry::TypeTrait
+/// [`TypeData`]: crate::registry::TypeData
 /// [crate-level documentation]: crate
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` does not implement `GetTypeMeta` so cannot provide type registration information",
+    message = "`{Self}` does not implement `GetTypeMeta`",
     note = "consider annotating `{Self}` with `#[derive(Reflect)]`"
 )]
 pub trait GetTypeMeta: Typed {
@@ -329,7 +303,8 @@ pub trait GetTypeMeta: Typed {
 
     /// Registers other types needed by this type.
     /// **Allow** not to register oneself.
-    fn register_dependencies(_registry: &mut TypeRegistry) {}
+    #[expect(unused_variables, reason = "default implementation")]
+    fn register_dependencies(registry: &mut TypeRegistry) {}
 }
 
 // -----------------------------------------------------------------------------
@@ -352,24 +327,24 @@ mod tests {
     #[test]
     fn manages_traits_and_attributes() {
         let mut meta = TypeMeta::with_capacity::<String>(1);
-        meta.insert_trait(Counter(1));
+        meta.insert_data(Counter(1));
 
-        assert!(meta.has_trait::<Counter>());
-        assert_eq!(meta.trait_count(), 1);
-        assert_eq!(meta.get_trait::<Counter>().unwrap().0, 1);
+        assert!(meta.has_data::<Counter>());
+        assert_eq!(meta.data_count(), 1);
+        assert_eq!(meta.get_data::<Counter>().unwrap().0, 1);
 
-        meta.get_trait_mut::<Counter>().unwrap().0 = 4;
-        assert_eq!(meta.get_trait::<Counter>().unwrap().0, 4);
+        meta.get_data_mut::<Counter>().unwrap().0 = 4;
+        assert_eq!(meta.get_data::<Counter>().unwrap().0, 4);
 
         let cloned = meta.clone();
-        assert_eq!(cloned.get_trait::<Counter>().unwrap().0, 4);
+        assert_eq!(cloned.get_data::<Counter>().unwrap().0, 4);
 
-        let removed = meta.remove_trait::<Counter>().unwrap();
+        let removed = meta.remove_data::<Counter>().unwrap();
         assert_eq!(removed.0, 4);
-        assert!(!meta.has_trait::<Counter>());
+        assert!(!meta.has_data::<Counter>());
 
         let tagged_meta = Tagged::get_type_meta();
         assert_eq!(tagged_meta.get_attribute::<u32>(), Some(&123_u32));
-        assert!(!tagged_meta.has_trait::<ReflectDefault>());
+        assert!(!tagged_meta.has_data::<ReflectDefault>());
     }
 }

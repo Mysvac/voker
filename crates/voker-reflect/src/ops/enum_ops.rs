@@ -4,9 +4,9 @@ use alloc::string::String;
 use core::cmp::Ordering;
 use core::fmt;
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed, VariantKind};
+use crate::info::{TypeInfo, VariantKind};
 use crate::ops::{ApplyError, ReflectCloneError};
 use crate::ops::{DynamicStruct, DynamicTuple, DynamicVariant};
 use crate::ops::{Struct, Tuple, VariantFieldIter};
@@ -22,7 +22,7 @@ use crate::reflection::impl_reflect_cast_fn;
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicEnum` can optionally represent a specific enum type through its
@@ -60,36 +60,8 @@ pub struct DynamicEnum {
     variant: DynamicVariant,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicEnum {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicEnum"
-    }
-
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicEnum"
-    }
-
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicEnum"
-    }
-
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicEnum {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicEnum);
+impl_dynamic_type_info!(DynamicEnum);
 
 impl DynamicEnum {
     /// Create a new [`TypeInfo`] to represent an enum at runtime.
@@ -126,7 +98,7 @@ impl DynamicEnum {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_enum(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_enum(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {
@@ -764,8 +736,8 @@ mod tests {
     #[test]
     fn type_path() {
         assert!(DynamicEnum::type_path() == "voker_reflect::ops::DynamicEnum");
-        assert!(DynamicEnum::module_path() == Some("voker_reflect::ops"));
         assert!(DynamicEnum::type_ident() == "DynamicEnum");
         assert!(DynamicEnum::type_name() == "DynamicEnum");
+        assert!(DynamicEnum::module_path() == Some("voker_reflect::ops"));
     }
 }

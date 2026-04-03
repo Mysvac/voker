@@ -1,4 +1,3 @@
-use alloc::format;
 use core::fmt;
 
 /// A enumeration of all error outcomes that might happen when
@@ -26,14 +25,19 @@ impl fmt::Display for ReflectCloneError {
                 field,
                 variant,
             } => {
-                write!(
-                    f,
-                    "field `{}` cannot be made cloneable for `reflect_clone`",
-                    match variant {
-                        Some(variant) => format!("{type_path}::{variant}::{field}"),
-                        None => format!("{type_path}::{field}"),
-                    }
-                )
+                if let Some(variant) = variant {
+                    write!(
+                        f,
+                        "field `{}::{}::{}` cannot be cloned by `reflect_clone`",
+                        type_path, variant, field,
+                    )
+                } else {
+                    write!(
+                        f,
+                        "field `{}::{}` cannot be cloned by `reflect_clone`",
+                        type_path, field,
+                    )
+                }
             }
         }
     }

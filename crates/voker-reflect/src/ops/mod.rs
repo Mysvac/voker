@@ -75,3 +75,48 @@ pub use struct_ops::{DynamicStruct, Struct, StructFieldIter};
 pub use tuple_ops::{DynamicTuple, Tuple, TupleFieldIter};
 pub use tuple_struct_ops::{DynamicTupleStruct, TupleStruct, TupleStructFieldIter};
 pub use variant_ops::{DynamicVariant, VariantField, VariantFieldIter};
+
+// -----------------------------------------------------------------------------
+// Macros
+
+macro_rules! impl_dynamic_type_path {
+    ($ty:ident) => {
+        impl crate::info::TypePath for $ty {
+            #[inline]
+            fn type_path() -> &'static str {
+                concat!("voker_reflect::ops::", stringify!($ty))
+            }
+
+            #[inline]
+            fn type_name() -> &'static str {
+                stringify!($ty)
+            }
+
+            #[inline]
+            fn type_ident() -> &'static str {
+                stringify!($ty)
+            }
+
+            #[inline]
+            fn module_path() -> Option<&'static str> {
+                Some("voker_reflect::ops")
+            }
+        }
+    };
+}
+
+macro_rules! impl_dynamic_type_info {
+    ($ty:ty) => {
+        impl crate::info::Typed for $ty {
+            #[inline]
+            fn type_info() -> &'static crate::info::TypeInfo {
+                static INFO: crate::info::TypeInfo =
+                    crate::info::TypeInfo::Opaque(crate::info::OpaqueInfo::new::<$ty>());
+                &INFO
+            }
+        }
+    };
+}
+
+use impl_dynamic_type_info;
+use impl_dynamic_type_path;

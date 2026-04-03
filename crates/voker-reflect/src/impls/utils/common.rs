@@ -37,7 +37,7 @@ pub fn array_apply(x: &mut dyn Array, y: &dyn Reflect) -> Result<(), ApplyError>
     let y = y.reflect_ref().as_array()?;
 
     if x.len() != y.len() {
-        return Err(ApplyError::DifferentSize {
+        return Err(ApplyError::MismatchedSize {
             from_size: y.len(),
             to_size: x.len(),
         });
@@ -230,7 +230,7 @@ pub fn tuple_apply(x: &mut dyn Tuple, y: &dyn Reflect) -> Result<(), ApplyError>
     let y = y.reflect_ref().as_tuple()?;
 
     if x.field_len() != y.field_len() {
-        return Err(ApplyError::DifferentSize {
+        return Err(ApplyError::MismatchedSize {
             from_size: y.field_len(),
             to_size: x.field_len(),
         });
@@ -636,7 +636,7 @@ pub fn enum_apply<'b>(
             }
             VariantKind::Tuple => {
                 if x.field_len() != y.field_len() {
-                    return Err(ApplyError::DifferentSize {
+                    return Err(ApplyError::MismatchedSize {
                         from_size: y.field_len(),
                         to_size: x.field_len(),
                     });
@@ -1526,7 +1526,7 @@ pub fn tuple_struct_apply(x: &mut dyn TupleStruct, y: &dyn Reflect) -> Result<()
     let y = y.reflect_ref().as_tuple_struct()?;
 
     if x.field_len() != y.field_len() {
-        return Err(ApplyError::DifferentSize {
+        return Err(ApplyError::MismatchedSize {
             from_size: y.field_len(),
             to_size: x.field_len(),
         });

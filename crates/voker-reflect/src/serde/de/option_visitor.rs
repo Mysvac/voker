@@ -46,7 +46,7 @@ impl<'de, P: DeserializeProcessor> Visitor<'de> for OptionVisitor<'_, P> {
 
         match variant_info {
             VariantInfo::Tuple(tuple_info) if tuple_info.field_len() == 1 => {
-                let field = tuple_info.field_at(0).unwrap();
+                let field = tuple_info.field(0).unwrap();
 
                 let Some(type_meta) = self.registry.get(field.type_id()) else {
                     return Err(make_custom_error(format!(

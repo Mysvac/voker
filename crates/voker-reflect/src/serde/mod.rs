@@ -38,8 +38,8 @@
 //!
 //! let input = MyStruct { value: 123 };
 //!
-//! let serializer = ReflectSerializeDriver::new(&input, &registry);
-//! let output = ron::to_string(&serializer).unwrap();
+//! let driver = ReflectSerializeDriver::new(&input, &registry);
+//! let output = ron::to_string(&driver).unwrap();
 //!
 //! assert_eq!(output, r#"{"my_crate::MyStruct":(value:123)}"#);
 //! ```
@@ -84,9 +84,9 @@
 //! }"#;
 //!
 //! let mut data = ron::Deserializer::from_str(input).unwrap();
-//! let deserializer = ReflectDeserializeDriver::new(&registry);
+//! let driver = ReflectDeserializeDriver::new(&registry);
 //!
-//! let output: Box<dyn Reflect> = deserializer.deserialize(&mut data).unwrap();
+//! let output: Box<dyn Reflect> = driver.deserialize(&mut data).unwrap();
 //!
 //! // If `ReflectFromReflect` is registered for this represented type,
 //! // the driver performs one final conversion attempt from the dynamic value.

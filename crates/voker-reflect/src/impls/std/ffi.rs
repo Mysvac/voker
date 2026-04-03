@@ -7,6 +7,5 @@ impl_reflect_opaque!(
     hash,
     eq,
     debug,
-    auto_register,
 ));
 

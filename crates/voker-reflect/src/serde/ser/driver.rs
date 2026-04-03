@@ -172,7 +172,7 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
         };
 
         // Prefer the type's registered serde serializer when available.
-        if let Some(p) = self.registry.get_type_trait::<ReflectSerialize>(self.value.type_id()) {
+        if let Some(p) = self.registry.get_type_data::<ReflectSerialize>(self.value.type_id()) {
             return p.serialize(self.value, serializer);
         }
 
@@ -293,7 +293,6 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
 /// # use voker_reflect::prelude::{TypeRegistry, ReflectSerializeDriver, Reflect};
 /// #
 /// #[derive(Reflect)]
-/// #[reflect(auto_register)]
 /// #[reflect(type_path = "my_crate::MyStruct")]
 /// struct MyStruct {
 ///   value: i32

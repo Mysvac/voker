@@ -3,9 +3,9 @@ use core::cmp::Ordering;
 use core::fmt;
 use core::iter::FusedIterator;
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
+use crate::info::TypeInfo;
 use crate::ops::{ApplyError, ReflectCloneError};
 
 // -----------------------------------------------------------------------------
@@ -21,7 +21,7 @@ use crate::ops::{ApplyError, ReflectCloneError};
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicList` can optionally represent a specific list type through its
@@ -51,7 +51,7 @@ use crate::ops::{ApplyError, ReflectCloneError};
 /// let mut dynamic = DynamicList::new();
 /// dynamic.push(Box::new(1_i32));
 /// dynamic.push(Box::new(2_i32));
-/// dynamic.insert(1, Box::new(99_i32));
+/// dynamic.push(Box::new(99_i32));
 ///
 /// assert_eq!(dynamic.len(), 3);
 /// ```
@@ -68,36 +68,8 @@ pub struct DynamicList {
     values: Vec<Box<dyn Reflect>>,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicList {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicList"
-    }
-
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicList"
-    }
-
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicList"
-    }
-
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicList {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicList);
+impl_dynamic_type_info!(DynamicList);
 
 impl DynamicList {
     /// Creates an empty `DynamicList`.
@@ -140,7 +112,7 @@ impl DynamicList {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_list(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_list(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {
@@ -311,8 +283,7 @@ impl<'a> IntoIterator for &'a DynamicList {
 ///
 /// Implementors must maintain elements in linear order from front to back,
 /// where the front element is at index 0 and the back element is at the largest index.
-/// Lists can grow and shrink dynamically through methods like [`push`], [`pop`],
-/// [`insert`], and [`remove`].
+/// Lists can grow and shrink dynamically through methods like [`push`], [`pop`].
 ///
 /// Unlike the [`Array`](crate::ops::Array) trait, lists are expected to support
 /// dynamic resizing as part of their normal operation.
@@ -347,17 +318,15 @@ impl<'a> IntoIterator for &'a DynamicList {
 /// let mut vec = vec!["first", "second", "third"];
 /// let list_ref: &mut dyn List = &mut vec;
 ///
-/// list_ref.insert(1, Box::new("inserted"));
-/// let removed = list_ref.remove(2);
+/// list_ref.push(Box::new("inserted"));
+/// let removed = list_ref.pop().unwrap();
 ///
 /// assert_eq!(list_ref.len(), 3);
-/// assert_eq!(removed.downcast_ref::<&str>(), Some(&"second"));
+/// assert_eq!(removed.downcast_ref::<&str>(), Some(&"inserted"));
 /// ```
 ///
 /// [`push`]: List::push
 /// [`pop`]: List::pop
-/// [`insert`]: List::insert
-/// [`remove`]: List::remove
 pub trait List: Reflect {
     /// Returns a reference to the element at the given index, or `None` if out of bounds.
     ///
@@ -394,55 +363,6 @@ pub trait List: Reflect {
     /// assert_eq!(vec, vec![1, 99, 3]);
     /// ```
     fn get_mut(&mut self, index: usize) -> Option<&mut dyn Reflect>;
-
-    /// Inserts an element at the specified position in the list.
-    ///
-    /// All elements after `index` are shifted to the right (their indices increase by 1).
-    ///
-    /// In standard implementation (e.g. `Vec<T>`), this function will use
-    /// [`FromReflect::take_from_reflect`] to convert value.
-    ///
-    /// # Panics
-    ///
-    /// Panics if:
-    /// - `index > len`
-    /// - The element type is incompatible with the list (implementation-specific)
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_reflect::ops::List;
-    /// let mut vec = vec![1, 3];
-    /// let list_ref: &mut dyn List = &mut vec;
-    ///
-    /// list_ref.insert(1, Box::new(2));
-    /// assert_eq!(list_ref.len(), 3);
-    /// ```
-    ///
-    /// [`FromReflect::take_from_reflect`]: crate::FromReflect::take_from_reflect
-    fn insert(&mut self, index: usize, element: Box<dyn Reflect>);
-
-    /// Removes and returns the element at the specified position in the list.
-    ///
-    /// All elements after `index` are shifted to the left (their indices decrease by 1).
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds (`index >= len`).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_reflect::{Reflect, ops::List};
-    ///
-    /// let mut vec = vec![1, 2, 3];
-    /// let list_ref: &mut dyn List = &mut vec;
-    ///
-    /// let removed = list_ref.remove(1);
-    /// assert_eq!(removed.downcast_ref::<i32>(), Some(&2));
-    /// assert_eq!(list_ref.len(), 2);
-    /// ```
-    fn remove(&mut self, index: usize) -> Box<dyn Reflect>;
 
     /// Appends an element to the end of the list.
     ///
@@ -548,10 +468,7 @@ pub trait List: Reflect {
     /// assert!(empty_ref.is_empty());
     /// assert!(!non_empty_ref.is_empty());
     /// ```
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    fn is_empty(&self) -> bool;
 
     /// Returns an iterator over the list's elements.
     ///
@@ -630,16 +547,6 @@ impl List for DynamicList {
     }
 
     #[inline]
-    fn insert(&mut self, index: usize, element: Box<dyn Reflect>) {
-        self.values.insert(index, element);
-    }
-
-    #[inline]
-    fn remove(&mut self, index: usize) -> Box<dyn Reflect> {
-        self.values.remove(index)
-    }
-
-    #[inline]
     fn push(&mut self, value: Box<dyn Reflect>) {
         self.values.push(value);
     }
@@ -661,6 +568,11 @@ impl List for DynamicList {
     }
 
     #[inline]
+    fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    #[inline]
     fn iter(&self) -> ListItemIter<'_> {
         ListItemIter::new(self)
     }
@@ -668,11 +580,6 @@ impl List for DynamicList {
     #[inline]
     fn drain(&mut self) -> Vec<Box<dyn Reflect>> {
         self.values.drain(..).collect()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.values.is_empty()
     }
 }
 

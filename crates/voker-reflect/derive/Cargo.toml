@@ -13,8 +13,6 @@ proc-macro = true
 
 reflect_docs = []
 
-auto_register = []
-
 [dependencies]
 voker-macro-utils = { path = "../../voker-macro-utils" }
 

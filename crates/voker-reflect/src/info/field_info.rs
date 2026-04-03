@@ -8,7 +8,7 @@ use crate::info::{impl_custom_attributes_fn, impl_with_custom_attributes};
 // -----------------------------------------------------------------------------
 // NamedField
 
-/// Information for a named (struct) field, size = 48.
+/// Information for a named (struct) field.
 ///
 /// # Examples
 ///
@@ -91,7 +91,8 @@ impl NamedField {
         }
     }
 
-    /// Checks whether the field should be skipped during (de)serialization, defaults to `false`.
+    /// Checks whether the field should be skipped during
+    /// (de)serialization, defaults to `false`.
     ///
     /// This flag only affects reflection-based (de)serialization.
     /// If a custom Serde implementation is provided by the user,
@@ -122,7 +123,7 @@ impl NamedField {
 /// struct Foo(f32);
 ///
 /// let info = Foo::type_info().as_tuple_struct().unwrap();
-/// let field_info = info.field_at(0).unwrap();
+/// let field_info = info.field(0).unwrap();
 ///
 /// assert!(field_info.type_is::<f32>());
 /// assert_eq!(field_info.index(), 0);

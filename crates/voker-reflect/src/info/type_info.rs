@@ -34,6 +34,27 @@ pub enum ReflectKind {
     Opaque,
 }
 
+macro_rules! impl_kind_is {
+    ($ident:ident, $var:ident) => {
+        /// Checks the metadata kind.
+        pub const fn $ident(self) -> bool {
+            matches!(self, Self::$var)
+        }
+    };
+}
+
+impl ReflectKind {
+    impl_kind_is!(is_struct, Struct);
+    impl_kind_is!(is_tuple_struct, TupleStruct);
+    impl_kind_is!(is_tuple, Tuple);
+    impl_kind_is!(is_list, List);
+    impl_kind_is!(is_array, Array);
+    impl_kind_is!(is_map, Map);
+    impl_kind_is!(is_set, Set);
+    impl_kind_is!(is_enum, Enum);
+    impl_kind_is!(is_opaque, Opaque);
+}
+
 impl fmt::Display for ReflectKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -151,19 +172,6 @@ macro_rules! impl_cast_method {
     };
 }
 
-macro_rules! impl_is_method {
-    ($name:ident : $kind:ident) => {
-        /// Checks the metadata kind. Can be used in const functions.
-        #[inline]
-        pub(crate) const fn $name(&self) -> bool {
-            match self {
-                Self::$kind(..) => true,
-                _ => false,
-            }
-        }
-    };
-}
-
 impl TypeInfo {
     impl_cast_method!(as_struct: Struct => StructInfo);
     impl_cast_method!(as_tuple_struct: TupleStruct => TupleStructInfo);
@@ -174,15 +182,6 @@ impl TypeInfo {
     impl_cast_method!(as_set: Set => SetInfo);
     impl_cast_method!(as_enum: Enum => EnumInfo);
     impl_cast_method!(as_opaque: Opaque => OpaqueInfo);
-
-    impl_is_method!(is_struct: Struct);
-    impl_is_method!(is_tuple_struct: TupleStruct);
-    impl_is_method!(is_tuple: Tuple);
-    impl_is_method!(is_list: List);
-    impl_is_method!(is_array: Array);
-    impl_is_method!(is_map: Map);
-    impl_is_method!(is_set: Set);
-    impl_is_method!(is_enum: Enum);
 
     /// Returns the underlying [`Type`] metadata for this `TypeInfo`.
     pub const fn ty(&self) -> &Type {
@@ -325,7 +324,6 @@ impl TypeInfo {
     /// let info = A::type_info();
     /// assert!(info.docs().is_none());
     /// ```
-    #[cfg_attr(not(feature = "reflect_docs"), inline(always))]
     pub const fn docs(&self) -> Option<&str> {
         #[cfg(not(feature = "reflect_docs"))]
         return None;

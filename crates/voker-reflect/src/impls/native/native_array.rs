@@ -118,7 +118,7 @@ impl<T: Reflect + Typed, const N: usize> Array for [T; N] {
 
     #[inline]
     fn get_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
-        <[T]>::get_mut(self, index).map(Reflect::as_reflect_mut)
+        <[T]>::get_mut(self, index).map(Reflect::as_mut_reflect)
     }
 
     #[inline]
@@ -139,7 +139,7 @@ impl<T: Reflect + Typed, const N: usize> Array for [T; N] {
 impl<T: Reflect + Typed + GetTypeMeta, const N: usize> GetTypeMeta for [T; N] {
     fn get_type_meta() -> TypeMeta {
         let mut type_meta = TypeMeta::with_capacity::<[T; N]>(1);
-        type_meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         type_meta
     }
 

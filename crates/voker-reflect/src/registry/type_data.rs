@@ -5,16 +5,16 @@ use crate::info::{DynamicTypePath, TypePath};
 
 /// A abstract trait representing the capabilities supported by a type.
 ///
-/// `TypeTrait` can be registered to the [`TypeRegistry`] and stored on a type's [`TypeMeta`](crate::registry::TypeMeta).
+/// `TypeData` can be registered to the [`TypeRegistry`] and stored on a type's [`TypeMeta`](crate::registry::TypeMeta).
 ///
-/// Almost any type that implements [`Clone`] and [`TypePath`] can be considered "type trait".
+/// Almost any type that implements [`Clone`] and [`TypePath`] can be considered "type data".
 /// This is because it has a blanket implementation over all `T` where `T: TypePath + Clone + Send + Sync + 'static`.
 ///
-/// While custom type trait is often generated using the [`#[reflect_trait]`](crate::derive::reflect_trait) macro.
+/// While custom type data is often generated using the [`#[reflect_trait]`](crate::derive::reflect_trait) macro.
 ///
 /// # Naming Convention
 ///
-/// We provided some `TypeTrait`s with `Reflect` prefix, such as:
+/// We provided some `TypeData`s with `Reflect` prefix, such as:
 /// - [`ReflectDefault`](crate::registry::ReflectDefault)
 /// - [`ReflectFromPtr`](crate::registry::ReflectFromPtr)
 /// - [`ReflectFromReflect`](crate::registry::ReflectFromReflect)
@@ -47,33 +47,33 @@ use crate::info::{DynamicTypePath, TypePath};
 /// ## Manually
 ///
 /// ```
-/// use voker_reflect::{derive::TypePath, registry::TypeTrait};
+/// use voker_reflect::{derive::TypePath, registry::TypeData};
 ///
 /// #[derive(Clone, TypePath)]
 /// struct K{ /* ... */ }
 ///
 /// let k = K{ /* ... */ };
-/// let type_trait: &dyn TypeTrait = &k;
+/// let type_data: &dyn TypeData = &k;
 /// ```
 ///
-/// See the [crate-level documentation] for more information on type_trait and type_meta.
+/// See the [crate-level documentation] for more information on type_data and type_meta.
 ///
 /// [`reflect_trait`]: crate::derive::reflect_trait
 /// [`TypePath`]: crate::info::TypePath
 /// [`TypeRegistry`]: crate::registry::TypeRegistry
 /// [crate-level documentation]: crate
-pub trait TypeTrait: DynamicTypePath + Any + Send + Sync {
-    fn clone_type_trait(&self) -> Box<dyn TypeTrait>;
+pub trait TypeData: DynamicTypePath + Any + Send + Sync {
+    fn clone_type_data(&self) -> Box<dyn TypeData>;
 }
 
-impl<T: Clone + TypePath + Any + Send + Sync> TypeTrait for T {
+impl<T: Clone + TypePath + Any + Send + Sync> TypeData for T {
     #[inline]
-    fn clone_type_trait(&self) -> Box<dyn TypeTrait> {
+    fn clone_type_data(&self) -> Box<dyn TypeData> {
         Box::new(self.clone())
     }
 }
 
-impl dyn TypeTrait {
+impl dyn TypeData {
     /// Returns `true` if the underlying value is of type `T`.
     ///
     /// Note that this is a comparison of its own type,
@@ -96,7 +96,7 @@ impl dyn TypeTrait {
     }
 }
 
-impl core::fmt::Debug for dyn TypeTrait {
+impl core::fmt::Debug for dyn TypeData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(DynamicTypePath::reflect_type_name(self))
     }
@@ -107,7 +107,7 @@ impl core::fmt::Debug for dyn TypeTrait {
 
 #[cfg(test)]
 mod tests {
-    use super::TypeTrait;
+    use super::TypeData;
     use crate::derive::TypePath;
 
     #[derive(Clone, TypePath)]
@@ -116,13 +116,13 @@ mod tests {
     #[test]
     fn clone_debug_and_downcast() {
         let marker = Marker(true);
-        let type_trait: &dyn TypeTrait = &marker;
+        let type_data: &dyn TypeData = &marker;
 
-        assert!(type_trait.is::<Marker>());
-        assert_eq!(type_trait.downcast_ref::<Marker>().unwrap().0, true);
-        assert_eq!(alloc::format!("{type_trait:?}"), "Marker");
+        assert!(type_data.is::<Marker>());
+        assert_eq!(type_data.downcast_ref::<Marker>().unwrap().0, true);
+        assert_eq!(alloc::format!("{type_data:?}"), "Marker");
 
-        let cloned = type_trait.clone_type_trait();
+        let cloned = type_data.clone_type_data();
         assert_eq!(cloned.downcast_ref::<Marker>().unwrap().0, true);
     }
 }

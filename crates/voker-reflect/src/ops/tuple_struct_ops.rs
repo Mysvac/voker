@@ -3,9 +3,9 @@ use core::cmp::Ordering;
 use core::fmt;
 use core::iter::FusedIterator;
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
+use crate::info::TypeInfo;
 use crate::ops::{ApplyError, ReflectCloneError};
 use crate::reflection::impl_reflect_cast_fn;
 
@@ -21,7 +21,7 @@ use crate::reflection::impl_reflect_cast_fn;
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicTupleStruct` can optionally represent a specific tuple-struct type through its
@@ -76,36 +76,8 @@ pub struct DynamicTupleStruct {
     pub(super) fields: Vec<Box<dyn Reflect>>,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicTupleStruct {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicTupleStruct"
-    }
-
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicTupleStruct"
-    }
-
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicTupleStruct"
-    }
-
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicTupleStruct {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicTupleStruct);
+impl_dynamic_type_info!(DynamicTupleStruct);
 
 impl DynamicTupleStruct {
     /// Creates an empty `DynamicTupleStruct`.
@@ -147,7 +119,7 @@ impl DynamicTupleStruct {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_tuple_struct(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_tuple_struct(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {

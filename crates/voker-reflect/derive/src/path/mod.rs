@@ -46,20 +46,6 @@ pub(crate) use ops::*;
 pub(crate) use registry::*;
 
 #[inline(always)]
-pub(crate) fn auto_register_(
-    voker_reflect_path: &syn::Path,
-    span: ::proc_macro2::Span,
-) -> TokenStream {
-    let auto_register = ::syn::Ident::new("auto_register", span);
-    quote! {
-        #voker_reflect_path::__macro_exports::#auto_register
-    }
-}
-
-// mod access;
-// `voker_reflect::access` does not require additional content.
-
-#[inline(always)]
 pub(crate) fn macro_utils_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::__macro_exports::macro_utils

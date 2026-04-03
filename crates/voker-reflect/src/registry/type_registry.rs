@@ -1,21 +1,20 @@
-use alloc::string::String;
 use core::any::TypeId;
 
 use voker_utils::extra::TypeIdMap;
 use voker_utils::hash::{HashMap, HashSet};
 
 use crate::info::{TypeInfo, Typed};
-use crate::registry::{FromType, GetTypeMeta, TypeMeta, TypeTrait};
+use crate::registry::{FromType, GetTypeMeta, TypeData, TypeMeta};
 
 // -----------------------------------------------------------------------------
 // TypeRegistry
 
 /// A registry of [reflected] types.
 ///
-/// This struct is used as the central store for type information.
-/// [Registering] a type will generate a new [`TypeMeta`] entry in this store
-/// using a type's [`GetTypeMeta`] implementation
-/// (which is automatically implemented when using [`#[derive(Reflect)]`](crate::derive::Reflect)).
+/// This struct is used as the central store for type information. [Registering]
+/// a type will generate a new [`TypeMeta`] entry in this store using a type's
+/// [`GetTypeMeta`] implementation (which is automatically implemented when using
+/// [`#[derive(Reflect)]`](crate::derive::Reflect)).
 ///
 /// It will be used during deserialization, but can also be used for many interesting things.
 ///
@@ -26,11 +25,12 @@ use crate::registry::{FromType, GetTypeMeta, TypeMeta, TypeTrait};
 /// use voker_reflect::info::DynamicTypePath;
 ///
 /// let input = "String";
-/// let registry = TypeRegistry::new();
+/// let mut registry = TypeRegistry::new();
+/// registry.auto_register();
 ///
 /// let generator = registry
-///     .get_with_type_name(input).unwrap()
-///     .get_trait::<ReflectDefault>().unwrap();
+///     .get_by_name(input).unwrap()
+///     .get_data::<ReflectDefault>().unwrap();
 ///
 /// let s = generator.default();
 /// assert_eq!(s.reflect_type_path(), "alloc::string::String");
@@ -50,7 +50,7 @@ pub struct TypeRegistry {
 }
 
 impl Default for TypeRegistry {
-    /// See [`TypeRegistry::new`] .
+    /// Create a empty [`TypeRegistry`].
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -59,44 +59,13 @@ impl Default for TypeRegistry {
 
 impl TypeRegistry {
     /// Create a empty [`TypeRegistry`].
-    #[inline]
-    pub const fn empty() -> Self {
+    pub const fn new() -> Self {
         Self {
             type_meta_table: TypeIdMap::new(),
             type_path_to_id: HashMap::new(),
             type_name_to_id: HashMap::new(),
             ambiguous_names: HashSet::new(),
         }
-    }
-
-    /// Create a type registry with default registrations for primitive types.
-    ///
-    /// - `()` `bool` `char`
-    /// - `i8 - i128` `isize`
-    /// - `u8 - u128` `usize`
-    /// - `f32` `f64`
-    /// - `String`
-    pub fn new() -> Self {
-        let mut registry = Self::empty();
-        registry.register::<()>();
-        registry.register::<bool>();
-        registry.register::<char>();
-        registry.register::<u8>();
-        registry.register::<u16>();
-        registry.register::<u32>();
-        registry.register::<u64>();
-        registry.register::<u128>();
-        registry.register::<usize>();
-        registry.register::<i8>();
-        registry.register::<i16>();
-        registry.register::<i32>();
-        registry.register::<i64>();
-        registry.register::<i128>();
-        registry.register::<isize>();
-        registry.register::<f32>();
-        registry.register::<f64>();
-        registry.register::<String>();
-        registry
     }
 
     // # Validity
@@ -161,7 +130,7 @@ impl TypeRegistry {
         })
     }
 
-    /// Insert or **Overwrite** inner TypeTraits.
+    /// Insert or **Overwrite** inner TypeDatas.
     ///
     /// This function checks whether `TypeMeta.type_id()` already exists.  
     /// - If the key [`TypeId`] already exists, the value will be overwritten.
@@ -192,7 +161,7 @@ impl TypeRegistry {
     /// If the meta for type `T` already exists, it will not be registered again and neither will its type dependencies.
     /// To register the type, overwriting any existing meta, use [`insert_type_meta`](Self::insert_type_meta) instead.
     ///
-    /// Additionally, this will add any reflect [type trait](TypeTrait) as specified in the `Reflect` derive.
+    /// Additionally, this will add any reflect [TypeData] as specified in the `Reflect` derive.
     ///
     /// # Example
     ///
@@ -218,7 +187,7 @@ impl TypeRegistry {
     /// assert!(type_registry.contains(TypeId::of::<i32>()));
     ///
     /// // Its type data
-    /// assert!(type_registry.get_type_trait::<ReflectDefault>(TypeId::of::<Foo>()).is_some());
+    /// assert!(type_registry.get_type_data::<ReflectDefault>(TypeId::of::<Foo>()).is_some());
     /// ```
     pub fn register<T: GetTypeMeta>(&mut self) -> &mut Self {
         if self.register_internal(TypeId::of::<T>(), T::get_type_meta) {
@@ -230,7 +199,6 @@ impl TypeRegistry {
     /// Attempts to register the referenced type `T` if it has not yet been registered.
     ///
     /// See [`register`](TypeRegistry::register) for more details.
-    #[inline]
     pub fn register_by_val<T: GetTypeMeta>(&mut self, _: &T) -> &mut Self {
         self.register::<T>()
     }
@@ -257,14 +225,14 @@ impl TypeRegistry {
     /// let mut type_registry = TypeRegistry::default();
     /// type_registry
     ///     .register::<Option<String>>()
-    ///     .register_type_trait::<Option<String>, ReflectSerialize>()
-    ///     .register_type_trait::<Option<String>, ReflectDeserialize>();
+    ///     .register_type_data::<Option<String>, ReflectSerialize>()
+    ///     .register_type_data::<Option<String>, ReflectDeserialize>();
     /// ```
-    pub fn register_type_trait<T: Typed, D: TypeTrait + FromType<T>>(&mut self) -> &mut Self {
+    pub fn register_type_data<T: Typed, D: TypeData + FromType<T>>(&mut self) -> &mut Self {
         match self.type_meta_table.get_mut(TypeId::of::<T>()) {
-            Some(type_meta) => type_meta.insert_trait(D::from_type()),
+            Some(type_meta) => type_meta.insert_data(D::from_type()),
             None => panic!(
-                "Called `TypeRegistry::register_type_trait`, but the type `{}` of type_trait `{}` without registering",
+                "register type_data `{}` for type `{}`, but the type is not registered",
                 T::type_path(),
                 core::any::type_name::<D>(),
             ),
@@ -272,75 +240,7 @@ impl TypeRegistry {
         self
     }
 
-    /// Automatically registers all non-generic types annotated with `#[reflect(auto_register)]`
-    /// or declared via `impl_auto_register!`.
-    ///
-    /// This method is equivalent to calling [`register`](Self::register) for each qualifying type.
-    /// Repeated calls are cheap and will not insert duplicates.
-    ///
-    /// ## Return Value
-    ///
-    /// Returns `true` if automatic registration succeeded on the current platform; otherwise, `false`.
-    /// Successful registrations remain `true` on subsequent calls, allowing you to detect platform support.
-    ///
-    /// ## Feature Dependency
-    ///
-    /// This method requires the `auto_register` feature. When disabled, it always do nothing and
-    /// returns `false`.
-    ///
-    /// ## Platform Support
-    ///
-    /// Supported platforms include Linux, macOS, Windows, iOS, Android, and Web, enabled by
-    /// the `inventory` crate. On unsupported platforms, this method becomes a no-op.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use std::any::TypeId;
-    /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectDefault}};
-    /// #[derive(Reflect, Default)]
-    /// #[reflect(default, auto_register)]
-    /// struct Foo {
-    ///     name: Option<String>,
-    ///     value: i32,
-    /// }
-    ///
-    /// let mut type_registry = TypeRegistry::empty();
-    /// let successful = type_registry.auto_register();
-    ///
-    /// assert!(successful);
-    ///
-    /// // Main type is registered
-    /// assert!(type_registry.contains(TypeId::of::<Foo>()));
-    ///
-    /// // Type dependencies are also registered
-    /// assert!(type_registry.contains(TypeId::of::<Option<String>>()));
-    /// assert!(type_registry.contains(TypeId::of::<i32>()));
-    ///
-    /// // Associated type trait is available
-    /// assert!(type_registry
-    ///     .get_type_trait::<ReflectDefault>(TypeId::of::<Foo>())
-    ///     .is_some());
-    /// ```
-    #[cfg_attr(not(feature = "auto_register"), inline(always))]
-    pub fn auto_register(&mut self) -> bool {
-        crate::cfg::auto_register! {
-            if {
-                use crate::__macro_exports::auto_register;
-                // Reduce the cost of duplicate registrations.
-                if self.contains(TypeId::of::<auto_register::__AvailFlag>()) {
-                    return true;
-                }
-                auto_register::__register_types(self);
-                self.contains(TypeId::of::<auto_register::__AvailFlag>())
-            } else {
-                false
-            }
-        }
-    }
-
     /// Whether the type with given [`TypeId`] has been registered in this registry.
-    #[inline]
     pub fn contains(&self, type_id: TypeId) -> bool {
         self.type_meta_table.contains(type_id)
     }
@@ -349,7 +249,6 @@ impl TypeRegistry {
     /// the given [`TypeId`].
     ///
     /// If the specified type has not been registered, returns `None`.
-    #[inline]
     pub fn get(&self, type_id: TypeId) -> Option<&TypeMeta> {
         self.type_meta_table.get(type_id)
     }
@@ -358,7 +257,6 @@ impl TypeRegistry {
     /// the given [`TypeId`].
     ///
     /// If the specified type has not been registered, returns `None`.
-    #[inline]
     pub fn get_mut(&mut self, type_id: TypeId) -> Option<&mut TypeMeta> {
         self.type_meta_table.get_mut(type_id)
     }
@@ -369,7 +267,7 @@ impl TypeRegistry {
     /// If no type with the given type path has been registered, returns `None`.
     ///
     /// [type path]: crate::info::TypePath::type_path
-    pub fn get_with_type_path(&self, type_path: &str) -> Option<&TypeMeta> {
+    pub fn get_by_path(&self, type_path: &str) -> Option<&TypeMeta> {
         // Manual inline
         match self.type_path_to_id.get(type_path) {
             Some(id) => self.get(*id),
@@ -383,7 +281,7 @@ impl TypeRegistry {
     /// If no type with the given type path has been registered, returns `None`.
     ///
     /// [type path]: crate::info::TypePath::type_path
-    pub fn get_with_type_path_mut(&mut self, type_path: &str) -> Option<&mut TypeMeta> {
+    pub fn get_by_path_mut(&mut self, type_path: &str) -> Option<&mut TypeMeta> {
         // Manual inline
         match self.type_path_to_id.get(type_path) {
             Some(id) => self.get_mut(*id),
@@ -399,10 +297,10 @@ impl TypeRegistry {
     /// If two different types share the same short type name, short-name lookup is
     /// intentionally disabled for that name. Use
     /// [`is_ambiguous`](Self::is_ambiguous) to detect this case and
-    /// [`get_with_type_path`](Self::get_with_type_path) for unambiguous lookup.
+    /// [`get_by_path`](Self::get_by_path) for unambiguous lookup.
     ///
     /// [type name]: crate::info::TypePath::type_name
-    pub fn get_with_type_name(&self, type_name: &str) -> Option<&TypeMeta> {
+    pub fn get_by_name(&self, type_name: &str) -> Option<&TypeMeta> {
         match self.type_name_to_id.get(type_name) {
             Some(id) => self.get(*id),
             None => None,
@@ -415,10 +313,10 @@ impl TypeRegistry {
     /// If the type name is ambiguous, or if no type with the given path
     /// has been registered, returns `None`.
     ///
-    /// See [`get_with_type_name`](Self::get_with_type_name) for ambiguity behavior.
+    /// See [`get_by_name`](Self::get_by_name) for ambiguity behavior.
     ///
     /// [type name]: crate::info::TypePath::type_name
-    pub fn get_with_type_name_mut(&mut self, type_name: &str) -> Option<&mut TypeMeta> {
+    pub fn get_by_name_mut(&mut self, type_name: &str) -> Option<&mut TypeMeta> {
         match self.type_name_to_id.get(type_name) {
             Some(id) => self.get_mut(*id),
             None => None,
@@ -451,26 +349,26 @@ impl TypeRegistry {
         self.ambiguous_names.contains(type_name)
     }
 
-    /// Returns a reference to the [`TypeTrait`] of type `T` associated with the given [`TypeId`].
+    /// Returns a reference to the [`TypeData`] of type `T` associated with the given [`TypeId`].
     ///
     /// If the specified type has not been registered, or if `T` is not present
     /// in its type registration, returns `None`.
-    pub fn get_type_trait<T: TypeTrait>(&self, type_id: TypeId) -> Option<&T> {
+    pub fn get_type_data<T: TypeData>(&self, type_id: TypeId) -> Option<&T> {
         // Manual inline
         match self.get(type_id) {
-            Some(type_meta) => type_meta.get_trait::<T>(),
+            Some(type_meta) => type_meta.get_data::<T>(),
             None => None,
         }
     }
 
-    /// Returns a mutable reference to the [`TypeTrait`] of type `T` associated with the given [`TypeId`].
+    /// Returns a mutable reference to the [`TypeData`] of type `T` associated with the given [`TypeId`].
     ///
     /// If the specified type has not been registered, or if `T` is not present
     /// in its type registration, returns `None`.
-    pub fn get_type_trait_mut<T: TypeTrait>(&mut self, type_id: TypeId) -> Option<&mut T> {
+    pub fn get_type_data_mut<T: TypeData>(&mut self, type_id: TypeId) -> Option<&mut T> {
         // Manual inline
         match self.get_mut(type_id) {
-            Some(type_meta) => type_meta.get_trait_mut::<T>(),
+            Some(type_meta) => type_meta.get_data_mut::<T>(),
             None => None,
         }
     }
@@ -492,12 +390,12 @@ impl TypeRegistry {
         self.type_meta_table.values_mut()
     }
 
-    /// Checks to see if the [`TypeTrait`] of type `T` is associated with each registered type,
-    /// returning a ([`TypeMeta`], [`TypeTrait`]) iterator for all entries where data of that type was found.
-    pub fn iter_with_trait<T: TypeTrait>(&self) -> impl Iterator<Item = (&TypeMeta, &T)> {
+    /// Checks to see if the [`TypeData`] of type `T` is associated with each registered type,
+    /// returning a ([`TypeMeta`], [`TypeData`]) iterator for all entries where data of that type was found.
+    pub fn iter_with_data<T: TypeData>(&self) -> impl Iterator<Item = (&TypeMeta, &T)> {
         self.type_meta_table.values().filter_map(|item| {
-            let type_trait = item.get_trait::<T>();
-            type_trait.map(|t| (item, t))
+            let type_data = item.get_data::<T>();
+            type_data.map(|t| (item, t))
         })
     }
 }
@@ -572,14 +470,14 @@ mod tests {
 
     #[test]
     fn lookup_and_ambiguity_checks() {
-        let mut registry = TypeRegistry::empty();
+        let mut registry = TypeRegistry::new();
         registry.register::<foo::MyType>();
         registry.register::<bar::MyType>();
 
-        assert!(registry.get_with_type_path(foo::MyType::type_path()).is_some());
-        assert!(registry.get_with_type_path(bar::MyType::type_path()).is_some());
+        assert!(registry.get_by_path(foo::MyType::type_path()).is_some());
+        assert!(registry.get_by_path(bar::MyType::type_path()).is_some());
         assert!(registry.is_ambiguous("MyType"));
-        assert!(registry.get_with_type_name("MyType").is_none());
+        assert!(registry.get_by_name("MyType").is_none());
     }
 
     #[test]
@@ -590,17 +488,17 @@ mod tests {
         assert!(registry.contains(TypeId::of::<NeedsDefault>()));
         assert!(
             registry
-                .get_type_trait::<ReflectDefault>(TypeId::of::<NeedsDefault>())
+                .get_type_data::<ReflectDefault>(TypeId::of::<NeedsDefault>())
                 .is_some()
         );
         assert!(
             registry
-                .get_type_trait::<ReflectFromPtr>(TypeId::of::<NeedsDefault>())
+                .get_type_data::<ReflectFromPtr>(TypeId::of::<NeedsDefault>())
                 .is_some()
         );
 
         let with_default: Vec<_> = registry
-            .iter_with_trait::<ReflectDefault>()
+            .iter_with_data::<ReflectDefault>()
             .map(|(meta, _)| meta.type_id())
             .collect();
         assert!(with_default.contains(&TypeId::of::<NeedsDefault>()));

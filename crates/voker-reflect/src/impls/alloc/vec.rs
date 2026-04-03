@@ -68,23 +68,7 @@ impl<T: Typed + FromReflect> List for Vec<T> {
     }
 
     fn get_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
-        <[T]>::get_mut(self, index).map(Reflect::as_reflect_mut)
-    }
-
-    fn insert(&mut self, index: usize, element: Box<dyn Reflect>) {
-        let element = match T::take_from_reflect(element) {
-            Ok(v) => v,
-            Err(e) => panic! {
-                "incompatible type: from {} to {}",
-                e.reflect_type_path(),
-                T::type_path(),
-            },
-        };
-        Self::insert(self, index, element);
-    }
-
-    fn remove(&mut self, index: usize) -> Box<dyn Reflect> {
-        Box::new(Self::remove(self, index))
+        <[T]>::get_mut(self, index).map(Reflect::as_mut_reflect)
     }
 
     fn push(&mut self, value: Box<dyn Reflect>) {
@@ -142,9 +126,9 @@ impl<T: Typed + FromReflect> FromReflect for Vec<T> {
 impl<T: Typed + FromReflect + GetTypeMeta> GetTypeMeta for Vec<T> {
     fn get_type_meta() -> TypeMeta {
         let mut meta = TypeMeta::with_capacity::<Self>(3);
-        meta.insert_trait::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }
 

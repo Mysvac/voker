@@ -9,7 +9,7 @@
 /// # use voker_reflect::info::ConstParamData;
 /// let x: ConstParamData = 7i32.into();
 ///
-/// let y = TryInto::<i32>::try_into(x).unwrap();
+/// let y: i32 = x.try_into().unwrap();
 /// assert_eq!(y, 7i32);
 /// ```
 ///
@@ -40,13 +40,14 @@ macro_rules! impl_from_fn {
                 Self::$kind(value)
             }
         }
+
         impl TryFrom<ConstParamData> for $ty {
-            type Error = ();
+            type Error = ConstParamData;
             #[inline]
             fn try_from(value: ConstParamData) -> Result<Self, Self::Error> {
                 match value {
                     ConstParamData::$kind(v) => Ok(v),
-                    _ => Err(()),
+                    _ => Err(value),
                 }
             }
         }

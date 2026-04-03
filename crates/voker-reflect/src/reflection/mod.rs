@@ -15,6 +15,12 @@ pub(crate) use reflect::impl_reflect_cast_fn;
 pub use from_reflect::FromReflect;
 pub use reflect::Reflect;
 
+// -----------------------------------------------------------------------------
+// reflect_hasher
+
+use core::hash::BuildHasher;
+use voker_utils::hash::{FixedHashState, FixedHasher};
+
 /// A Fixed Hasher for [`Reflect::reflect_hash`] implementation.
 ///
 /// # Examples
@@ -31,6 +37,6 @@ pub use reflect::Reflect;
 ///
 /// See [`FixedHashState`](voker_utils::hash::FixedHashState) for details.
 #[inline(always)]
-pub fn reflect_hasher() -> voker_utils::hash::FixedHasher {
-    core::hash::BuildHasher::build_hasher(&voker_utils::hash::FixedHashState)
+pub fn reflect_hasher() -> FixedHasher {
+    FixedHashState.build_hasher()
 }

@@ -54,8 +54,8 @@ impl<'de, P: DeserializeProcessor> Visitor<'de> for EnumVisitor<'_, P> {
                 )?
                 .into(),
             VariantInfo::Tuple(info) => {
-                if info.field_len() == 1 && !info.field_at(0).unwrap().skip_serde() {
-                    let field = TupleLikeInfo::field_at(info, 0)?;
+                if info.field_len() == 1 && !info.field(0).unwrap().skip_serde() {
+                    let field = TupleLikeInfo::field(info, 0)?;
                     let Some(type_meta) = self.registry.get(field.type_id()) else {
                         return Err(make_custom_error(format!(
                             "no TypeMeta found for type `{}`",

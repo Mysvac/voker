@@ -89,7 +89,7 @@ macro_rules! impl_reflect_for_hashmap {
             fn get_mut(&mut self, key: &dyn $crate::Reflect) -> Option<&mut dyn $crate::Reflect> {
                 key.downcast_ref::<K>()
                     .and_then(move |key| Self::get_mut(self, key))
-                    .map($crate::Reflect::as_reflect_mut)
+                    .map($crate::Reflect::as_mut_reflect)
             }
 
             #[inline]
@@ -193,9 +193,9 @@ macro_rules! impl_reflect_for_hashmap {
         {
             fn get_type_meta() -> $crate::registry::TypeMeta {
                 let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_trait::<$crate::registry::ReflectFromPtr>($crate::registry::FromType::<Self>::from_type());
-                type_meta.insert_trait::<$crate::registry::ReflectFromReflect>($crate::registry::FromType::<Self>::from_type());
-                type_meta.insert_trait::<$crate::registry::ReflectDefault>($crate::registry::FromType::<Self>::from_type());
+                type_meta.insert_data::<$crate::registry::ReflectFromPtr>($crate::registry::FromType::<Self>::from_type());
+                type_meta.insert_data::<$crate::registry::ReflectFromReflect>($crate::registry::FromType::<Self>::from_type());
+                type_meta.insert_data::<$crate::registry::ReflectDefault>($crate::registry::FromType::<Self>::from_type());
                 type_meta
             }
 
@@ -313,7 +313,7 @@ macro_rules! impl_reflect_for_fixedhashmap {
             fn get_mut(&mut self, key: &dyn $crate::Reflect) -> Option<&mut dyn $crate::Reflect> {
                 key.downcast_ref::<K>()
                     .and_then(move |key| Self::get_mut(self, key))
-                    .map($crate::Reflect::as_reflect_mut)
+                    .map($crate::Reflect::as_mut_reflect)
             }
 
             #[inline]
@@ -450,13 +450,13 @@ macro_rules! impl_reflect_for_fixedhashmap {
         {
             fn get_type_meta() -> $crate::registry::TypeMeta {
                 let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_trait::<$crate::registry::ReflectFromPtr>(
+                type_meta.insert_data::<$crate::registry::ReflectFromPtr>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
-                type_meta.insert_trait::<$crate::registry::ReflectFromReflect>(
+                type_meta.insert_data::<$crate::registry::ReflectFromReflect>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
-                type_meta.insert_trait::<$crate::registry::ReflectDefault>(
+                type_meta.insert_data::<$crate::registry::ReflectDefault>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
                 type_meta

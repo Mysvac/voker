@@ -137,7 +137,7 @@ crate::cfg::debug! {
 ///
 /// // We can also do this dynamically with `ReflectFromReflect`.
 /// let type_id = output.represented_type_info().unwrap().type_id();
-/// let from_reflect = registry.get_type_trait::<ReflectFromReflect>(type_id).unwrap();
+/// let from_reflect = registry.get_type_data::<ReflectFromReflect>(type_id).unwrap();
 /// let value: Box<dyn Reflect> = from_reflect.from_reflect(&*output).unwrap();
 /// assert!(value.is::<MyStruct>());
 /// assert_eq!(value.take::<MyStruct>().unwrap(), MyStruct { value: 123 });
@@ -235,7 +235,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
             deserializer
         };
 
-        if let Some(deserialize_reflect) = self.type_meta.get_trait::<ReflectDeserialize>() {
+        if let Some(deserialize_reflect) = self.type_meta.get_data::<ReflectDeserialize>() {
             return deserialize_reflect.deserialize(deserializer);
         }
 
@@ -259,7 +259,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
             }
             TypeInfo::TupleStruct(tuple_struct_info) => {
                 let is_new_type = tuple_struct_info.field_len() == 1
-                    && !tuple_struct_info.field_at(0).unwrap().skip_serde();
+                    && !tuple_struct_info.field(0).unwrap().skip_serde();
 
                 let mut dynamic_tuple_struct = if is_new_type {
                     deserializer.deserialize_newtype_struct(
@@ -528,7 +528,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for ReflectDeserializeDr
                 }
 
                 if (*value).type_id() != type_meta.type_id()
-                    && let Some(from_reflect) = type_meta.get_trait::<ReflectFromReflect>()
+                    && let Some(from_reflect) = type_meta.get_data::<ReflectFromReflect>()
                     && let Some(target_value) = from_reflect.from_reflect(&*value)
                 {
                     return Ok(target_value);
@@ -577,7 +577,7 @@ impl<'a, 'de> DeserializeSeed<'de> for TypePathDeserializer<'a> {
             }
 
             fn visit_str<E: Error>(self, type_path: &str) -> Result<Self::Value, E> {
-                self.0.get_with_type_path(type_path).ok_or_else(|| {
+                self.0.get_by_path(type_path).ok_or_else(|| {
                     Error::custom(format!("no registration found for `{type_path}`"))
                 })
             }

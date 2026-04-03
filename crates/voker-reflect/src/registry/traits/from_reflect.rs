@@ -18,9 +18,10 @@ use crate::{FromReflect, Reflect};
 /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectFromReflect}};
 /// let s: Box<dyn Reflect> = Box::new("123".to_string());
 ///
-/// let registry = TypeRegistry::new(); // `new` will register some basic type
-/// let meta = registry.get_with_type_name("String").unwrap();
-/// let from_reflect = meta.get_trait::<ReflectFromReflect>().unwrap();
+/// let mut registry = TypeRegistry::new();
+/// registry.register::<String>();
+/// let meta = registry.get_by_name("String").unwrap();
+/// let from_reflect = meta.get_data::<ReflectFromReflect>().unwrap();
 ///
 /// let s2 = from_reflect.from_reflect(&*s).unwrap();
 /// assert_eq!(s2.take::<String>().unwrap(), "123");

@@ -6,7 +6,7 @@ use crate::info::{ConstParamData, Type, TypePath, impl_type_fn};
 // -----------------------------------------------------------------------------
 // Type Generic Param
 
-/// Information about generic type parameters, size = 64.
+/// Information about generic type parameters.
 ///
 /// # Examples
 ///
@@ -126,7 +126,7 @@ impl ConstParamInfo {
 // -----------------------------------------------------------------------------
 // Single Generic
 
-/// A single generic parameter (either a type or a const), size = 72.
+/// A single generic parameter (either a type or a const).
 ///
 /// # Examples
 ///
@@ -196,13 +196,16 @@ impl GenericInfo {
         }
     }
 
+    /// Returns `true` if this parameter is a type parameter.
+    #[inline]
+    pub const fn is_type(&self) -> bool {
+        matches!(self, Self::Type(_))
+    }
+
     /// Returns `true` if this parameter is a const parameter.
     #[inline]
     pub const fn is_const(&self) -> bool {
-        match self {
-            Self::Type(_) => false,
-            Self::Const(_) => true,
-        }
+        matches!(self, Self::Const(_))
     }
 }
 
@@ -212,11 +215,9 @@ impl GenericInfo {
 /// A container for a list of generic parameters.
 ///
 /// This is automatically generated via the [`#[derive(Reflect)]`](crate::derive::Reflect),
-/// and stored on the [`TypeInfo`] returned by [`Typed::type_info`]
-/// for types that have generics.
+/// and stored on the [`TypeInfo`] returned by [`Typed::type_info`] for types that have generics.
 ///
-/// It supports both type parameters and const parameters
-/// so long as they implement [`TypePath`].
+/// It supports both type parameters and const parameters so long as they implement [`TypePath`].
 ///
 /// If the type has no generics, this will be empty.
 ///
@@ -326,8 +327,9 @@ impl Generics {
     /// #[derive(Reflect)]
     /// struct Foo<T = usize>(T);
     ///
-    /// let info = <Foo<i32>>::type_info().generics().get("T").unwrap();
-    /// assert!(!info.is_const());
+    /// let generics = <Foo<i32>>::type_info().generics();
+    /// let info = generics.get("T").unwrap();
+    /// assert!(info.is_type());
     /// ```
     pub fn get(&self, name: &str) -> Option<&GenericInfo> {
         match &self.0 {
@@ -341,10 +343,9 @@ impl Deref for Generics {
     type Target = [GenericInfo];
     #[inline]
     fn deref(&self) -> &Self::Target {
-        static EMPTY: [GenericInfo; 0] = [];
         match &self.0 {
             Some(v) => v,
-            None => &EMPTY,
+            None => &[],
         }
     }
 }

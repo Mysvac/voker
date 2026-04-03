@@ -18,6 +18,7 @@ pub(crate) fn impl_trait_reflect(
     reflect_debug_tokens: TokenStream,
     add_from_reflect: bool,
 ) -> TokenStream {
+    use crate::path::fp::ResultFP;
     let voker_reflect_path = meta.voker_reflect_path();
 
     let reflect_ = crate::path::reflect_(voker_reflect_path);
@@ -33,8 +34,11 @@ pub(crate) fn impl_trait_reflect(
 
     quote! {
         impl #impl_generics #reflect_ for #real_ident #ty_generics #where_clause {
-            fn set(&mut self, value: #macro_utils_::Box<dyn #reflect_>) -> ::core::result::Result<(), #macro_utils_::Box<dyn #reflect_>> {
-                *self = value.take::<Self>()?;
+            fn reflect_assign(
+                &mut self,
+                value: #macro_utils_::Box<dyn #reflect_>,
+            ) -> #ResultFP<(), #macro_utils_::Box<dyn #reflect_>> {
+                *self = <dyn #reflect_>::take::<Self>(value)?;
                 Ok(())
             }
 

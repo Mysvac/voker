@@ -1,3 +1,5 @@
+#![expect(clippy::len_without_is_empty, reason = "`Array::len` is fixed.")]
+
 use core::any::{Any, TypeId};
 
 use crate::Reflect;
@@ -29,7 +31,8 @@ pub struct ArrayInfo {
     generics: Generics,
     // Cache `TypeId` for deserialization.
     item_id: TypeId,
-    // `TypeInfo` is created on the first visit, use function pointers to delay it.
+    // `TypeInfo` is created on the first visit,
+    // use function pointers to delay it.
     item_info: fn() -> &'static TypeInfo,
     len: usize,
     #[cfg(feature = "reflect_docs")]
@@ -68,7 +71,6 @@ impl ArrayInfo {
 
     /// The compile-time length of the array.
     #[inline]
-    #[expect(clippy::len_without_is_empty, reason = "`Array::len` is fixed.")]
     pub const fn len(&self) -> usize {
         self.len
     }

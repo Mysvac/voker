@@ -3,9 +3,9 @@ use core::cmp::Ordering;
 use core::fmt;
 use core::iter::FusedIterator;
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
+use crate::info::TypeInfo;
 use crate::ops::{ApplyError, DynamicTupleStruct, ReflectCloneError};
 use crate::reflection::impl_reflect_cast_fn;
 
@@ -20,7 +20,7 @@ use crate::reflection::impl_reflect_cast_fn;
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicTuple` can optionally represent a specific tuple type through its
@@ -88,36 +88,8 @@ pub struct DynamicTuple {
     fields: Vec<Box<dyn Reflect>>,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicTuple {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicTuple"
-    }
-
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicTuple"
-    }
-
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicTuple"
-    }
-
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicTuple {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicTuple);
+impl_dynamic_type_info!(DynamicTuple);
 
 impl DynamicTuple {
     /// Creates an empty `DynamicTuple`.
@@ -162,7 +134,7 @@ impl DynamicTuple {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_tuple(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_tuple(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {

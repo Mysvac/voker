@@ -35,7 +35,7 @@ use crate::registry::FromType;
 ///
 /// let input = MyStruct { value: 123 };
 ///
-/// let processor = registry.get_type_trait::<ReflectSerialize>(TypeId::of::<MyStruct>()).unwrap();
+/// let processor = registry.get_type_data::<ReflectSerialize>(TypeId::of::<MyStruct>()).unwrap();
 ///
 /// let mut output = String::new();
 /// let mut serializer = ron::Serializer::new(&mut output, None).unwrap();

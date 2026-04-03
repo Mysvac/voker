@@ -30,7 +30,7 @@ pub(crate) fn get_struct_clone_impl(info: &ReflectStruct) -> TokenStream {
             let member = field.to_member();
 
             tokens.extend(quote! {
-                __new_value__.#member = #macro_utils_::__reflect_clone_field::<#field_ty>(&self.#member)?;
+                __new_value__.#member = #macro_utils_::reflect_clone_field::<#field_ty>(&self.#member)?;
             });
         }
 
@@ -51,7 +51,7 @@ pub(crate) fn get_struct_clone_impl(info: &ReflectStruct) -> TokenStream {
             let member = field.to_member();
 
             tokens.extend(quote! {
-                #member: #macro_utils_::__reflect_clone_field::<#field_ty>(&self.#member)?,
+                #member: #macro_utils_::reflect_clone_field::<#field_ty>(&self.#member)?,
             });
         }
 

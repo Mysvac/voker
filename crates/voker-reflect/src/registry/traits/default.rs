@@ -14,6 +14,7 @@ use crate::registry::FromType;
 ///
 /// ```
 /// use voker_reflect::prelude::*;
+/// use voker_reflect::registry::FromType;
 ///
 /// #[derive(Reflect, Default)]
 /// struct Foo;
@@ -23,7 +24,8 @@ use crate::registry::FromType;
 ///
 /// # Automatic registration
 ///
-/// When using the type registry, [`ReflectDefault`] is automatically registered for common types:
+/// After calling [`TypeRegistry::auto_register`], [`ReflectDefault`] is available
+/// for many commonly used types:
 ///
 /// - Integer types: `u8`-`u128`, `i8`-`i128`, `usize`, `isize`
 /// - Primitives: `()`, `bool`, `char`, `f32`, `f64`
@@ -32,14 +34,17 @@ use crate::registry::FromType;
 /// - Map types: `BTreeMap<K, V>`, `BTreeSet<T>`
 /// - Others: `Option<T>`, `PhantomData<T>`, `Duration` ...
 ///
+/// [`TypeRegistry::auto_register`]: crate::registry::TypeRegistry::auto_register
+///
 /// ```
 /// use voker_reflect::prelude::*;
 ///
-/// let registry = TypeRegistry::new(); // `new` registers basic types automatically
+/// let mut registry = TypeRegistry::new();
+/// registry.auto_register();
 ///
 /// let generator = registry
-///     .get_with_type_name("String").unwrap()
-///     .get_trait::<ReflectDefault>().unwrap();
+///     .get_by_name("String").unwrap()
+///     .get_data::<ReflectDefault>().unwrap();
 ///
 /// let s: Box<dyn Reflect> = generator.default();
 ///
@@ -62,7 +67,7 @@ use crate::registry::FromType;
 /// let mut registry = TypeRegistry::default();
 /// registry.register::<Foo>();
 ///
-/// let defaulter = registry.get_type_trait::<ReflectDefault>(TypeId::of::<Foo>());
+/// let defaulter = registry.get_type_data::<ReflectDefault>(TypeId::of::<Foo>());
 /// assert!(defaulter.is_some());
 /// ```
 ///
@@ -79,9 +84,9 @@ use crate::registry::FromType;
 ///
 /// let mut registry = TypeRegistry::default();
 /// registry.register::<Foo>();
-/// registry.register_type_trait::<Foo, ReflectDefault>();
+/// registry.register_type_data::<Foo, ReflectDefault>();
 ///
-/// let defaulter = registry.get_type_trait::<ReflectDefault>(TypeId::of::<Foo>());
+/// let defaulter = registry.get_type_data::<ReflectDefault>(TypeId::of::<Foo>());
 /// assert!(defaulter.is_some());
 /// ```
 ///

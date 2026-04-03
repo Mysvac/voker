@@ -19,7 +19,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = [ "std", "debug", "auto_register" ]
+default = [ "std", "debug" ]
 
 # Even if turned on, it only takes effect in Debug mode.
 debug = [
@@ -40,12 +40,9 @@ web = [
     "voker-task/web",
 ]
 
-auto_register = [ "voker-reflect/auto_register" ]
-
 reflect_docs = [ "voker-reflect/reflect_docs" ]
 
 async_io = [ "voker-task/async_io" ]
-
 
 [dependencies]
 voker-cfg = { path = "./crates/voker-cfg" }

@@ -55,7 +55,7 @@ impl TupleStructInfo {
 
     /// Returns the [`UnnamedField`] at the given index, if present.
     #[inline]
-    pub fn field_at(&self, index: usize) -> Option<&UnnamedField> {
+    pub fn field(&self, index: usize) -> Option<&UnnamedField> {
         self.fields.get(index)
     }
 

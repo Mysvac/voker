@@ -18,11 +18,17 @@ macro_rules! impl_docs_fn {
 
         /// Replaces docs (overwrite, do not merge).
         ///
-        /// Used by the proc-macro crate.
-        #[cfg(feature = "reflect_docs")]
+        /// No-op if `reflect_docs` feature is disabled.
         #[inline]
-        pub fn with_docs(self, $field: Option<&'static str>) -> Self {
-            Self { $field, ..self }
+        pub fn with_docs(self, _doc_: Option<&'static str>) -> Self {
+            #[cfg(feature = "reflect_docs")]
+            return Self {
+                $field: _doc_,
+                ..self
+            };
+
+            #[cfg(not(feature = "reflect_docs"))]
+            return self;
         }
     };
 }

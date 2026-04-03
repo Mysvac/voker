@@ -27,9 +27,10 @@ use crate::Reflect;
 ///     name: String,
 /// }
 ///
-/// let info = <Slider as Typed>::type_info().as_struct().unwrap();
+/// let info = <Slider as Typed>::type_info();
 /// assert!(info.has_attribute::<bool>());
 ///
+/// let info = info.as_struct().unwrap();
 /// let field = info.field("value").unwrap();
 /// assert!(!field.has_attribute::<i32>());
 /// assert_eq!(*field.get_attribute::<f32>().unwrap(), 10.0f32);
@@ -195,7 +196,7 @@ macro_rules! impl_with_custom_attributes {
     };
 }
 
-pub(super) use impl_custom_attributes_fn;
+pub(crate) use impl_custom_attributes_fn;
 pub(super) use impl_with_custom_attributes;
 
 // -----------------------------------------------------------------------------
@@ -203,8 +204,6 @@ pub(super) use impl_with_custom_attributes;
 
 #[cfg(test)]
 mod tests {
-    use core::any::TypeId;
-
     use super::CustomAttributes;
 
     #[test]
@@ -214,11 +213,12 @@ mod tests {
             .with_attribute(1_u32)
             .with_attribute(2_u32);
 
+        assert!(!attrs.is_empty());
         assert_eq!(attrs.len(), 2);
         assert_eq!(attrs.get::<u32>(), Some(&2_u32));
         assert_eq!(attrs.get::<bool>(), Some(&false));
-        assert!(attrs.contains_by_id(TypeId::of::<u32>()));
-        assert!(!attrs.is_empty());
+        assert!(attrs.contains::<u32>());
+        assert!(!attrs.contains::<u8>());
 
         let collected = attrs.iter().count();
         assert_eq!(collected, 2);

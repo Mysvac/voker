@@ -74,11 +74,11 @@ impl Reflect for Cow<'static, str> {
 impl GetTypeMeta for Cow<'static, str> {
     fn get_type_meta() -> TypeMeta {
         let mut meta = TypeMeta::with_capacity::<Self>(5);
-        meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectSerialize>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectDeserialize>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
         meta
     }
 }
@@ -138,23 +138,7 @@ impl<T: FromReflect + Typed + Clone> List for Cow<'static, [T]> {
     }
 
     fn get_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
-        <[T]>::get_mut(self.to_mut(), index).map(Reflect::as_reflect_mut)
-    }
-
-    fn insert(&mut self, index: usize, element: Box<dyn Reflect>) {
-        let element = match T::take_from_reflect(element) {
-            Ok(v) => v,
-            Err(e) => panic! {
-                "incompatible type: from {} to {}",
-                e.reflect_type_path(),
-                T::type_path(),
-            },
-        };
-        self.to_mut().insert(index, element);
-    }
-
-    fn remove(&mut self, index: usize) -> Box<dyn Reflect> {
-        Box::new(self.to_mut().remove(index))
+        <[T]>::get_mut(self.to_mut(), index).map(Reflect::as_mut_reflect)
     }
 
     fn push(&mut self, value: Box<dyn Reflect>) {
@@ -183,6 +167,10 @@ impl<T: FromReflect + Typed + Clone> List for Cow<'static, [T]> {
         self.as_ref().len()
     }
 
+    fn is_empty(&self) -> bool {
+        self.as_ref().is_empty()
+    }
+
     fn iter(&self) -> ListItemIter<'_> {
         ListItemIter::new(self)
     }
@@ -209,9 +197,9 @@ impl<T: FromReflect + Typed + Clone> FromReflect for Cow<'static, [T]> {
 impl<T: FromReflect + Typed + Clone + GetTypeMeta> GetTypeMeta for Cow<'static, [T]> {
     fn get_type_meta() -> TypeMeta {
         let mut meta = TypeMeta::with_capacity::<Self>(3);
-        meta.insert_trait::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }
 

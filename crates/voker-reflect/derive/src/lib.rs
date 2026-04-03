@@ -6,6 +6,7 @@
 //! - [`impl_reflect_opaque`]
 //! - [`impl_type_path`]
 //! - [`impl_auto_register`]
+//! - [`auto_register`]
 //! - [`reflect_trait`]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::std_instead_of_core, reason = "proc-macro lib")]
@@ -127,29 +128,19 @@ mod utils;
 ///
 /// Two convenience bundles enable multiple flags simultaneously:
 ///
-/// - `serde`: `serialize` + `deserialize` + `auto_register`
-/// - `full`: All seven traits listed above + `auto_register`
+/// - `serde`: `serialize` + `deserialize`
+/// - `full`: All seven traits listed above
 ///
 /// These attributes can only be applied at the type level.
 ///
-/// ## Auto Registration
+/// ### Automatic registration
 ///
-/// Unlike Bevy, automatic type registration is disabled by default (even when the `auto_register` feature is enabled).
-/// You must explicitly enable it using the `auto_register` attribute.
+/// For non-generic local types, `#[derive(Reflect)]` automatically emits
+/// registration metadata (as long as `GetTypeMeta` generation is enabled).
 ///
-/// ### Example
-///
-/// ```rust, ignore
-/// #[derive(Reflect)]
-/// #[reflect(auto_register)]
-/// struct A { /* ... */ }
-/// ```
-///
-/// Note: This macro has no effect on generic types, as we cannot determine which concrete types will be instantiated.
-///
-/// This attribute is a no-op when the `auto_register` feature is disabled.
-///
-/// This attribute can only be applied at the type level.
+/// Generic types are not collected automatically because static registration
+/// requires concrete type instantiations. Use [`impl_auto_register`] for
+/// specific generic instantiations.
 ///
 /// ## Custom GetTypeMeta
 ///
@@ -162,18 +153,18 @@ mod utils;
 /// - `ReflectSerialize`: If `serde::Serialize` is marked as available via `#[reflect(serialize)]`.
 /// - `ReflectDeserialize`: If `serde::Deserialize` is marked as available via `#[reflect(deserialize)]`.
 ///
-/// You can also manually add type traits using `#[reflect(type_trait = (...))]`. These will be automatically
+/// You can also manually add type traits using `#[reflect(type_data = (...))]`. These will be automatically
 /// inserted into `get_type_meta`.
 ///
 /// ### Example
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(type_trait = ReflectPrint)]
+/// #[reflect(type_data = ReflectPrint)]
 /// struct A;
 ///
 /// #[derive(Reflect)]
-/// #[reflect(type_trait = (ReflectDebug, ReflectClone, ReflectDisplay))]
+/// #[reflect(type_data = (ReflectDebug, ReflectClone, ReflectDisplay))]
 /// struct A;
 /// ```
 ///
@@ -240,6 +231,22 @@ mod utils;
 /// ```
 ///
 /// This attribute can be applied at the type, field, and enum variant levels.
+///
+/// ## auto_register
+///
+/// When a non-generic type (lifetimes are allowed, but type and const
+/// parameters are not) is derived with `Reflect`, and `GetTypeMeta`
+/// generation is not explicitly disabled, the macro also generates
+/// auto-registration code for that type.
+///
+/// Auto-registration relies on static initialization, which requires a
+/// concrete type. Because of that, generic parameters cannot be collected
+/// automatically. Static registration also requires `TypeMeta`, so this
+/// behavior is tied to `GetTypeMeta` generation.
+///
+/// For generic types, use [`impl_auto_register`] to register concrete
+/// instantiations. For remote types where [`impl_auto_register`] is not
+/// applicable, consider using [`auto_register`] instead.
 ///
 /// ## skip_serde
 ///
@@ -442,49 +449,113 @@ pub fn impl_type_path(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Add the type to the automatic registry.
+/// Registers a concrete type for automatic discovery via the reflection system.
 ///
-/// If the feature is not enabled, this macro will not do anything.
+/// This macro is intended for types **defined in the current crate** (local types).
+/// It leverages the `AutoRegister` trait to prevent duplicate registrations at compile time.
 ///
-/// The type must be concrete (no uncertain generic parameters).
+/// # Duplicate Registration Prevention
+/// - The macro generates an `impl AutoRegister for #type_path` block.
+/// - If the same type is registered multiple times, the compiler will complain about
+///   conflicting implementations of `AutoRegister`, effectively preventing duplicates.
+/// - This is the recommended macro for most use cases.
 ///
-/// ## Example
+/// # Feature Flag
+/// If the required feature is disabled, this macro expands to nothing.
 ///
+/// # Requirements
+/// - The type must be **concrete** (no unbound generic parameters).
+///   - ✅ `foo::Foo`
+///   - ✅ `Vec<u32>`
+///   - ❌ `Vec<T>` (where `T` is unconstrained)
+/// - The type must be defined in the current crate (to satisfy the orphan rule).
+///
+/// # Example
 /// ```ignore
 /// impl_auto_register!(foo::Foo);
-/// impl_auto_register!(Vec<u32>); // Ok
-/// impl_auto_register!(Vec<T: Clone>); // Error
+/// impl_auto_register!(Bar<u32>);           // OK - concrete type
+/// impl_auto_register!(Bar<T>);             // Error - generic parameters
 /// ```
 ///
-/// This does not conflict with the `reflect(auto_register)` attribute.
+/// # For Remote Types
+/// For types defined in other crates, use [`auto_register!`] instead, as the orphan rule
+/// prevents implementing `AutoRegister` for external types.
 ///
-/// See: [`derive Reflect`](derive_full_reflect)
+/// See also: [`derive Reflect`](derive_full_reflect)
 #[proc_macro]
 pub fn impl_auto_register(input: TokenStream) -> TokenStream {
-    if ::core::cfg!(feature = "auto_register") {
-        let type_path = syn::parse_macro_input!(input as syn::Type);
+    let type_path = syn::parse_macro_input!(input as syn::Type);
 
-        let voker_reflect_path = path::voker_reflect();
-        let auto_register_ =
-            path::auto_register_(&voker_reflect_path, ::proc_macro2::Span::call_site());
+    let voker_reflect_path = path::voker_reflect();
+    let macro_utils_ = path::macro_utils_(&voker_reflect_path);
 
-        TokenStream::from(quote! {
-            const _: () = {
-                #auto_register_::inventory::submit!{
-                    #auto_register_::__AutoRegisterFunc(
-                        <#type_path as #auto_register_::__RegisterType>::__register
-                    )
-                }
-            };
-        })
-    } else {
-        utils::empty().into()
-    }
+    TokenStream::from(quote! {
+        const _: () = {
+            impl #macro_utils_::AutoRegister for #type_path {}
+
+            #macro_utils_::inv::submit!{
+                #macro_utils_::RegisterFn::of::<#type_path>()
+                => #macro_utils_::RegisterFn
+            }
+        };
+    })
 }
 
-/// Impl `TypeTrait` for specific trait with a new struct.
+/// Registers a concrete type for automatic discovery, **without** compile-time duplicate prevention.
 ///
-/// This macro will generate a `{trait_name}FromReflect` struct, which implements `TypeTrait` and `TypePath`.
+/// This macro is designed for **remote types** (defined in other crates) where implementing
+/// the `AutoRegister` trait is impossible due to the orphan rule.
+///
+/// # Duplicate Registration Behavior
+/// - Unlike [`impl_auto_register!`], this macro does **not** generate an `AutoRegister`
+///   implementation, and thus cannot prevent duplicate registrations at compile time.
+/// - Duplicate registrations are **safe** and will not cause runtime errors.
+/// - The only downside is a **minor performance impact during iteration** over registered types
+///   (duplicates will be visited multiple times).
+///
+/// # When to Use
+/// - ✅ Types from external crates (e.g., `std::string::String`, `serde_json::Value`)
+/// - ✅ When you cannot or don't want to implement `AutoRegister` for a type
+/// - ❌ Avoid for local types—use [`impl_auto_register!`] instead for better compile-time checking
+///
+/// # Feature Flag
+/// If the required feature is disabled, this macro expands to nothing.
+///
+/// # Requirements
+/// - The type must be **concrete** (no unbound generic parameters).
+///
+/// # Example
+/// ```ignore
+/// auto_register!(std::string::String);      // OK - remote type
+/// auto_register!(Vec<u32>);                // OK - concrete, but consider impl_auto_register! for local
+/// auto_register!(Vec<T>);                  // Error - generic parameters
+/// ```
+///
+/// # Note on Performance
+/// Duplicate registrations slightly increase iteration time but have no other side effects.
+/// In practice, this is negligible unless thousands of duplicates are registered.
+///
+/// See also: [`derive Reflect`](derive_full_reflect)
+#[proc_macro]
+pub fn auto_register(input: TokenStream) -> TokenStream {
+    let type_path = syn::parse_macro_input!(input as syn::Type);
+
+    let voker_reflect_path = path::voker_reflect();
+    let macro_utils_ = path::macro_utils_(&voker_reflect_path);
+
+    TokenStream::from(quote! {
+        const _: () = {
+            #macro_utils_::inv::submit!{
+                #macro_utils_::RegisterFn::of::<#type_path>()
+                => #macro_utils_::RegisterFn
+            }
+        };
+    })
+}
+
+/// Impl `TypeData` for specific trait with a new struct.
+///
+/// This macro will generate a `{trait_name}FromReflect` struct, which implements `TypeData` and `TypePath`.
 ///
 /// For example, for `Display`, this will generate `DisplayReflect`.
 ///
@@ -505,11 +576,11 @@ pub fn impl_auto_register(input: TokenStream) -> TokenStream {
 ///
 /// let reg = TypeRegistry::new()
 ///     .register::<String>()
-///     .register_type_trait::<String, MyDebugFromReflect>();
+///     .register_type_data::<String, MyDebugFromReflect>();
 ///
 /// let x: Box<dyn Reflect> = Box::new(String::from("123"));
 ///
-/// let my_debug_from = reg.get_type_trait::<MyDebugFromReflect>::((*x).type_id()).unwrap();
+/// let my_debug_from = reg.get_type_data::<MyDebugFromReflect>((*x).type_id()).unwrap();
 /// let x: Box<dyn MyDebug> = my_debug_from.from_boxed(x);
 /// x.debug();
 /// ```

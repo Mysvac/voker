@@ -1,9 +1,8 @@
 //! Provides reusable and one-shot multi-layer path access support.
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt;
-
-use voker_utils::vec::FastVec;
 
 use crate::Reflect;
 use crate::access::{AccessError, AccessPath, OffsetAccessor, ParseError};
@@ -94,10 +93,6 @@ impl<'a> From<AccessError<'a>> for PathAccessError<'a> {
 /// ```
 ///
 /// [`ReflectPathAccess`]: crate::access::ReflectPathAccess
-#[expect(
-    clippy::len_without_is_empty,
-    reason = "`is_empty` here is meaningless"
-)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PathAccessor(Box<[OffsetAccessor<'static>]>);
 
@@ -127,11 +122,10 @@ impl PathAccessor {
     /// [`String`]: alloc::string::String
     /// [`parse_static`]: crate::access::PathAccessor::parse_static
     pub fn parse<'a>(path: impl AccessPath<'a>) -> Result<Self, ParseError<'a>> {
-        let mut vec: FastVec<OffsetAccessor, 8> = FastVec::new();
-        let data = vec.data();
+        let mut vec: Vec<OffsetAccessor> = Vec::new();
 
         for res in path.parse_to_accessor() {
-            data.push(res?.into_owned());
+            vec.push(res?.into_owned());
         }
 
         Ok(Self(vec.into_boxed_slice()))
@@ -155,11 +149,10 @@ impl PathAccessor {
     ///
     /// [`String`]: alloc::string::String
     pub fn parse_static(path: impl AccessPath<'static>) -> Result<Self, ParseError<'static>> {
-        let mut vec: FastVec<OffsetAccessor, 8> = FastVec::new();
-        let data = vec.data();
+        let mut vec: Vec<OffsetAccessor> = Vec::new();
 
         for res in path.parse_to_accessor() {
-            data.push(res?);
+            vec.push(res?);
         }
 
         Ok(Self(vec.into_boxed_slice()))
@@ -175,6 +168,7 @@ impl PathAccessor {
     /// assert_eq!(accessor.len(), 3);
     /// ```
     #[inline]
+    #[expect(clippy::len_without_is_empty, reason = "useless")]
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -281,10 +275,9 @@ impl PathAccessor {
     /// assert_eq!(a.len(), 3);
     /// ```
     pub fn concat(self, other: PathAccessor) -> Self {
-        let mut vec: FastVec<OffsetAccessor, 12> = FastVec::new();
-        let data = vec.data();
-        data.extend(self.0);
-        data.extend(other.0);
+        let mut vec: Vec<OffsetAccessor> = Vec::with_capacity(self.len() + other.len());
+        vec.extend(self.0);
+        vec.extend(other.0);
         Self(vec.into_boxed_slice())
     }
 }

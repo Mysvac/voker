@@ -5,7 +5,7 @@ use crate::info::{Generics, Type, TypeInfo, TypePath, Typed};
 use crate::info::{impl_docs_fn, impl_generic_fn, impl_type_fn};
 use crate::ops::Set;
 
-/// A container for compile-time set-like info, size = 88 (exclude `docs`).
+/// A container for compile-time set-like info.
 ///
 /// At present, `SetInfo` does not have `CustomAttributes`, which can save memory.
 ///

@@ -32,9 +32,9 @@ impl FromReflect for &'static Path {
 impl GetTypeMeta for &'static Path {
     fn get_type_meta() -> TypeMeta {
         let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectSerialize>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
         type_meta
     }
 }
@@ -60,11 +60,11 @@ impl FromReflect for Cow<'static, Path> {
 impl GetTypeMeta for Cow<'static, Path> {
     fn get_type_meta() -> TypeMeta {
         let mut type_meta: TypeMeta = TypeMeta::with_capacity::<Self>(4);
-        type_meta.insert_trait::<ReflectDefault>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectFromPtr>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectFromReflect>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectDeserialize>(FromType::<Self>::from_type());
-        type_meta.insert_trait::<ReflectSerialize>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
+        type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
         type_meta
     }
 }

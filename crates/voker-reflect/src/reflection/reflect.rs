@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use core::any::{Any, TypeId};
 use core::cmp::Ordering;
 
-use crate::impls::NonGenericTypeInfoCell;
 use crate::info::{DynamicTypePath, DynamicTyped, TypePath, Typed};
 use crate::info::{OpaqueInfo, ReflectKind, TypeInfo};
 use crate::ops::{ApplyError, ReflectCloneError};
@@ -118,7 +117,7 @@ use crate::ops::{ReflectMut, ReflectOwned, ReflectRef};
 /// Some methods have standard implementations:
 ///
 /// ```rust, ignore
-/// fn set(&mut self, value: Box<dyn Reflect>) -> Result<(), Box<dyn Reflect>> {
+/// fn reflect_assign(&mut self, value: Box<dyn Reflect>) -> Result<(), Box<dyn Reflect>> {
 ///     *self = value.take::<Self>()?;  // Extract Self from Box<dyn Reflect>
 ///     Ok(())
 /// }
@@ -220,12 +219,12 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// use voker_reflect::Reflect;
     ///
     /// let mut x = 32;
-    /// let r: &mut dyn Reflect = x.as_reflect_mut();
+    /// let r: &mut dyn Reflect = x.as_mut_reflect();
     /// // Equal to this:
     /// // let r: &mut dyn Reflect = &mut x;
     /// ```
     #[inline(always)]
-    fn as_reflect_mut(&mut self) -> &mut dyn Reflect
+    fn as_mut_reflect(&mut self) -> &mut dyn Reflect
     where
         Self: Sized,
     {
@@ -276,23 +275,6 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     fn represented_type_info(&self) -> Option<&'static TypeInfo> {
         Some(self.reflect_type_info())
     }
-
-    /// Performs a type-checked assignment of a reflected value to this value.
-    ///
-    /// This is type strict but fast; to allow compatible-but-not-identical inputs,
-    /// use [`Reflect::apply`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_reflect::Reflect;
-    /// let data = vec![1_i32, 2_i32, 3_i32].into_boxed_reflect();
-    /// let mut vec = Vec::<i32>::new();
-    ///
-    /// vec.set(data);
-    /// assert_eq!(vec, [1, 2, 3]);
-    /// ```
-    fn set(&mut self, value: Box<dyn Reflect>) -> Result<(), Box<dyn Reflect>>;
 
     /// Returns a pure enumeration of ["kinds"](ReflectKind) of type.
     ///
@@ -448,6 +430,23 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// }
     /// ```
     fn apply(&mut self, value: &dyn Reflect) -> Result<(), ApplyError>;
+
+    /// Performs a type-checked assignment of a reflected value to this value.
+    ///
+    /// This is type strict but fast; to allow compatible-but-not-identical inputs,
+    /// use [`Reflect::apply`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_reflect::Reflect;
+    /// let data = vec![1_i32, 2_i32, 3_i32].into_boxed_reflect();
+    /// let mut vec = Vec::<i32>::new();
+    ///
+    /// vec.reflect_assign(data).unwrap();
+    /// assert_eq!(vec, [1, 2, 3]);
+    /// ```
+    fn reflect_assign(&mut self, value: Box<dyn Reflect>) -> Result<(), Box<dyn Reflect>>;
 
     /// Attempts to clone `Self` using reflection.
     ///
@@ -819,8 +818,8 @@ impl Typed for dyn Reflect {
     ///
     /// [`dyn Reflect`]: crate::Reflect
     fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
+        static INFO: TypeInfo = TypeInfo::Opaque(OpaqueInfo::new::<dyn Reflect>());
+        &INFO
     }
 }
 
@@ -830,7 +829,7 @@ impl Typed for dyn Reflect {
 /// Implement some common methos like `reflect_kind` and `reflect_ref`.
 macro_rules! impl_reflect_cast_fn {
     ($kind:ident) => {
-        fn set(
+        fn reflect_assign(
             &mut self,
             value: ::alloc::boxed::Box<dyn $crate::Reflect>,
         ) -> Result<(), ::alloc::boxed::Box<dyn $crate::Reflect>> {
@@ -887,7 +886,7 @@ mod tests {
 
         let boxed = value.clone().into_boxed_reflect();
         let mut target = Sample { value: 0 };
-        target.set(boxed).unwrap();
+        target.reflect_assign(boxed).unwrap();
         assert_eq!(target.value, 2);
 
         let dynamic = target.to_dynamic();

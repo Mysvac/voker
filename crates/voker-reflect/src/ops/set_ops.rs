@@ -4,9 +4,9 @@ use core::{fmt, ops::Deref};
 
 use voker_utils::hash::{HashTable, hash_table};
 
+use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
-use crate::impls::NonGenericTypeInfoCell;
-use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
+use crate::info::TypeInfo;
 use crate::ops::{ApplyError, ReflectCloneError};
 use crate::reflection::impl_reflect_cast_fn;
 
@@ -21,7 +21,7 @@ use crate::reflection::impl_reflect_cast_fn;
 ///
 /// # Type Information
 ///
-/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`],
+/// Dynamic types are special in that their `TypeInfo` is [`OpaqueInfo`](crate::info::OpaqueInfo),
 /// but other APIs behave like the represented type, such as [`reflect_kind`] and [`reflect_ref`].
 ///
 /// A `DynamicSet` can optionally represent a specific set type through its
@@ -74,36 +74,8 @@ pub struct DynamicSet {
     hash_table: HashTable<Box<dyn Reflect>>,
 }
 
-// Explicitly implemented here so that code readers do not need
-// to ponder the principles of proc-macros in advance.
-impl TypePath for DynamicSet {
-    #[inline]
-    fn type_path() -> &'static str {
-        "voker_reflect::ops::DynamicSet"
-    }
-
-    #[inline]
-    fn type_name() -> &'static str {
-        "DynamicSet"
-    }
-
-    #[inline]
-    fn type_ident() -> &'static str {
-        "DynamicSet"
-    }
-
-    #[inline]
-    fn module_path() -> Option<&'static str> {
-        Some("voker_reflect::ops")
-    }
-}
-
-impl Typed for DynamicSet {
-    fn type_info() -> &'static TypeInfo {
-        static CELL: NonGenericTypeInfoCell = NonGenericTypeInfoCell::new();
-        CELL.get_or_init(|| TypeInfo::Opaque(OpaqueInfo::new::<Self>()))
-    }
-}
+impl_dynamic_type_path!(DynamicSet);
+impl_dynamic_type_info!(DynamicSet);
 
 impl DynamicSet {
     /// Creates an empty `DynamicSet`.
@@ -152,7 +124,7 @@ impl DynamicSet {
     pub const fn set_type_info(&mut self, info: Option<&'static TypeInfo>) {
         match info {
             Some(info) => {
-                assert!(info.is_set(), "`TypeInfo` mismatched.");
+                assert!(info.kind().is_set(), "`TypeInfo` mismatched.");
                 self.info = Some(info);
             }
             None => {

@@ -45,7 +45,7 @@ impl<'de, P: DeserializeProcessor> Visitor<'de> for TupleStructVisitor<'_, P> {
         self,
         deserializer: D,
     ) -> Result<Self::Value, D::Error> {
-        let field = self.tuple_struct_info.field_at(0).unwrap();
+        let field = self.tuple_struct_info.field(0).unwrap();
 
         // If the length is `1` and the field is `skip_serde`,
         // it should call 'visit_tuple' instead of 'visit_newtype_struct'.

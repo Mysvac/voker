@@ -233,3 +233,15 @@ impl<'a> AccessPath<'a> for &'a str {
         }
     }
 }
+
+impl<'a> AccessPath<'a> for &'a alloc::string::String {
+    #[inline]
+    fn parse_to_accessor(
+        &self,
+    ) -> impl Iterator<Item = Result<OffsetAccessor<'a>, ParseError<'a>>> {
+        PathParser {
+            path: self,
+            remaining: self.as_bytes(),
+        }
+    }
+}

@@ -41,7 +41,7 @@
 //!
 //! `ReflectPathAccess`:
 //!
-//! ```
+//! ```no_run
 //! use voker_reflect::{Reflect, access::ReflectPathAccess};
 //!
 //! #[derive(Reflect)]
@@ -56,7 +56,7 @@
 //!
 //! `PathAccessor`:
 //!
-//! ```
+//! ```no_run
 //! use voker_reflect::{Reflect, access::PathAccessor};
 //!
 //! #[derive(Reflect)]

@@ -5,7 +5,7 @@ use crate::info::{Generics, Type, TypeInfo, TypePath, Typed};
 use crate::info::{impl_docs_fn, impl_generic_fn, impl_type_fn};
 use crate::ops::List;
 
-///  A container for compile-time list-like info, size = 88 (exclude `docs`).
+///  A container for compile-time list-like info.
 ///
 /// At present, `ListInfo` does not have `CustomAttributes`.
 /// If necessary, it may be added in the future.

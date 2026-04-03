@@ -27,12 +27,12 @@ As a dynamic reflection system, this library aims to support:
 - **Type Registration**:
     - Metadata: type metadata containing both type information and available function pointers
     - Registry: storage system for metadata enabling type information retrieval without instances
-    - Auto-registration (optional): type registration through static initialization
+    - Auto-registration: type registration through static initialization
     - See more information in [`voker_reflect::registry`].
 
 - **Trait Reflection**:
     - Trait reflection based on registration system, enabling dynamic trait object retrieval
-    - See more information in [`registry::TypeTrait`] and [`derive::reflect_trait`]
+    - See more information in [`registry::TypeData`] and [`derive::reflect_trait`]
 
 - **Reflection Macros**:
     - Automatic generation of reflection implementations for types
@@ -84,8 +84,8 @@ let inventory = Inventory {
     slots: vec![Some("Sword"), None],
 };
 
-// Once access
-assert_eq!(*inventory.access_as::<u32>(".coins").unwrap(), 1234);
+// One-off access
+assert_eq!(inventory.access_as::<u32>(".coins"), Ok(&1234_u32));
 
 // Reuseable accessor
 let accessor = PathAccessor::parse_static(".slots[0]").unwrap();
@@ -101,7 +101,7 @@ use voker_reflect::prelude::*;
 use voker_reflect::ops::Struct;
 
 #[derive(Reflect, Default)]
-#[reflect(default, auto_register)]
+#[reflect(default)]
 struct Enemy {
     species: String,
     hp: u32,
@@ -112,16 +112,11 @@ let type_id = TypeId::of::<Enemy>();
 // Dynamic operation
 
 let mut registry = TypeRegistry::default();
-let auto_register_ok = registry.auto_register();
-
-// On unsupported platforms or when the feature is disabled, this is false.
-if !auto_register_ok {
-    registry.register::<Enemy>();
-}
+registry.auto_register();
 
 assert!(registry.contains(type_id));
 
-let default_ctor = registry.get_type_trait::<ReflectDefault>(type_id).unwrap();
+let default_ctor = registry.get_type_data::<ReflectDefault>(type_id).unwrap();
 let mut dyn_obj: Box<dyn Reflect> = default_ctor.default();
 let dyn_struct: &mut dyn Struct = dyn_obj.reflect_mut().as_struct().unwrap();
 dyn_struct.field_mut("hp").unwrap().apply(&100u32);
@@ -182,22 +177,8 @@ Provide reflection implementations for standard library containers like `HashMap
 
 ### `debug`
 
-Enabled by default, but only takes effect in debug mode.
-
-When turned on, we will test the validity of the data in many places
-and record type information stack during serialization and deserialization.
-
-### `auto_register`
-
-Enabled by default.
-
-Enables automatic type registration through static initialization.
-
-Only non-generic types are auto-collected. Register concrete generic instantiations manually.
-
-When disabled, auto-registration functions remain available but perform no operation.
-
-See [`TypeRegistry::auto_register`](crate::registry::TypeRegistry::auto_register) for details.
+Enabled by default, when turned on, we will record type information
+stack during serialization and deserialization.
 
 ### `reflect_docs`
 

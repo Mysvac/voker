@@ -18,7 +18,6 @@ mod kw {
     syn::custom_keyword!(Tuple);
     syn::custom_keyword!(Enum);
     syn::custom_keyword!(Opaque);
-    syn::custom_keyword!(auto_register);
     syn::custom_keyword!(default);
     syn::custom_keyword!(clone);
     syn::custom_keyword!(debug);
@@ -31,7 +30,7 @@ mod kw {
     syn::custom_keyword!(type_path);
     syn::custom_keyword!(doc);
     syn::custom_keyword!(full); // serde + clone + debug + hash + partial_eq + partial_cmp + default
-    syn::custom_keyword!(type_trait);
+    syn::custom_keyword!(type_data);
 }
 
 #[derive(Default)]
@@ -44,14 +43,12 @@ pub(crate) struct TypeAttributes {
     pub avail_traits: TraitAvailableFlags,
     /// `#[reflect(Opaque)]`
     pub is_opaque: Option<Span>,
-    /// `#[reflect(auto_register)]`
-    pub auto_register: Option<Span>,
     /// `#[reflect(type_path = "...")]`
     pub type_path: Option<Path>,
     /// `#[reflect(doc = "...")]` or `#[doc = "..."]`
     pub docs: ReflectDocs,
-    /// `#[reflect(type_trait = (...))]`
-    pub extra_type_trait: Vec<Path>,
+    /// `#[reflect(type_data = (...))]`
+    pub extra_type_data: Vec<Path>,
 }
 
 impl TypeAttributes {
@@ -134,8 +131,6 @@ impl TypeAttributes {
             self.parse_cmp(input)
         } else if lookahead.peek(kw::debug) {
             self.parse_debug(input)
-        } else if lookahead.peek(kw::auto_register) {
-            self.parse_auto_register(input)
         } else if lookahead.peek(kw::serialize) {
             self.parse_serialize(input)
         } else if lookahead.peek(kw::deserialize) {
@@ -144,8 +139,8 @@ impl TypeAttributes {
             self.parse_opaque(input)
         } else if lookahead.peek(kw::type_path) {
             self.parse_type_path(input)
-        } else if lookahead.peek(kw::type_trait) {
-            self.parses_extra_type_trait(input)
+        } else if lookahead.peek(kw::type_data) {
+            self.parses_extra_type_data(input)
         } else if lookahead.peek(kw::TypePath) {
             self.parse_trait_type_path(input)
         } else if lookahead.peek(kw::Typed) {
@@ -189,7 +184,6 @@ impl TypeAttributes {
         let s = input.parse::<kw::serde>()?.span;
         self.avail_traits.serialize = Some(s);
         self.avail_traits.deserialize = Some(s);
-        self.auto_register = Some(s);
         Ok(())
     }
 
@@ -204,7 +198,6 @@ impl TypeAttributes {
         self.avail_traits.cmp = Some(s);
         self.avail_traits.serialize = Some(s);
         self.avail_traits.deserialize = Some(s);
-        self.auto_register = Some(s);
         Ok(())
     }
 
@@ -268,13 +261,6 @@ impl TypeAttributes {
     fn parse_opaque(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Opaque>()?.span;
         self.is_opaque = Some(s);
-        Ok(())
-    }
-
-    // #[reflect(auto_register)]
-    fn parse_auto_register(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::auto_register>()?.span;
-        self.auto_register = Some(s);
         Ok(())
     }
 
@@ -517,19 +503,19 @@ impl TypeAttributes {
         Ok(())
     }
 
-    fn parses_extra_type_trait(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parses_extra_type_data(&mut self, input: ParseStream) -> syn::Result<()> {
         let pair = input.parse::<MetaNameValue>()?;
 
         if let Expr::Tuple(tuple) = &pair.value {
             for elem in &tuple.elems {
                 if let Expr::Path(expr_path) = elem {
-                    self.extra_type_trait.push(expr_path.path.clone());
+                    self.extra_type_data.push(expr_path.path.clone());
                 } else {
                     return Err(syn::Error::new(elem.span(), "Expected a path in tuple."));
                 }
             }
         } else if let Expr::Path(expr_path) = &pair.value {
-            self.extra_type_trait.push(expr_path.path.clone());
+            self.extra_type_data.push(expr_path.path.clone());
         } else {
             return Err(syn::Error::new(
                 pair.value.span(),

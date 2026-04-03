@@ -17,21 +17,21 @@ pub(crate) fn impl_trait_get_type_meta(
     let get_type_meta_ = crate::path::get_type_meta_(voker_reflect_path);
     let type_meta_ = crate::path::type_meta_(voker_reflect_path);
     let from_type_ = crate::path::from_type_(voker_reflect_path);
-    let type_trait_from_ptr = crate::path::type_trait_from_ptr_(voker_reflect_path);
+    let type_data_from_ptr = crate::path::reflect_from_ptr_(voker_reflect_path);
 
     let outer_ = Ident::new("__ret__", Span::call_site());
 
     // `1` : ReflectFromPtr
-    let mut trait_counter = 1usize;
+    let mut data_counter = 1usize;
 
     // We can only add `ReflectFromReflect` when using the default `FromReflect` implementation.
     // If it is uniformly added, there may be issues with mismatched generic constraints.
     let insert_from_reflect = if meta.attrs().impl_switchs.impl_from_reflect {
-        trait_counter += 1;
-        let type_trait_from_reflect_ = crate::path::type_trait_from_reflect_(voker_reflect_path);
+        data_counter += 1;
+        let reflect_from_reflect_ = crate::path::reflect_from_reflect_(voker_reflect_path);
 
         quote! {
-            #type_meta_::insert_trait::<#type_trait_from_reflect_>(&mut #outer_, #from_type_::<Self>::from_type());
+            #type_meta_::insert_data::<#reflect_from_reflect_>(&mut #outer_, #from_type_::<Self>::from_type());
         }
     } else {
         crate::utils::empty()
@@ -39,13 +39,13 @@ pub(crate) fn impl_trait_get_type_meta(
 
     let insert_default = match meta.attrs().avail_traits.default {
         Some(span) => {
-            trait_counter += 1;
-            let type_trait_default_ = crate::path::type_trait_default_(voker_reflect_path);
+            data_counter += 1;
+            let reflect_default_ = crate::path::reflect_default_(voker_reflect_path);
 
             let from_type_fn = Ident::new("from_type", span);
 
             quote! {
-                #type_meta_::insert_trait::<#type_trait_default_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
+                #type_meta_::insert_data::<#reflect_default_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
         None => crate::utils::empty(),
@@ -53,12 +53,12 @@ pub(crate) fn impl_trait_get_type_meta(
 
     let insert_serialize = match meta.attrs().avail_traits.serialize {
         Some(span) => {
-            trait_counter += 1;
-            let type_trait_serialize_ = crate::path::type_trait_serialize_(voker_reflect_path);
+            data_counter += 1;
+            let reflect_serialize_ = crate::path::reflect_serialize_(voker_reflect_path);
             let from_type_fn = Ident::new("from_type", span);
 
             quote! {
-                #type_meta_::insert_trait::<#type_trait_serialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
+                #type_meta_::insert_data::<#reflect_serialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
         None => crate::utils::empty(),
@@ -66,25 +66,25 @@ pub(crate) fn impl_trait_get_type_meta(
 
     let insert_deserialize = match meta.attrs().avail_traits.deserialize {
         Some(span) => {
-            trait_counter += 1;
-            let type_trait_deserialize_ = crate::path::type_trait_deserialize_(voker_reflect_path);
+            data_counter += 1;
+            let reflect_deserialize_ = crate::path::reflect_deserialize_(voker_reflect_path);
             let from_type_fn = Ident::new("from_type", span);
 
             quote! {
-                #type_meta_::insert_trait::<#type_trait_deserialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
+                #type_meta_::insert_data::<#reflect_deserialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
         None => crate::utils::empty(),
     };
 
-    trait_counter += meta.attrs().extra_type_trait.len();
+    data_counter += meta.attrs().extra_type_data.len();
 
-    let insert_extra_traits = meta.attrs().extra_type_trait.iter().map(|extra_path| {
+    let insert_extra_traits = meta.attrs().extra_type_data.iter().map(|extra_path| {
         let span = extra_path.span();
         let from_type_fn = Ident::new("from_type", span);
 
         quote! {
-            #type_meta_::insert_trait::<#extra_path>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
+            #type_meta_::insert_data::<#extra_path>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
         }
     });
 
@@ -94,8 +94,8 @@ pub(crate) fn impl_trait_get_type_meta(
     quote! {
         impl #impl_generics #get_type_meta_ for #real_ident #ty_generics #where_clause {
             fn get_type_meta() -> #type_meta_ {
-                let mut #outer_ = #type_meta_::with_capacity::<Self>(#trait_counter);
-                #type_meta_::insert_trait::<#type_trait_from_ptr>(&mut #outer_, #from_type_::<Self>::from_type());
+                let mut #outer_ = #type_meta_::with_capacity::<Self>(#data_counter);
+                #type_meta_::insert_data::<#type_data_from_ptr>(&mut #outer_, #from_type_::<Self>::from_type());
                 #insert_from_reflect
                 #insert_default
                 #insert_serialize
