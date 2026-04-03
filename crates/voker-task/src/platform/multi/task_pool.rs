@@ -177,9 +177,9 @@ thread_local! {
 }
 
 /// A thread pool for executing asynchronous tasks.
-///
+/// 
 /// Manages multi-threaded resources and schedules asynchronous workloads.
-/// Internally guarantees at least one worker thread (even if the builder is configured with `0`).
+/// Note that `0` threads are feasible, then all tasks run on the main thread.
 ///
 /// ---
 ///
@@ -308,8 +308,7 @@ impl Default for TaskPool {
 impl TaskPool {
     /// Creates a `TaskPool` with default configuration.
     /// 
-    /// The worker count defaults to [`available_parallelism`]
-    /// and is never lower than `1`.
+    /// The worker count defaults to [`available_parallelism`] and at least `1`.
     /// 
     /// # Examples
     /// 
@@ -329,8 +328,7 @@ impl TaskPool {
         // Set the number of threads based on Builder or available_parallelism.
         let thread_num = builder
             .thread_num
-            .unwrap_or_else(|| available_parallelism().get())
-            .max(1); // At least one working thread.
+            .unwrap_or_else(|| available_parallelism().get());
 
         // GlobalExecutor
         let executor = Arc::new(GlobalExecutor::new(thread_num));
@@ -426,7 +424,7 @@ impl TaskPool {
     /// poll tasks submitted via [`TaskPool::spawn_local`].
     #[inline]
     pub fn local_ticker() -> ThreadExecutorTicker<'static, 'static> {
-        THREAD_EXECUTOR.with(|ex|{
+        THREAD_EXECUTOR.with(|ex: &Arc<ThreadExecutor>|{
             let ex: &ThreadExecutor = ex; // From Arc to Inner
             #[expect(unsafe_code, reason = "need to transmute lifetime.")]
             let ex: &'static ThreadExecutor = unsafe { mem::transmute(ex) };
@@ -583,11 +581,11 @@ impl TaskPool {
         F: for<'scope> FnOnce(&'scope Scope<'scope, 'env, T>),
         T: Send + 'static,
     {
-        THREAD_EXECUTOR.with(|ex| {
+        THREAD_EXECUTOR.with(|ex: &Arc<ThreadExecutor>| {
             // If an `remote_executor` is passed, use that.
             // Otherwise, use local executor instead.
-            let local = &**ex;
-            let remote = remote_ex.unwrap_or(local);
+            let local: &ThreadExecutor = ex; // From Arc to Inner
+            let remote: &ThreadExecutor = remote_ex.unwrap_or(local);
             self.scope_with_inner(tick_global, remote, local, f)
         })
     }
@@ -649,8 +647,8 @@ impl TaskPool {
             return Vec::new();
         }
 
-        // self.threads.len() >= 1.
-        // let tick_global = tick_global || self.threads.is_empty();
+        // If there are not worker threads, we must tick global executor explicitly. 
+        let tick_global = tick_global || self.threads.is_empty();
 
         // we get this from a thread local so we should always be on the scope executors thread.
         let local_ticker = unsafe {

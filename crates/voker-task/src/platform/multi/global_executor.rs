@@ -29,13 +29,9 @@ use super::XorShift64Star;
 
 /// Capacity of each worker's local task queue.
 /// 
-/// Using 63 ensures `crossbeam::ArrayQueue` allocates exactly 64 slots (next power of two).
+/// Using 63 ensures `crossbeam::ArrayQueue` allocates exactly 64 slots( (x+1).next_power_of_two ).
 /// This balance provides good throughput while keeping cache footprint reasonable.
 const WORKER_QUEUE_SIZE: usize = 63;
-
-/// Number of tasks processed before a worker yields to the scheduler.
-/// This prevents long-running tasks from starving other work.
-const RUN_BATCH: usize = 200;
 
 // -----------------------------------------------------------------------------
 // GlobalExecutor
@@ -61,9 +57,9 @@ const RUN_BATCH: usize = 200;
 /// 
 /// Since we have three task pools but the main thread only has one `Worker`,
 /// the main thread's `Worker` is not bound to any specific `GlobalExecutor`.
-/// Consequently, the main thread `Worker` has no local queue and directly
-/// pulls tasks from the caller's global queue. It maintains a high frequency
-/// of `yield` operations to avoid blocking the main thread.
+/// Consequently, the main thread `Worker` directly pulls tasks from the caller's
+/// global queue or the **last** local queue in the state. It maintains a high
+/// frequency of `yield` operations to avoid blocking the main thread.
 pub(super) struct GlobalExecutor<'a> {
     state: State,
     _marker: PhantomData<UnsafeCell<&'a ()>>,
@@ -79,9 +75,15 @@ pub(super) struct GlobalExecutor<'a> {
 struct State {
     /// Shared global queue
     queue: ListQueue<Runnable>,
-    /// “Seats” for worker threads; length equals the number of workers
+    /// “Seats” for worker threads; length equals
+    /// 1 (main-thread) + the number of workers
+    /// 
+    /// worker_num: the number of worker threads
+    /// seats[..worker_num] -> Workers' local queue
+    /// seats[worker_num] -> Main Executor's local queue
     seats: CachePadded<Box<[Seat]>>,
-    /// Manages sleeping workers and stores their wakers
+    /// Manages sleeping workers and stores their wakers;
+    /// length equals the number of workers(without main thread).
     lounge: Mutex<Lounge>,
     /// Indicates whether a worker is currently being woken up.
     /// This flag ensures workers are woken one by one, preventing thundering herd.
@@ -101,6 +103,9 @@ struct State {
 /// 
 /// The seat metaphor helps visualize the fixed number of workers
 /// that can participate in a task pool.
+/// 
+/// seats[..worker_num] -> Workers' local queue
+/// seats[worker_num] -> Main Executor's local queue
 struct Seat {
     /// Local, bounded task queue for this worker
     /// Uses `ArrayQueue` for lock-free push/pop operations
@@ -164,11 +169,14 @@ thread_local! {
 /// - **Waking** (transitioning from sleeping to working)
 /// - **Sleeping**
 /// 
-/// A worker that fails to obtain a runnable while working will transition to **Waking**.
-/// If it fails again, it will go to **Sleeping** and return `Pending`.
+/// Then a **Working** worker that fails to obtain a runnable,
+/// it will transition to **Sleeping** and try obtain again.
+/// If it fails again, it will return `Pending` and sleep thread.
 /// 
-/// When a sleeping worker is woken, it becomes **Working** if a runnable is obtained;
-/// otherwise it returns to **Sleeping**.
+/// When a sleeping worker is woken, it becomes **Waking**.
+/// If a runnable is obtained, it becomes **Working**;
+/// otherwise it returns to **Sleeping** and try obtain again,
+/// If it fails again, it will return `Pending` and sleep thread.
 struct Lounge {
     /// Number of workers currently sleeping (with registered wakers)
     sleeping: usize,
@@ -195,7 +203,7 @@ impl Lounge {
         self.sleeping += 1;
     }
 
-    /// Updates an existing waker or registers a new one (Waking → Sleeping)
+    /// Updates an existing waker or registers a new one (Waking/Sleeping → Sleeping)
     /// 
     /// Returns `true` if the state changed from Waking to Sleeping,
     /// `false` if the worker was already Sleeping.
@@ -254,18 +262,17 @@ impl Lounge {
     /// 
     /// This implements a "soft" wakeup strategy - only one worker
     /// is woken per available task, reducing contention.
-    fn wake_one(&mut self) {
+    #[must_use]
+    fn wake_one(&mut self) -> Option<Waker> {
         // Only wake a worker if no wakeup is already happening
-        if !self.is_waking() {
-            for item in self.wakers.iter_mut() {
-                if let Some(wake) = item.take() {
-                    self.sleeping -= 1;
-                    self.waking += 1;
-                    wake.wake();
-                    return;
-                }
+        for item in self.wakers.iter_mut() {
+            if item.is_some() {
+                self.sleeping -= 1;
+                self.waking += 1;
+                return item.take();
             }
         }
+        None
     }
 }
 
@@ -286,11 +293,16 @@ impl State {
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
-            self
+            let waker = self
                 .lounge
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .wake_one();
+
+            // Reduce the time that occupied lock
+            if let Some(waker) = waker {
+                waker.wake();
+            }
         }
     }
 }
@@ -300,35 +312,34 @@ impl State {
 
 impl Worker {
     #[inline(never)]
-    fn steal_global(&self) -> Option<Runnable> {
-        /// We assume that steal from other workers frequently failed.
-        #[inline(never)]
-        fn steal_global_inner(src: &ListQueue<Runnable>, dst: &ArrayQueue<Runnable>) {
-            let mut deque = ArrayDeque::<Runnable, WORKER_QUEUE_SIZE>::new();
+    fn steal_global(src: &ListQueue<Runnable>, dst: &ArrayQueue<Runnable>) {
+        let mut deque = ArrayDeque::<Runnable, WORKER_QUEUE_SIZE>::new();
 
-            let mut guard = src.lock_pop();
-            for _ in 0..WORKER_QUEUE_SIZE {
-                if let Some(runnable) = src.pop_with_lock(&mut guard) {
-                    // SAFETY: WORKER_QUEUE_SIZE == capacity.
-                    unsafe{ deque.push_back_unchecked(runnable); }
-                } else {
-                    break;
-                }
-            }
-            ::core::mem::drop(guard);
-
-            while let Some(runnable) = deque.pop_front() {
-                let ret = dst.push(runnable);
-                debug_assert!(ret.is_ok());
-                unsafe { ret.unwrap_unchecked(); }
+        let mut guard = src.lock_pop();
+        for _ in 0..WORKER_QUEUE_SIZE {
+            if let Some(runnable) = src.pop_with_lock(&mut guard) {
+                // SAFETY: WORKER_QUEUE_SIZE == capacity.
+                unsafe{ deque.push_back_unchecked(runnable); }
+            } else {
+                break;
             }
         }
-        
+        ::core::mem::drop(guard);
+
+        while let Some(runnable) = deque.pop_front() {
+            let ret = dst.push(runnable);
+            debug_assert!(ret.is_ok());
+            unsafe { ret.unwrap_unchecked(); }
+        }
+    }
+
+    #[inline(never)]
+    fn steal_global_for_work(&self) -> Option<Runnable> {
         let src: &ListQueue<Runnable> = &self.state().queue;
         let dst: &ArrayQueue<Runnable> = self.queue();
 
         if let Some(r) = src.pop() {
-            steal_global_inner(src, dst);
+            Worker::steal_global(src, dst);
             self.wake();
             self.wake_one();
             return Some(r);
@@ -338,22 +349,38 @@ impl Worker {
     }
 
     #[inline(never)]
-    fn steal_worker(&self) -> Option<Runnable> {
-        /// We assume that steal from other workers frequently failed.
-        #[inline(never)]
-        fn steal_woker_inner(src: &ArrayQueue<Runnable>, dst: &ArrayQueue<Runnable>) {
-            let len = (src.len() + 1) >> 1;
-            for _ in 0..len {
-                if let Some(runnable) = src.pop() {
-                    let ret = dst.push(runnable);
-                    debug_assert!(ret.is_ok());
-                    unsafe { ret.unwrap_unchecked(); }
-                } else {
-                    return;
-                }
-            }
+    fn steal_global_for_main(&self, state: &State) -> Option<Runnable> {
+        let worker_num = state.seats.len() - 1;
+        let src: &ListQueue<Runnable> = &state.queue;
+        let dst: &ArrayQueue<Runnable> = &state.seats[worker_num].queue;
+
+        if let Some(r) = src.pop() {
+            Worker::steal_global(src, dst);
+            state.wake_one();
+            return Some(r);
         }
 
+        None
+    }
+
+    #[inline(never)]
+    fn steal_woker(src: &ArrayQueue<Runnable>, dst: &ArrayQueue<Runnable>) {
+        let len = src.len() >> 1;
+        // if src.len == 1, we do not steal,
+        // because we already stealed one before this function. 
+        for _ in 0..len {
+            if let Some(runnable) = src.pop() {
+                let ret = dst.push(runnable);
+                debug_assert!(ret.is_ok());
+                unsafe { ret.unwrap_unchecked(); }
+            } else {
+                return;
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn steal_worker_for_work(&self) -> Option<Runnable> {
         let state = self.state();
         let dst: &ArrayQueue<Runnable> = self.queue();
 
@@ -366,12 +393,37 @@ impl Worker {
             .filter(|seat| !ptr::eq(&seat.queue, dst));
 
         // Try stealing from each local queue in the list.
-        for worker_seat in iter {
-            let src: &ArrayQueue<Runnable> = &worker_seat.queue;
+        for seat in iter {
+            let src: &ArrayQueue<Runnable> = &seat.queue;
             if let Some(r) = src.pop() {
-                steal_woker_inner(src, dst);
+                Worker::steal_woker(src, dst);
                 self.wake();
                 self.wake_one();
+                return Some(r);
+            }
+        }
+
+        None
+    }
+
+    #[inline(never)]
+    fn steal_worker_for_main(&self, state: &State) -> Option<Runnable> {
+        let worker_num = state.seats.len();
+        let dst: &ArrayQueue<Runnable> = &state.seats[worker_num - 1].queue;
+
+        // Pick a random starting point in the iterator list and rotate the list.
+        let start = self.xor_shift.next_usize(worker_num);
+        let iter = state.seats[start..]
+            .iter()
+            .chain(state.seats[..start].iter())
+            .filter(|seat| !ptr::eq(&seat.queue, dst));
+
+        // Try stealing from each local queue in the list.
+        for seat in iter {
+            let src: &ArrayQueue<Runnable> = &seat.queue;
+            if let Some(r) = src.pop() {
+                Worker::steal_woker(src, dst);
+                state.wake_one();
                 return Some(r);
             }
         }
@@ -413,6 +465,7 @@ impl Worker {
             // Working → Sleeping
             lounge.insert(self.seat_index.get(), waker);
             self.working.set(false);
+            // loop again
         } else {
             // Already not working, update waker
             if !lounge.update(self.seat_index.get(), waker) {
@@ -427,7 +480,7 @@ impl Worker {
         true
     }
 
-    /// Set self to `Working`.
+    /// Wakes this worker (**Sleeping/Waking** → **Working**).
     #[inline]
     fn wake(&self) {
         /// Wakes this worker (Sleeping → Working or Waking → Working).
@@ -451,7 +504,8 @@ impl Worker {
             wake_internal(self);
         }
     }
-
+    
+    /// Wakes an other worker if exist. (**Sleeping** → **Waking**).
     #[inline]
     fn wake_one(&self) {
         self.state().wake_one();
@@ -474,63 +528,76 @@ impl Worker {
         }
 
         voker_utils::cold_path();
-        self.steal_global().or_else(|| self.steal_worker())
+        self.steal_global_for_work().or_else(|| self.steal_worker_for_work())
     }
 
-    /// Wakes this worker (transition: **Sleeping** → **Working** or **Waking** → **Working**).
+    /// Attempts to get a runnable task
+    /// 
+    /// - Return Ready and set **Working** if successed.
+    /// - Return Pending and set **Sleeping** if repeatedly failed.
     async fn runnable(&self) -> Runnable {
         poll_fn(|cx| {
             loop {
-                match self.fetch_runnable() {
-                    None => {
-                        // It will only enter sleep after the second `None`.
-                        if !self.sleep(cx.waker()) {
-                            // Sleeping -> Sleeping, return Pending
-                            return Poll::Pending;
-                        }
-                        // else: Working/Waking -> Sleeping, try again.
-                    }
-                    Some(r) => {
-                        return Poll::Ready(r);
-                    }
+                if let Some(r) = self.fetch_runnable() {
+                    return Poll::Ready(r);
                 }
+                // Only enter sleep after the second `None`.
+                if !self.sleep(cx.waker()) {
+                    // Sleeping -> Sleeping, return Pending
+                    return Poll::Pending;
+                }
+                // else: Working/Waking -> Sleeping, try again.
             }
         })
         .await
     }
 
+    /// Worker thread:
+    /// - Uses work-stealing from local/global/other workers
+    /// - Processes in batches of `RUN_BATCH` tasks before yielding
+    async fn work_run(&self) -> ! {
+        /// Number of tasks processed before a worker yields to the scheduler.
+        /// This prevents long-running tasks from starving other work.
+        const RUN_BATCH: usize = 200;
+
+        loop {
+            for _ in 0..RUN_BATCH {
+                let runnable = self.runnable().await;
+                runnable.run();
+            }
+            futures_lite::future::yield_now().await;
+        }
+    }
+
+
+    /// Main thread:
+    /// - Polls the last local queue and global queue, support stealing.
+    /// - Yields frequently to avoid starving bound workers
+    async fn main_run(&self, state: &State) -> ! {
+        let last = state.seats.len() - 1;
+        let queue = &state.seats[last].queue;
+
+        loop {
+            let runnable = queue.pop()
+                .or_else(|| self.steal_global_for_main(state))
+                .or_else(|| self.steal_worker_for_main(state));
+
+            if let Some(runnable) = runnable {
+                runnable.run();
+            }
+            futures_lite::future::yield_now().await;
+        }
+    }
+
     /// Main worker execution loop
     /// 
     /// Continuously processes tasks until `stop_signal` future completes.
-    /// 
-    /// # Behavior by thread type:
-    /// 
-    /// ## Worker thread:
-    /// - Uses work-stealing from local/global/other workers
-    /// - Processes in batches of `RUN_BATCH` tasks before yielding
-    /// - Periodic global queue stealing for fairness
-    /// 
-    /// ## Main thread:
-    /// - Directly polls global queue (no work stealing)
-    /// - Yields frequently to avoid starving bound workers
-    /// - Used for running futures that need to block on pool completion
     async fn run<T>(&self, state: &State, stop_signal: impl Future<Output = T>) -> T {
         let run_forever = async {
             if self.queue.get().is_null() {
-                loop{ 
-                    if let Some(runnable) = state.queue.pop() {
-                        runnable.run();
-                    }
-                    futures_lite::future::yield_now().await; 
-                }
+                self.main_run(state).await;
             } else {
-                loop {
-                    for _ in 0..RUN_BATCH {
-                        let runnable = self.runnable().await;
-                        runnable.run();
-                    }
-                    futures_lite::future::yield_now().await;
-                }
+                self.work_run().await;
             }
         };
 
@@ -554,22 +621,27 @@ impl<'a> GlobalExecutor<'a> {
     /// - Lounge has no sleeping workers
     /// - `is_waking` is true (all workers considered active initially)
     pub fn new(worker_num: usize) -> Self {
+        // idle capacity is 32 * 64 == 2048, appropriate?
+        let queue: ListQueue<Runnable> = ListQueue::new(32);
+        // [0..worker_num] for worker thread, [worker_num] for main thread.
+        let seats: CachePadded<Box<[Seat]>> = CachePadded::new(
+            (0..=worker_num).map(|_|Seat{
+                occupied: AtomicBool::new(false),
+                queue: ArrayQueue::new(WORKER_QUEUE_SIZE),
+            }).collect()
+        );
+        // occupy main thread queue
+        seats[worker_num].occupied.store(true, Ordering::Release);
+        // [0..worker_num] for worker thread, without main thread
+        let lounge: Mutex<Lounge> = Mutex::new(Lounge {
+            waking: 0,
+            sleeping: 0,
+            wakers: (0..worker_num).map(|_|None).collect(),
+        });
+        let is_waking: AtomicBool = AtomicBool::new(true);
+
         Self {
-            state: State {
-                queue: ListQueue::new(64),
-                seats: CachePadded::new(
-                    (0..worker_num).map(|_|Seat{
-                        occupied: AtomicBool::new(false),
-                        queue: ArrayQueue::new(WORKER_QUEUE_SIZE),
-                    }).collect()
-                ),
-                lounge: Mutex::new(Lounge {
-                    waking: 0,
-                    sleeping: 0,
-                    wakers: (0..worker_num).map(|_|None).collect(),
-                }),
-                is_waking: AtomicBool::new(true),
-            },
+            state: State { queue, seats, lounge, is_waking },
             _marker: PhantomData,
         }
     }
@@ -592,7 +664,6 @@ impl<'a> GlobalExecutor<'a> {
 
             worker.state.set(&self.state);
 
-            // Try to claim a seat (max 10 attempts to avoid infinite loops)
             for (index, seat) in self.state.seats.iter().enumerate()  {
                 if !seat.occupied.swap(true, Ordering::AcqRel) {
                     worker.queue.set(&seat.queue);
@@ -618,14 +689,7 @@ impl<'a> GlobalExecutor<'a> {
             state.wake_one();
         };
 
-        // # SAFETY:
-        // - If `Fut` is not [`Send`], its [`Runnable`] must be used and dropped on the original
-        //   thread.
-        // - If `Fut` is not `'static`, borrowed non-metadata variables must outlive its [`Runnable`].
-        // - If `schedule` is not [`Send`] and [`Sync`], all instances of the [`Runnable`]'s [`Waker`]
-        //   must be used and dropped on the original thread.
-        // - If `schedule` is not `'static`, borrowed variables must outlive all instances of the
-        //   [`Runnable`]'s [`Waker`].
+        // # SAFETY: See in async_task::spawn_unchecked
         let (runnable, task) = unsafe {
             async_task::Builder::new()
                 .propagate_panic(true)
@@ -639,23 +703,12 @@ impl<'a> GlobalExecutor<'a> {
     }
 
     /// Runs the executor until the given future completes
-    /// 
-    /// This method:
-    /// 1. Uses the current thread's worker to process tasks
-    /// 2. Continuously executes tasks from the pool
-    /// 3. Returns when the provided future completes
-    /// 
-    /// If called on main thread, it will directly poll the global
-    /// queue without work stealing.
     #[inline]
     pub async fn run<T>(&self, stop_signal: impl Future<Output = T>) -> T {
-        LOCAL_WORKER.with(|local_worker|{
-            // SAFETY: The thread-local worker lives as long as the thread,
-            // which outlives this async call. The transmute extends the lifetime
-            // for the duration of the async block.
-            let local_worker: &'static Worker =
-                unsafe{ core::mem::transmute::<&Worker, &'static Worker>(local_worker) };
-            local_worker.run(&self.state, stop_signal)
+        LOCAL_WORKER.with(|local_worker: &Worker|{
+            // SAFETY: The thread-local worker lives as long as the thread.
+            let worker: &'static Worker = unsafe{ core::mem::transmute(local_worker) };
+            worker.run(&self.state, stop_signal)
         }).await
     }
 }
@@ -667,8 +720,9 @@ impl RefUnwindSafe for GlobalExecutor<'_> {}
 
 impl fmt::Debug for GlobalExecutor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let worker_num = self.state.seats.len() - 1;
         f.debug_struct("GlobalExecutor")
-            .field("worker_count", &self.state.seats.len())
+            .field("worker_num", &worker_num)
             .finish()
     }
 }
