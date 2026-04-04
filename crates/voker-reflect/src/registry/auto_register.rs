@@ -12,11 +12,6 @@ pub struct RegisterFn(fn(&mut TypeRegistry) -> &mut TypeRegistry);
 /// A trait for avoiding duplicate registration.
 pub trait AutoRegister: GetTypeMeta {}
 
-/// A flag used to mark that automatic registration has been completed.
-#[derive(Reflect)]
-#[reflect(FromReflect = false, GetTypeMeta = false)]
-pub struct AutoRegisterFlag;
-
 impl RegisterFn {
     pub const fn of<T: GetTypeMeta>() -> Self {
         Self(TypeRegistry::register::<T>)
@@ -26,6 +21,11 @@ impl RegisterFn {
 inv::collect!(RegisterFn);
 
 inv::submit!(RegisterFn::of::<AutoRegisterFlag>() => RegisterFn);
+
+/// A flag used to mark that automatic registration has been completed.
+#[derive(Reflect)]
+#[reflect(FromReflect = false, GetTypeMeta = false)]
+pub struct AutoRegisterFlag;
 
 impl AutoRegister for AutoRegisterFlag {}
 

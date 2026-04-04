@@ -694,7 +694,7 @@ impl dyn Reflect {
     /// assert!( d.represents::<Vec<i32>>() );
     /// ```
     #[inline]
-    pub fn represents<T: Reflect>(&self) -> bool {
+    pub fn represents<T: Any>(&self) -> bool {
         match self.represented_type_info() {
             Some(t) => t.type_id() == TypeId::of::<T>(),
             None => false,

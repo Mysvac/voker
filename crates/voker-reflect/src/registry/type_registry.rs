@@ -1,4 +1,5 @@
 use core::any::TypeId;
+use core::fmt::Debug;
 
 use voker_utils::extra::TypeIdMap;
 use voker_utils::hash::{HashMap, HashSet};
@@ -400,6 +401,12 @@ impl TypeRegistry {
     }
 }
 
+impl Debug for TypeRegistry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.type_path_to_id.keys().fmt(f)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // TypeRegistryArc
 
@@ -424,7 +431,7 @@ impl TypeRegistryArc {
     }
 }
 
-impl core::fmt::Debug for TypeRegistryArc {
+impl Debug for TypeRegistryArc {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.internal
             .read()
@@ -485,26 +492,20 @@ mod tests {
         let mut registry = TypeRegistry::default();
         registry.register::<NeedsDefault>();
 
-        assert!(registry.contains(TypeId::of::<NeedsDefault>()));
-        assert!(
-            registry
-                .get_type_data::<ReflectDefault>(TypeId::of::<NeedsDefault>())
-                .is_some()
-        );
-        assert!(
-            registry
-                .get_type_data::<ReflectFromPtr>(TypeId::of::<NeedsDefault>())
-                .is_some()
-        );
+        let type_id = TypeId::of::<NeedsDefault>();
+        assert!(registry.contains(type_id));
+        assert!(registry.get_type_data::<ReflectDefault>(type_id).is_some());
+        assert!(registry.get_type_data::<ReflectFromPtr>(type_id).is_some());
 
         let with_default: Vec<_> = registry
             .iter_with_data::<ReflectDefault>()
             .map(|(meta, _)| meta.type_id())
             .collect();
-        assert!(with_default.contains(&TypeId::of::<NeedsDefault>()));
+
+        assert!(with_default.contains(&type_id));
 
         let arc = TypeRegistryArc::default();
         arc.write().register::<NeedsDefault>();
-        assert!(arc.read().contains(TypeId::of::<NeedsDefault>()));
+        assert!(arc.read().contains(type_id));
     }
 }
