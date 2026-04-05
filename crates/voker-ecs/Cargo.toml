@@ -21,6 +21,7 @@ debug = []
 voker-ptr = { path = "../voker-ptr" }
 voker-cfg = { path = "../voker-cfg" }
 voker-utils = { path = "../voker-utils" }
+voker-inventory = { path = "../voker-inventory" }
 
 voker-ecs-derive = { path = "derive" }
 

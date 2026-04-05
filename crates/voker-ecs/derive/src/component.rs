@@ -119,7 +119,7 @@ pub(crate) fn impl_derive_component(ast: DeriveInput) -> TokenStream {
         Cloner::Auto => quote! {
             fn cloner() -> #OptionFP<#cloner_> {
                 use #macro_utils_::cloner::*;
-                (&&&&__CloneSpec::<Self>::INS).__specialized_cloner()
+                (&&&&CloneSpec::<Self>::INS).__specialized_cloner()
             }
         },
     };

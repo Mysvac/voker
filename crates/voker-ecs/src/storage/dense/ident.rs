@@ -20,13 +20,31 @@ impl TableId {
     /// Sentinel value representing a empty table (no compoennts).
     pub const EMPTY: TableId = TableId(NonMaxU32::ZERO);
 
-    /// Creates a new `TableId` from a raw u32.
-    ///
     /// # Panics
     /// Panics if `id` would cause the maximum number of tables to be exceeded.
     #[inline]
     pub(crate) const fn new(id: u32) -> Self {
         Self(NonMaxU32::new(id).expect("too many tables"))
+    }
+
+    /// # Safety
+    /// The value must not be the maximum value of the underlying integer type.
+    #[inline(always)]
+    pub(crate) const unsafe fn new_unchecked(id: u32) -> Self {
+        Self(unsafe { NonMaxU32::new_unchecked(id) })
+    }
+
+    /// Creates a new `TableId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id` >= u32::MAX.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id >= u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("TableId must be < u32::MAX");
+        }
+        unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
     }
 
     /// Returns the table index as a usize.

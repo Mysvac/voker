@@ -24,6 +24,19 @@ impl ComponentId {
         Self(NonMaxU32::new(id).expect("too many components"))
     }
 
+    /// Creates a new `ComponentId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id` >= u32::MAX.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id >= u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("ComponentId must be < u32::MAX");
+        }
+        unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
+    }
+
     /// Convert `ComponentId` to usize.
     #[inline(always)]
     pub const fn index(self) -> usize {

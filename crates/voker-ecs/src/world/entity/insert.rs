@@ -37,7 +37,7 @@ impl EntityOwned<'_> {
     #[track_caller]
     pub fn insert<B: Bundle>(&mut self, bundle: B) {
         let world = unsafe { self.world.full_mut() };
-        let bundle_id = world.register_bundle::<B>();
+        let bundle_id = world.register_required_bundle::<B>();
         let old_arche_id = self.location.arche_id;
         let new_arche_id = world.arche_after_insert(old_arche_id, bundle_id);
 

@@ -24,6 +24,19 @@ impl MapId {
         Self(NonMaxU32::new(id).expect("too many maps"))
     }
 
+    /// Creates a new `MapId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id` >= u32::MAX.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id >= u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("MapId must be < u32::MAX");
+        }
+        unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
+    }
+
     /// Returns the map index as a usize.
     #[inline(always)]
     pub const fn index(self) -> usize {

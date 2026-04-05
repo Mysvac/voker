@@ -14,13 +14,7 @@ impl EntityOwned<'_> {
     ///
     /// ## If required components are involved
     ///
-    /// For the specified set of components to remove `A`:
-    /// 1. Attempt to remove `A`'s required components `B`
-    /// 2. Only remove the removable parts, i.e., components that exist and are not
-    ///    depended upon by components outside of `A + B`.
-    ///
-    /// For example, given an entity `(A, B, C)` where `B` requires `A`:
-    /// You cannot remove only `A`. When removing `B`, `A` will be automatically removed.
+    /// Only remove the removable parts.
     ///
     /// # Examples
     ///
@@ -34,15 +28,17 @@ impl EntityOwned<'_> {
     /// let mut world = World::alloc();
     ///
     /// let mut entity = world.spawn((Foo, Bar));
+    /// assert!(entity.contains::<Foo>());
     /// assert!(entity.contains::<Bar>());
     ///
     /// entity.remove::<Bar>();
+    /// assert!(entity.contains::<Foo>());
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[track_caller]
     pub fn remove<B: Bundle>(&mut self) {
         let world = unsafe { self.world.full_mut() };
-        let bundle_id = world.register_bundle::<B>();
+        let bundle_id = world.register_explicit_bundle::<B>();
         let old_arche_id = self.location.arche_id;
         let new_arche_id = world.arche_after_remove(old_arche_id, bundle_id);
 

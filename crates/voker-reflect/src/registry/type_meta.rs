@@ -14,7 +14,7 @@ use crate::registry::{TypeData, TypeRegistry};
 ///
 /// This includes a [`TypeInfo`] and a [`TypeData`] table.
 ///
-/// An instance of `TypeMeta` can be created using the [`TypeMeta::of`]
+/// An instance of `TypeMeta` can be created using the [`TypeMeta::new`]
 /// method, but is more often automatically generated using
 /// [`#[derive(Reflect)]`](crate::derive::Reflect), which generates
 /// an implementation of the [`GetTypeMeta`] trait.
@@ -23,7 +23,7 @@ use crate::registry::{TypeData, TypeRegistry};
 ///
 /// ```
 /// # use voker_reflect::registry::{TypeMeta, ReflectDefault, FromType};
-/// let mut meta = TypeMeta::of::<String>();
+/// let mut meta = TypeMeta::new::<String>();
 /// meta.insert_data::<ReflectDefault>(FromType::<String>::from_type());
 ///
 /// let f = meta.get_data::<ReflectDefault>().unwrap();
@@ -55,10 +55,10 @@ impl TypeMeta {
     ///
     /// ```
     /// use voker_reflect::registry::TypeMeta;
-    /// let mut meta = TypeMeta::of::<String>();
+    /// let mut meta = TypeMeta::new::<String>();
     /// ```
     #[inline]
-    pub fn of<T: Typed>() -> Self {
+    pub fn new<T: Typed>() -> Self {
         let type_info = T::type_info();
         let ty = type_info.ty();
         Self {
@@ -281,7 +281,7 @@ impl core::fmt::Debug for TypeMeta {
 ///
 /// impl GetTypeMeta for A {
 ///     fn get_type_meta() -> TypeMeta {
-///         let mut meta = TypeMeta::of::<Self>();
+///         let mut meta = TypeMeta::new::<Self>();
 ///         meta.insert_data::<MyDisplayFromReflect>(FromType::<Self>::from_type());
 ///         meta
 ///     }

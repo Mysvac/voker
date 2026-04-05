@@ -16,11 +16,8 @@ pub struct Components {
     mapper: TypeIdMap<ComponentId>,
 }
 
-impl Debug for Components {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        Debug::fmt(&self.infos, f)
-    }
-}
+// -----------------------------------------------------------------------------
+// Private
 
 impl Components {
     /// Creates a new empty component registry.
@@ -31,7 +28,18 @@ impl Components {
             mapper: TypeIdMap::new(),
         }
     }
+}
 
+// -----------------------------------------------------------------------------
+// Basic
+
+impl Debug for Components {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Debug::fmt(self.infos.as_slice(), f)
+    }
+}
+
+impl Components {
     /// Returns the number of registered components.
     #[inline]
     #[expect(clippy::len_without_is_empty, reason = "useless")]
@@ -55,7 +63,7 @@ impl Components {
     ///
     /// # Safety
     /// The caller must ensure `id` is a valid ID (i.e., `id.index() < self.len()`).
-    #[inline]
+    #[inline(always)]
     pub unsafe fn get_unchecked(&self, id: ComponentId) -> &ComponentInfo {
         debug_assert!(id.index() < self.infos.len());
         unsafe { self.infos.get_unchecked(id.index()) }

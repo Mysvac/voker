@@ -1,15 +1,17 @@
-use crate::message::{Message, MessageRegistry};
+use crate::message::{Message, MessageRegistry, Messages};
 use crate::world::World;
 
 impl World {
     /// Registers a message type in the global message registry.
     pub fn register_message<T: Message>(&mut self) {
         self.message_registry.register_message::<T>();
+        self.init_resource::<Messages<T>>();
     }
 
     /// Deregisters a message type from the global message registry.
     pub fn deregister_message<T: Message>(&mut self) {
         self.message_registry.deregister_message::<T>();
+        self.drop_resource::<Messages<T>>();
     }
 
     /// Runs one global message-update pass for all message types in the registry.

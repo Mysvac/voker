@@ -4,31 +4,24 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Display};
 use core::hash::{BuildHasher, Hash};
 use core::ops::Deref;
+
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use voker_reflect::Reflect;
 use voker_utils::hash::FixedHashState;
 
-use crate::component::Component;
-use crate::utils::Cloner;
+use voker_ecs_derive::Component;
 
 /// A pre-built component for representing names.
 ///
 /// This component stores a name string along with its precomputed hash value,
 /// providing efficient comparison and lookup operations. The hash is computed
 /// automatically and cached to avoid repeated hashing overhead.
-#[derive(Reflect, Clone)]
+#[derive(Component, Reflect, Clone)]
 #[reflect(Opaque, full)]
 pub struct Name {
     name: Cow<'static, str>,
     hash: u64,
-}
-
-/// Manually implement to accelerate compilation.
-impl Component for Name {
-    fn cloner() -> Option<Cloner> {
-        Some(Cloner::clonable::<Self>())
-    }
 }
 
 impl Hash for Name {

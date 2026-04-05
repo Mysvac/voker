@@ -2,12 +2,13 @@ use alloc::alloc as malloc;
 use core::alloc::Layout;
 use core::fmt::Debug;
 use core::num::NonZeroUsize;
+use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::ptr::{self, NonNull};
 
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
 
 use crate::borrow::{UntypedMut, UntypedRef};
-use crate::resource::{Resource, ResourceInfo};
+use crate::resource::{Resource, ResourceId, ResourceInfo};
 use crate::tick::{Tick, TicksMut, TicksRef};
 use crate::utils::{DebugName, Dropper};
 
@@ -39,6 +40,7 @@ impl Drop for AbortOnDropFail {
 ///
 /// Manages memory allocation, initialization state, and change tracking ticks.
 pub struct ResData {
+    id: ResourceId,
     name: DebugName,
     layout: Layout,
     dropper: Option<Dropper>,
@@ -47,9 +49,81 @@ pub struct ResData {
     changed: Tick,
 }
 
+// -----------------------------------------------------------------------------
+// Private
+
+impl ResData {
+    /// Creates a new `ResData` from resource type information.
+    ///
+    /// # Safety
+    /// - `info` must correctly describe the resource type
+    /// - The memory layout must be valid for allocation
+    pub(crate) unsafe fn new(info: &ResourceInfo) -> Self {
+        Self {
+            id: info.id(),
+            name: info.debug_name(),
+            layout: info.layout(),
+            dropper: info.dropper(),
+            data: ptr::null_mut(),
+            added: Tick::new(0),
+            changed: Tick::new(0),
+        }
+    }
+
+    /// Inserts a new resource value.
+    ///
+    /// # Safety
+    /// - `value` must point to valid data matching the resource's layout
+    /// - `tick` must be a valid system tick
+    /// - If the data is NonSend, the function must be call in correct thread.
+    pub(crate) unsafe fn insert_untyped(&mut self, value: OwningPtr<'_>, tick: Tick) {
+        if let Some(data) = NonNull::new(self.data) {
+            if let Some(dropper) = self.dropper {
+                let guard = AbortOnDropFail;
+                unsafe {
+                    dropper.call(OwningPtr::new(data));
+                }
+                ::core::mem::forget(guard);
+            }
+        } else {
+            let layout = self.layout;
+            if layout.size() == 0 {
+                let align = NonZeroUsize::new(layout.align()).unwrap();
+                self.data = NonNull::without_provenance(align).as_ptr();
+            } else {
+                self.data = NonNull::new(unsafe { malloc::alloc(layout) })
+                    .unwrap_or_else(|| malloc::handle_alloc_error(layout))
+                    .as_ptr();
+            };
+            self.added = tick;
+        }
+
+        unsafe {
+            self.changed = tick;
+            ptr::copy_nonoverlapping::<u8>(value.as_ptr(), self.data, self.layout.size());
+        }
+    }
+
+    /// Updates ticks with quick-check logic.
+    #[inline(always)]
+    pub(super) fn quick_check(&mut self, now: Tick, fall_back: Tick) {
+        Tick::quick_check(&mut self.added, now, fall_back);
+        Tick::quick_check(&mut self.changed, now, fall_back);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Basic
+
+unsafe impl Sync for ResData {}
+unsafe impl Send for ResData {}
+impl UnwindSafe for ResData {}
+impl RefUnwindSafe for ResData {}
+
 impl Debug for ResData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Res")
+            .field("id", &self.id)
             .field("name", &self.name)
             .field("is_active", &self.is_active())
             .finish()
@@ -65,26 +139,6 @@ impl Drop for ResData {
 }
 
 impl ResData {
-    /// Creates a new `ResData` from resource type information.
-    ///
-    /// # Safety
-    /// - `info` must correctly describe the resource type
-    /// - The memory layout must be valid for allocation
-    pub(crate) unsafe fn new(info: &ResourceInfo) -> Self {
-        let name = info.debug_name();
-        let dropper = info.dropper();
-        let layout = info.layout();
-
-        Self {
-            name,
-            layout,
-            dropper,
-            data: ptr::null_mut(),
-            added: Tick::new(0),
-            changed: Tick::new(0),
-        }
-    }
-
     /// Returns whether the resource is currently initialized.
     #[inline(always)]
     pub fn is_active(&self) -> bool {
@@ -129,6 +183,41 @@ impl ResData {
         }
     }
 
+    /// Returns an untyped reference to the resource if initialized.
+    #[inline]
+    pub fn get_ref(&self, last_run: Tick, this_run: Tick) -> Option<UntypedRef<'_>> {
+        let data = NonNull::new(self.data)?;
+        Some(UntypedRef {
+            value: unsafe { Ptr::new(data) },
+            ticks: TicksRef {
+                added: &self.added,
+                changed: &self.changed,
+                last_run,
+                this_run,
+            },
+        })
+    }
+
+    /// Returns an untyped mutable reference to the resource if initialized.
+    #[inline]
+    pub fn get_mut(&mut self, last_run: Tick, this_run: Tick) -> Option<UntypedMut<'_>> {
+        let data = NonNull::new(self.data)?;
+        Some(UntypedMut {
+            value: unsafe { PtrMut::new(data) },
+            ticks: TicksMut {
+                added: &mut self.added,
+                changed: &mut self.changed,
+                last_run,
+                this_run,
+            },
+        })
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Insert & Remove
+
+impl ResData {
     /// Drops the resource data if initialized.
     ///
     /// # Safety
@@ -149,18 +238,19 @@ impl ResData {
         }
     }
 
+    /// Return the underlying pointer and set resource to inactive.
+    ///
     /// # Safety
     /// - If the data is NonSend, the function must be call in correct thread.
+    #[must_use]
     pub unsafe fn leak(&mut self) -> Option<(NonNull<u8>, Tick, Tick)> {
-        if !self.data.is_null() {
-            let ptr = self.data;
-            self.data = ptr::null_mut();
-            NonNull::new(ptr).map(|ptr| (ptr, self.added, self.changed))
-        } else {
-            None
-        }
+        let ptr = self.data;
+        self.data = ptr::null_mut();
+        NonNull::new(ptr).map(|ptr| (ptr, self.added, self.changed))
     }
 
+    /// Clear the old value and inserts a new resource value from pointer.
+    ///
     /// # Safety
     /// - `ptr` must matche the resource's layout
     /// - If the data is NonSend, the function must be call in correct thread.
@@ -171,23 +261,6 @@ impl ResData {
         self.added = added;
         self.changed = changed;
         self.data = ptr.as_ptr();
-    }
-
-    /// Drop the resource in situ.
-    ///
-    /// # Safety
-    /// - `T` must matche the resource's layout
-    /// - If the data is NonSend, the function must be call in correct thread.
-    pub unsafe fn drop_in_place<T: Resource>(&mut self) {
-        if !self.data.is_null() {
-            unsafe {
-                self.data.cast::<T>().drop_in_place();
-            }
-            if self.layout.size() != 0 {
-                unsafe { malloc::dealloc(self.data, self.layout) };
-            }
-            self.data = ptr::null_mut();
-        }
     }
 
     /// Removes the resource and returns ownership of its data.
@@ -222,73 +295,22 @@ impl ResData {
         unsafe { self.insert_untyped(value, tick) };
     }
 
-    /// Inserts a new resource value.
+    /// Drop the resource in situ.
+    ///
+    /// This function is faster then [`ResData::remove`].
     ///
     /// # Safety
-    /// - `value` must point to valid data matching the resource's layout
-    /// - `tick` must be a valid system tick
+    /// - `T` must matche the resource's layout
     /// - If the data is NonSend, the function must be call in correct thread.
-    pub unsafe fn insert_untyped(&mut self, value: OwningPtr<'_>, tick: Tick) {
-        if let Some(data) = NonNull::new(self.data) {
-            if let Some(dropper) = self.dropper {
-                let guard = AbortOnDropFail;
-                unsafe {
-                    dropper.call(OwningPtr::new(data));
-                }
-                ::core::mem::forget(guard);
+    pub unsafe fn drop_in_place<T: Resource>(&mut self) {
+        if !self.data.is_null() {
+            unsafe {
+                self.data.cast::<T>().drop_in_place();
             }
-        } else {
-            let layout = self.layout;
-            if layout.size() == 0 {
-                let align = NonZeroUsize::new(layout.align()).unwrap();
-                self.data = NonNull::without_provenance(align).as_ptr();
-            } else {
-                self.data = NonNull::new(unsafe { malloc::alloc(layout) })
-                    .unwrap_or_else(|| malloc::handle_alloc_error(layout))
-                    .as_ptr();
-            };
-            self.added = tick;
+            if self.layout.size() != 0 {
+                unsafe { malloc::dealloc(self.data, self.layout) };
+            }
+            self.data = ptr::null_mut();
         }
-        unsafe {
-            self.changed = tick;
-            ptr::copy_nonoverlapping::<u8>(value.as_ptr(), self.data, self.layout.size());
-        }
-    }
-
-    /// Returns an untyped reference to the resource if initialized.
-    #[inline]
-    pub fn get_ref(&self, last_run: Tick, this_run: Tick) -> Option<UntypedRef<'_>> {
-        let data = NonNull::new(self.data)?;
-        Some(UntypedRef {
-            value: unsafe { Ptr::new(data) },
-            ticks: TicksRef {
-                added: &self.added,
-                changed: &self.changed,
-                last_run,
-                this_run,
-            },
-        })
-    }
-
-    /// Returns an untyped mutable reference to the resource if initialized.
-    #[inline]
-    pub fn get_mut(&mut self, last_run: Tick, this_run: Tick) -> Option<UntypedMut<'_>> {
-        let data = NonNull::new(self.data)?;
-        Some(UntypedMut {
-            value: unsafe { PtrMut::new(data) },
-            ticks: TicksMut {
-                added: &mut self.added,
-                changed: &mut self.changed,
-                last_run,
-                this_run,
-            },
-        })
-    }
-
-    /// Updates ticks with quick-check logic.
-    #[inline(always)]
-    pub(super) fn quick_check(&mut self, now: Tick, fall_back: Tick) {
-        Tick::quick_check(&mut self.added, now, fall_back);
-        Tick::quick_check(&mut self.changed, now, fall_back);
     }
 }

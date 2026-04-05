@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::iter::FusedIterator;
 use core::ptr::NonNull;
 
@@ -41,7 +40,7 @@ impl<'a> BundleSpawner<'a> {
                 return id;
             }
 
-            let dense_len = info.dense_len();
+            let dense_len = info.dense_components().len();
             let components = info.clone_components();
             let table_id = unsafe {
                 let sparses = info.sparse_components();
@@ -163,7 +162,7 @@ impl World {
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityOwned<'_> {
-        let bundle_id = self.register_bundle::<B>();
+        let bundle_id = self.register_required_bundle::<B>();
 
         let mut spawner = BundleSpawner::new(
             self,
@@ -214,7 +213,7 @@ impl World {
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
     pub fn spawn_at<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityOwned<'_> {
-        let bundle_id = self.register_bundle::<B>();
+        let bundle_id = self.register_required_bundle::<B>();
 
         let mut spawner = BundleSpawner::new(
             self,
@@ -250,13 +249,7 @@ where
     I::Item: Bundle,
 {
     fn drop(&mut self) {
-        let len = self.allocator.len();
-        if len > 0 {
-            let mut buffer = Vec::with_capacity(len);
-            self.allocator.by_ref().for_each(|e| buffer.push(e));
-            let world = unsafe { self.spawner.world.full_mut() };
-            world.allocator.free_many(&buffer);
-        }
+        self.by_ref().for_each(|_| {});
     }
 }
 
@@ -283,17 +276,6 @@ where
     }
 }
 
-impl<I> SpawnBatchIter<'_, I>
-where
-    I: Iterator,
-    I::Item: Bundle,
-{
-    #[inline]
-    pub fn exhaust(self) {
-        self.for_each(|_| {});
-    }
-}
-
 impl<I: ExactSizeIterator<Item: Bundle>> ExactSizeIterator for SpawnBatchIter<'_, I> {}
 impl<I: FusedIterator<Item: Bundle>> FusedIterator for SpawnBatchIter<'_, I> {}
 
@@ -302,10 +284,8 @@ impl World {
     ///
     /// # Important
     ///
-    /// Entity **spawning is lazy** and will only execute when the iterator is consumed.
-    ///
-    /// If the iterator is not fully consumed, remaining data will be properly
-    /// released and unused entity IDs will be reclaimed.
+    /// If the iterator is not fully consumed, remaining data will
+    /// be spawned during `Drop::drop`.`
     ///
     /// # Examples
     ///
@@ -321,13 +301,12 @@ impl World {
     /// ```
     #[inline]
     #[track_caller]
-    #[must_use = "`SpawnBatchIter` is lazy. Add `.exhaust()` if you don't need the results."]
     pub fn spawn_batch<I, B>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
         B: Bundle,
         I: IntoIterator<Item = B>,
     {
-        let bundle_id = self.register_bundle::<B>();
+        let bundle_id = self.register_required_bundle::<B>();
         let mut spawner = BundleSpawner::new(
             self,
             bundle_id,

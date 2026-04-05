@@ -31,7 +31,7 @@ impl AutoRegister for AutoRegisterFlag {}
 
 impl GetTypeMeta for AutoRegisterFlag {
     fn get_type_meta() -> TypeMeta {
-        TypeMeta::of::<Self>()
+        TypeMeta::new::<Self>()
     }
 }
 

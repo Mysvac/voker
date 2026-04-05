@@ -9,7 +9,7 @@ use crate::info::Typed;
 ///
 /// ```
 /// # use voker_reflect::registry::{TypeMeta, ReflectDefault, FromType};
-/// let mut meta = TypeMeta::of::<String>();
+/// let mut meta = TypeMeta::new::<String>();
 ///
 /// meta.insert_data::<ReflectDefault>(FromType::<String>::from_type());
 /// ```

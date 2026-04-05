@@ -18,7 +18,7 @@ fn insert_internal<'a, 'b>(
     unsafe {
         this.prepare_resource(id);
         let tick = this.this_run_fast(); // we have `full_mut` world
-        let data = this.storages.ress.get_unchecked_mut(id);
+        let data = this.storages.res_set.get_unchecked_mut(id);
         data.insert_untyped(value, tick);
         data.get_data_mut().debug_checked_unwrap()
     }
@@ -70,7 +70,7 @@ impl World {
     /// ```
     pub fn remove_resource<T: Resource + Send>(&mut self) -> Option<T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -97,7 +97,7 @@ impl World {
     /// ```
     pub fn drop_resource<T: Resource + Send>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             unsafe { data.drop_in_place::<T>() }
         }
@@ -121,7 +121,7 @@ impl World {
     /// ```
     pub fn resource<T: Resource + Sync>(&self) -> Option<&T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get(id)
+            && let Some(data) = self.storages.res_set.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -152,7 +152,7 @@ impl World {
     /// ```
     pub fn resource_ref<T: Resource + Sync>(&self) -> Option<ResRef<'_, T>> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get(id)
+            && let Some(data) = self.storages.res_set.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -188,7 +188,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_resource::<T>() })
@@ -204,7 +204,7 @@ impl World {
 
         let unsafe_world = self.unsafe_world();
         unsafe {
-            let data = unsafe_world.data_mut().storages.ress.get_unchecked_mut(id);
+            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
             if !data.is_active() {
                 let world = unsafe_world.read_only();
                 let this_run = world.this_run();
@@ -242,7 +242,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.ress.get_unchecked_mut(id);
+                let data = this.storages.res_set.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run).debug_checked_unwrap().into_resource()
             }
@@ -254,7 +254,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.ress.get_mut(id)
+            && let Some(data) = world_mut.storages.res_set.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_resource::<T>() }
@@ -322,7 +322,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -357,7 +357,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             unsafe { data.drop_in_place::<T>() }
         }
@@ -387,7 +387,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get(id)
+            && let Some(data) = self.storages.res_set.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -426,7 +426,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get(id)
+            && let Some(data) = self.storages.res_set.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -469,7 +469,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_non_send::<T>() })
@@ -490,7 +490,7 @@ impl World {
 
         let unsafe_world = self.unsafe_world();
         unsafe {
-            let data = unsafe_world.data_mut().storages.ress.get_unchecked_mut(id);
+            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
             if !data.is_active() {
                 let world = unsafe_world.read_only();
                 let this_run = world.this_run();
@@ -530,7 +530,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.ress.get_unchecked_mut(id);
+                let data = this.storages.res_set.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run).debug_checked_unwrap().into_non_send()
             }
@@ -547,7 +547,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.ress.get_mut(id)
+            && let Some(data) = world_mut.storages.res_set.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_non_send::<T>() }
@@ -572,7 +572,7 @@ impl World {
         let this_run = self.this_run_fast();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
             unsafe {
@@ -589,7 +589,7 @@ impl World {
 
                 let ret = func(self, res_mut);
 
-                if let Some(data) = self.storages.ress.get_mut(id) {
+                if let Some(data) = self.storages.res_set.get_mut(id) {
                     data.from_raw(ptr, added, changed);
                 } else {
                     core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);
@@ -623,7 +623,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
             let last_run = self.last_run();
@@ -642,7 +642,7 @@ impl World {
 
                 let ret = func(self, res_mut);
 
-                if let Some(data) = self.storages.ress.get_mut(id) {
+                if let Some(data) = self.storages.res_set.get_mut(id) {
                     data.from_raw(ptr, added, changed);
                 } else {
                     core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);

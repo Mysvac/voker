@@ -72,17 +72,50 @@ pub struct Archetype {
     // The number of components stored in the table.
     // Due to struct alignment, `usize` is equivalent to `u32`.
     dense_len: usize,
-    // - `[0..dense_len]` are stored in Tables, sorted.
+    // - `[..dense_len]` are stored in Tables, sorted.
     // - `[dense_len..]` are stored in Maps, sorted.
     // We use Arc to reduce memory allocation overhead.
     components: Arc<[ComponentId]>,
-    /// Maps archetype rows to their corresponding entities.
-    /// The vector index = `ArcheRow`, value = `Entity`.
-    /// Maintained in contiguous order for O(1) entity lookup by row.
+    // Maps archetype rows to their corresponding entities.
+    // The vector index = `ArcheRow`, value = `Entity`.
+    // Maintained in contiguous order for O(1) entity lookup by row.
     entities: Vec<Entity>,
+    // Optimize component insertion and removal.
     after_insert: SparseHashMap<BundleId, ArcheId>,
     after_remove: SparseHashMap<BundleId, ArcheId>,
 }
+
+// -----------------------------------------------------------------------------
+// Private
+
+impl Archetype {
+    /// # Requirement
+    /// - valid arche_id
+    /// - table_id matched components
+    /// - `components[..dense_len]` are stored in Tables, sorted.
+    /// - `components[dense_len..]` are stored in Maps, sorted.
+    pub(super) fn new(
+        arche_id: ArcheId,
+        table_id: TableId,
+        dense_len: usize,
+        components: Arc<[ComponentId]>,
+    ) -> Self {
+        debug_assert!(components[..dense_len].is_sorted());
+        debug_assert!(components[dense_len..].is_sorted());
+        Archetype {
+            id: arche_id,
+            table_id,
+            dense_len,
+            components,
+            entities: Vec::new(),
+            after_insert: SparseHashMap::new(),
+            after_remove: SparseHashMap::new(),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Basic
 
 impl Debug for Archetype {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -96,28 +129,6 @@ impl Debug for Archetype {
 }
 
 impl Archetype {
-    /// # Safety
-    /// - valid arche_id
-    /// - table_id matched components
-    /// - `components[..dense_len]` are stored in Tables, sorted.
-    /// - `components[dense_len..]` are stored in Maps, sorted.
-    pub(super) unsafe fn new(
-        arche_id: ArcheId,
-        table_id: TableId,
-        dense_len: usize,
-        components: Arc<[ComponentId]>,
-    ) -> Self {
-        Archetype {
-            id: arche_id,
-            table_id,
-            dense_len,
-            components,
-            entities: Vec::new(),
-            after_insert: SparseHashMap::new(),
-            after_remove: SparseHashMap::new(),
-        }
-    }
-
     /// Returns the unique identifier of this archetype.
     #[inline(always)]
     pub fn id(&self) -> ArcheId {
@@ -139,6 +150,29 @@ impl Archetype {
         &self.components
     }
 
+    /// Checks if this archetype contains a specific component type.
+    ///
+    /// # Complexity
+    /// - Time: O(log n) where n is the total number of component types
+    /// - Space: O(1)
+    pub fn contains_component(&self, id: ComponentId) -> bool {
+        self.contains_dense_component(id) || self.contains_sparse_component(id)
+    }
+
+    /// Returns a slice of all entities in this archetype.
+    ///
+    /// The entities are stored in the order of their archetype rows,
+    /// which is also the iteration order for component data.
+    #[inline(always)]
+    pub fn entities(&self) -> &[Entity] {
+        &self.entities
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Filter
+
+impl Archetype {
     /// Returns the list of dense component types stored in tables.
     ///
     /// These components benefit from cache-efficient iteration due to
@@ -158,15 +192,6 @@ impl Archetype {
         &self.components[self.dense_len..]
     }
 
-    /// Checks if this archetype contains a specific component type.
-    ///
-    /// # Complexity
-    /// - Time: O(log n) where n is the total number of component types
-    /// - Space: O(1)
-    pub fn contains_component(&self, id: ComponentId) -> bool {
-        self.contains_dense_component(id) || self.contains_sparse_component(id)
-    }
-
     /// Checks if this archetype contains a specific dense component type.
     ///
     /// # Complexity
@@ -184,127 +209,12 @@ impl Archetype {
     pub fn contains_sparse_component(&self, id: ComponentId) -> bool {
         self.sparse_components().binary_search(&id).is_ok()
     }
+}
 
-    /// Checks whether this archetype matches the given component requirements.
-    ///
-    /// This is the primary method for **archetype-level filtering** in the query system.
-    /// It quickly determines if an archetype qualifies for further processing without
-    /// examining individual entities.
-    ///
-    /// # Parameters
-    /// - `with` - Component types that must be present
-    ///   (order doesn't matter, allow duplicates)
-    /// - `without` - Component types that must be absent
-    ///   (order doesn't matter, allow duplicates)
-    ///
-    /// # Complexity
-    /// - Time: O(m * log n) where m = len(with) + len(without), n = total components
-    /// - Space: O(1)
-    ///
-    /// For better performance with sorted inputs, see [`matches_sorted`](Self::matches_sorted).
-    pub fn matches(&self, with: &[ComponentId], without: &[ComponentId]) -> bool {
-        with.iter().all(|id| self.contains_component(*id))
-            && !without.iter().any(|id| self.contains_component(*id))
-    }
+// -----------------------------------------------------------------------------
+// Entity Operation
 
-    /// Fast archetype matching requiring sorted input slices.
-    ///
-    /// This optimized variant is designed for high-throughput query processing,
-    /// particularly when filtering many archetypes with the same query.
-    ///
-    /// # Parameters
-    /// - `with` - Component types that must be present
-    ///   (**must be sorted and deduplicated**)
-    /// - `without` - Component types that must be absent
-    ///   (**must be sorted and deduplicated**)
-    ///
-    /// # Requirements
-    /// Both input slices **MUST** be sorted in ascending order. Duplicate entries
-    /// are **not** allowed. Violating the requirement leads to unspecified results
-    /// (but not memory unsafety).
-    ///
-    /// # Complexity
-    /// - Time: O(min(m + n, m * log n)) where m = len(with) + len(without), n = total components
-    /// - Space: O(1)
-    pub fn matches_sorted(&self, with: &[ComponentId], without: &[ComponentId]) -> bool {
-        fn jump_search(id: ComponentId, slice: &[ComponentId]) -> Result<usize, usize> {
-            let mut index = 0usize;
-            let len = slice.len();
-
-            loop {
-                if index == len || slice[index] > id {
-                    return Err(index);
-                }
-                if slice[index] == id {
-                    return Ok(index);
-                }
-
-                let mut step = 1usize;
-                loop {
-                    let offset = index + step;
-                    if offset < len && slice[offset] <= id {
-                        step <<= 1;
-                    } else {
-                        break;
-                    }
-                }
-                // index + (step >> 1) < len
-                // index + max(step >> 1, 1) <= len
-                index += core::cmp::max(step >> 1, 1);
-            }
-        }
-        {
-            // with
-            let mut dense = self.dense_components();
-            let mut sparse = self.sparse_components();
-            let result = with.iter().all(|&id| {
-                // `with` has been sorted and deduplicated, the `[..=idx]` can be skipped.
-                // we can skip `[idx]` because it's `==` specific id.
-                if let Ok(idx) = jump_search(id, dense) {
-                    dense = &dense[(idx + 1)..];
-                    return true;
-                }
-                if let Ok(idx) = jump_search(id, sparse) {
-                    sparse = &sparse[(idx + 1)..];
-                    return true;
-                }
-                false
-            });
-            if !result {
-                return false;
-            }
-        }
-        {
-            // without
-            let mut dense = self.dense_components();
-            let mut sparse = self.sparse_components();
-            // `without` has been sorted and deduplicated, the `[..idx]` can be skipped.
-            // cannot skip `[idx]` because it's `>` specific id (or the end of slice).
-            without.iter().all(|&id| {
-                if let Err(idx) = jump_search(id, dense) {
-                    dense = &dense[idx..];
-                } else {
-                    return false;
-                }
-                if let Err(idx) = jump_search(id, sparse) {
-                    sparse = &sparse[idx..];
-                } else {
-                    return false;
-                }
-                true
-            })
-        }
-    }
-
-    /// Returns a slice of all entities in this archetype.
-    ///
-    /// The entities are stored in the order of their archetype rows,
-    /// which is also the iteration order for component data.
-    #[inline(always)]
-    pub fn entities(&self) -> &[Entity] {
-        &self.entities
-    }
-
+impl Archetype {
     /// Finds the row index for a given entity using linear search.
     ///
     /// # Complexity
@@ -366,6 +276,7 @@ impl Archetype {
     /// - Space: O(1)
     #[must_use]
     pub unsafe fn insert_entity(&mut self, entity: Entity) -> ArcheRow {
+        // 0 < EntitIndex < u32::MAX
         let row = ArcheRow(self.entities.len() as u32);
         self.entities.push(entity);
         row
@@ -420,7 +331,12 @@ impl Archetype {
             }
         }
     }
+}
 
+// -----------------------------------------------------------------------------
+// Bundle
+
+impl Archetype {
     /// Obtain the new archetype id after inserting a Component.
     pub fn after_insert(&self, bundle: BundleId) -> Option<ArcheId> {
         self.after_insert.get(&bundle).copied()

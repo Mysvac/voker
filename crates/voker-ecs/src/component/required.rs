@@ -98,7 +98,7 @@ unsafe impl<T: Component + FromWorld> RequiredComponents for T {
     }
 
     fn required_collect(collector: &mut ComponentCollector) {
-        collector.collect::<T>();
+        collector.collect_required::<T>();
     }
 
     unsafe fn required_write(writer: &mut ComponentWriter) {

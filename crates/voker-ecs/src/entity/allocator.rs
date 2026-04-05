@@ -50,6 +50,7 @@ use voker_utils::vec::ArrayVec;
 
 use crate::entity::Entity;
 use crate::entity::EntityId;
+use crate::entity::EntityTag;
 use crate::utils::DebugCheckedUnwrap;
 
 // -----------------------------------------------------------------------------
@@ -561,7 +562,8 @@ impl FreeList {
 /// `id != 0 && id != u32::MAX`
 #[inline(always)]
 unsafe fn entity_from_u32(id: u32) -> Entity {
-    Entity::from_id(unsafe { ::core::mem::transmute::<u32, EntityId>(id) })
+    let id = unsafe { core::mem::transmute::<u32, EntityId>(id) };
+    Entity::new(id, EntityTag::FIRST)
 }
 
 /// Allocator for new, never-before-used entity IDs.

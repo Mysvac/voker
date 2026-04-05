@@ -21,29 +21,29 @@ mod clone_spec {
     use crate::voker_ecs::utils::Cloner;
     use core::marker::PhantomData;
 
-    pub struct __CloneSpec<T>(PhantomData<T>);
+    pub struct CloneSpec<T>(PhantomData<T>);
 
-    impl<T> __CloneSpec<T> {
+    impl<T> CloneSpec<T> {
         pub const INS: Self = Self(PhantomData);
     }
 
-    pub trait __ClonerSpecialization {
+    pub trait ClonerSpecialization {
         fn __specialized_cloner(&self) -> Option<Cloner>;
     }
 
-    impl<T> __ClonerSpecialization for __CloneSpec<T> {
+    impl<T> ClonerSpecialization for CloneSpec<T> {
         fn __specialized_cloner(&self) -> Option<Cloner> {
             None
         }
     }
 
-    impl<T: Clone> __ClonerSpecialization for &__CloneSpec<T> {
+    impl<T: Clone> ClonerSpecialization for &CloneSpec<T> {
         fn __specialized_cloner(&self) -> Option<Cloner> {
             Some(Cloner::clonable::<T>())
         }
     }
 
-    impl<T: Copy> __ClonerSpecialization for &&__CloneSpec<T> {
+    impl<T: Copy> ClonerSpecialization for &&CloneSpec<T> {
         fn __specialized_cloner(&self) -> Option<Cloner> {
             Some(Cloner::copyable::<T>())
         }

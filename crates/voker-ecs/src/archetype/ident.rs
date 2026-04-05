@@ -27,6 +27,19 @@ impl ArcheId {
         Self(unsafe { NonMaxU32::new_unchecked(id) })
     }
 
+    /// Creates a new `ArcheId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id` >= u32::MAX.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id >= u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("ArcheId must be < u32::MAX");
+        }
+        unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
+    }
+
     /// Returns the archetype index as a usize.
     #[inline(always)]
     pub const fn index(self) -> usize {

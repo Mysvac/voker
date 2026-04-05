@@ -177,6 +177,11 @@ impl World {
     pub fn resource_count(&self) -> usize {
         self.resources.len()
     }
+
+    /// Returns the number of resource types.
+    pub fn schedule_count(&self) -> usize {
+        self.schedules.len()
+    }
 }
 
 // -----------------------------------------------------------------------------

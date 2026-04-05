@@ -1,84 +1,19 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::alloc::Layout;
 use core::fmt::Debug;
 use core::num::NonZeroUsize;
-use voker_ptr::PtrMut;
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use voker_ptr::OwningPtr;
-use voker_ptr::Ptr;
+use voker_os::sync::Arc;
+use voker_ptr::{OwningPtr, Ptr, PtrMut};
 
-use super::{TableCol, TableRow};
-use crate::borrow::UntypedMut;
-use crate::borrow::UntypedRef;
-use crate::borrow::UntypedSliceMut;
-use crate::borrow::UntypedSliceRef;
-use crate::component::ComponentId;
-use crate::entity::Entity;
-use crate::entity::MovedEntityRow;
+use super::{TableCol, TableId, TableRow};
+use crate::borrow::{UntypedMut, UntypedRef};
+use crate::borrow::{UntypedSliceMut, UntypedSliceRef};
+use crate::component::{ComponentId, Components};
+use crate::entity::{Entity, MovedEntityRow};
 use crate::storage::{AbortOnPanic, Column, VecRemoveExt};
-use crate::tick::CheckTicks;
 use crate::tick::Tick;
-use crate::utils::Dropper;
-
-// -----------------------------------------------------------------------------
-// TableBuilder
-
-/// Builder for creating a new `Table` with a fixed set of component columns.
-pub(super) struct TableBuilder {
-    columns: Vec<Column>,
-    idents: Vec<ComponentId>,
-}
-
-impl TableBuilder {
-    /// Creates a new builder with pre-allocated capacity for the given column count.
-    #[must_use]
-    pub fn new(column_count: usize) -> Self {
-        Self {
-            columns: Vec::with_capacity(column_count),
-            idents: Vec::with_capacity(column_count),
-        }
-    }
-
-    /// Inserts a new component column into the table being built.
-    ///
-    /// # Safety
-    /// - Inserted `ComponentId`s must be unique and sorted in ascending order
-    /// - `layout` and `drop_fn` must correctly match the component type
-    /// - The column index returned is valid for the lifetime of the built table
-    pub unsafe fn insert(
-        &mut self,
-        id: ComponentId,
-        layout: Layout,
-        dropper: Option<Dropper>,
-    ) -> TableCol {
-        // `0 < ComponentId < u32::MAX`, so `location < u32::MAX`
-        let index = self.columns.len() as u32;
-        self.columns.push(unsafe { Column::new(layout, dropper) });
-        self.idents.push(id);
-
-        TableCol(index)
-    }
-
-    /// Consumes the builder and creates the final `Table`.
-    ///
-    /// # Panics
-    /// Panics if component IDs are not unique or not properly sorted.
-    #[must_use]
-    pub fn build(mut self) -> Table {
-        let len = self.idents.len();
-        self.idents.dedup();
-        assert!(self.idents.is_sorted());
-        assert!(self.idents.len() == len);
-
-        Table {
-            columns: self.columns.into_boxed_slice(),
-            idents: self.idents.into_boxed_slice(),
-            // SAFETY: `capacity` must be `0`, because columns is unallocated.
-            entities: Vec::new(),
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Table
@@ -94,15 +29,68 @@ impl TableBuilder {
 ///
 /// This structure provides optimal cache locality during iteration.
 pub struct Table {
+    id: TableId,
     columns: Box<[Column]>,
-    idents: Box<[ComponentId]>,
+    compnents: Arc<[ComponentId]>,
     entities: Vec<Entity>,
 }
+
+// -----------------------------------------------------------------------------
+// Private
+
+impl Table {
+    pub(super) fn new(table_id: TableId, components: &Components, idents: &[ComponentId]) -> Self {
+        debug_assert!(idents.is_sorted());
+
+        let mut columns: Vec<Column> = Vec::with_capacity(idents.len());
+        idents.iter().for_each(|&id| {
+            let info = unsafe { components.get_unchecked(id) };
+            let layout = info.layout();
+            let dropper = info.dropper();
+            columns.push(unsafe { Column::new(layout, dropper) });
+        });
+
+        Self {
+            id: table_id,
+            columns: columns.into_boxed_slice(),
+            compnents: Arc::from(idents),
+            entities: Vec::new(),
+        }
+    }
+
+    pub(super) fn clone_components(&self) -> Arc<[ComponentId]> {
+        self.compnents.clone()
+    }
+
+    /// Updates change ticks for all components based on the provided check parameters.
+    pub(crate) fn check_ticks(&mut self, now: Tick) {
+        let len = self.entity_count();
+        self.columns.iter_mut().for_each(|c| unsafe {
+            c.check_ticks(len, now);
+        });
+    }
+
+    /// Returns the current allocation capacity of the table.
+    #[inline(always)]
+    fn capacity(&self) -> usize {
+        self.entities.capacity()
+    }
+
+    /// Returns the number of entities currently stored in the table.
+    #[inline(always)]
+    fn entity_count(&self) -> usize {
+        self.entities.len()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Basic
 
 impl Debug for Table {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Table")
-            .field("components", &self.idents)
+            .field("id", &self.id)
+            .field("components", &self.compnents)
             .field("entities", &self.entities)
             .finish()
     }
@@ -121,18 +109,16 @@ impl Drop for Table {
 
 unsafe impl Sync for Table {}
 unsafe impl Send for Table {}
+impl UnwindSafe for Table {}
+impl RefUnwindSafe for Table {}
+
+// -----------------------------------------------------------------------------
+// Basic
 
 impl Table {
-    /// Returns the current allocation capacity of the table.
     #[inline(always)]
-    fn capacity(&self) -> usize {
-        self.entities.capacity()
-    }
-
-    /// Returns the number of entities currently stored in the table.
-    #[inline(always)]
-    fn entity_count(&self) -> usize {
-        self.entities.len()
+    pub fn components(&self) -> &[ComponentId] {
+        &self.compnents
     }
 
     #[inline(always)]
@@ -145,6 +131,7 @@ impl Table {
     /// # Safety
     /// - The entity must be unique within this table
     /// - The returned row is valid until the entity is removed
+    #[must_use]
     pub unsafe fn allocate(&mut self, entity: Entity) -> TableRow {
         #[cold]
         #[inline(never)]
@@ -183,8 +170,9 @@ impl Table {
     ///
     /// # Complexity
     /// O(log n) where n is the number of component types
+    #[inline]
     pub fn get_table_col(&self, key: ComponentId) -> Option<TableCol> {
-        let index = self.idents.binary_search(&key).ok()?;
+        let index = self.compnents.binary_search(&key).ok()?;
         Some(TableCol(index as u32))
     }
 
@@ -195,6 +183,7 @@ impl Table {
     ///
     /// Note: This is inefficient and should be avoided. Store the `TableRow`
     /// returned by `allocate()` instead.
+    #[inline]
     pub fn get_table_row(&self, key: Entity) -> Option<TableRow> {
         let index = self.entities.iter().position(|it| *it == key)?;
         Some(TableRow(index as u32))
@@ -481,14 +470,6 @@ impl Table {
             column.remove_item(table_row.0 as usize)
         }
     }
-
-    /// Updates change ticks for all components based on the provided check parameters.
-    pub(crate) fn check_ticks(&mut self, check: CheckTicks) {
-        let len = self.entity_count();
-        self.columns.iter_mut().for_each(|c| unsafe {
-            c.check_ticks(len, check);
-        });
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -573,15 +554,18 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
-                    if let Some(table_col) = other.get_table_col(id) {
-                        let other_col = other.get_column_mut(table_col);
-                        col.move_item_to(other_col, src, dst);
-                        col.swap_forget_not_last(src, last);
-                    } else {
-                        col.swap_drop_not_last(src, last);
-                    }
-                });
+                self.compnents
+                    .iter()
+                    .zip(self.columns.iter_mut())
+                    .for_each(|(&id, col)| {
+                        if let Some(table_col) = other.get_table_col(id) {
+                            let other_col = other.get_column_mut(table_col);
+                            col.move_item_to(other_col, src, dst);
+                            col.swap_forget_not_last(src, last);
+                        } else {
+                            col.swap_drop_not_last(src, last);
+                        }
+                    });
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
             } else {
@@ -590,14 +574,17 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
-                    if let Some(table_col) = other.get_table_col(id) {
-                        let other_col = other.get_column_mut(table_col);
-                        col.move_item_to(other_col, src, dst);
-                    } else {
-                        col.drop_item(last);
-                    }
-                });
+                self.compnents
+                    .iter()
+                    .zip(self.columns.iter_mut())
+                    .for_each(|(&id, col)| {
+                        if let Some(table_col) = other.get_table_col(id) {
+                            let other_col = other.get_column_mut(table_col);
+                            col.move_item_to(other_col, src, dst);
+                        } else {
+                            col.drop_item(last);
+                        }
+                    });
 
                 (MovedEntityRow::in_table(None, table_row), new_row)
             }
@@ -627,13 +614,16 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
-                    if let Some(table_col) = other.get_table_col(id) {
-                        let other_col = other.get_column_mut(table_col);
-                        col.move_item_to(other_col, src, dst);
-                    }
-                    col.swap_forget_not_last(src, last);
-                });
+                self.compnents
+                    .iter()
+                    .zip(self.columns.iter_mut())
+                    .for_each(|(&id, col)| {
+                        if let Some(table_col) = other.get_table_col(id) {
+                            let other_col = other.get_column_mut(table_col);
+                            col.move_item_to(other_col, src, dst);
+                        }
+                        col.swap_forget_not_last(src, last);
+                    });
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
             } else {
@@ -642,13 +632,15 @@ impl Table {
                 let new_row = other.allocate(moved);
                 let dst = new_row.0 as usize;
 
-                self.idents.iter().zip(self.columns.iter_mut()).for_each(|(&id, col)| {
-                    if let Some(table_col) = other.get_table_col(id) {
-                        let other_col = other.get_column_mut(table_col);
-                        col.move_item_to(other_col, src, dst);
-                    }
-                    col.forget_item(src);
-                });
+                self.compnents
+                    .iter()
+                    .zip(self.columns.iter_mut())
+                    .for_each(|(&id, col)| {
+                        if let Some(table_col) = other.get_table_col(id) {
+                            let other_col = other.get_column_mut(table_col);
+                            col.move_item_to(other_col, src, dst);
+                        }
+                    });
 
                 (MovedEntityRow::in_table(None, table_row), new_row)
             }

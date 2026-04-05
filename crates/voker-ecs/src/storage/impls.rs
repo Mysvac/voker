@@ -31,7 +31,7 @@ use super::ResSet;
 ///   rarely-present components or large component sets
 #[derive(Debug)]
 pub struct Storages {
-    pub ress: ResSet,
+    pub res_set: ResSet,
     pub tables: Tables,
     pub maps: Maps,
 }
@@ -40,7 +40,7 @@ impl Storages {
     /// Creates a new, empty storage coordinator.
     pub(crate) fn new() -> Storages {
         Storages {
-            ress: ResSet::new(),
+            res_set: ResSet::new(),
             tables: Tables::new(),
             maps: Maps::new(),
         }
@@ -55,15 +55,16 @@ impl Storages {
     /// |    State         | Description                            | Storage Status                       |
     /// |------------------|----------------------------------------|--------------------------------------|
     /// | **Unregistered** | No `ResourceId` allocated yet          | Not tracked                          |
-    /// | **Unprepared**   | `Id` allocated, but no memory reserved | `ResData` not initialized            |
+    /// | **Registered**   | `Id` allocated, but no memory reserved | `ResData` not initialized            |
     /// | **Prepared**     | Memory allocated, ready for insertion  | Storage reserved, data uninitialized |
     /// | **Inserted**     | Memory allocated and initialized       | Active resource                      |
+    /// | **Removed**      | Memory allocated, the data is removed  | Equivlant to **Prepared**            |
     ///
     /// This method transitions a resource from **unprepared** to **prepared** state.
     /// First call may allocate, subsequent calls are no-op
     #[inline]
     pub fn prepare_resource(&mut self, info: &ResourceInfo) {
-        self.ress.prepare(info);
+        self.res_set.prepare(info);
     }
 
     /// Prepares storage for a component type based on its storage strategy.
@@ -115,27 +116,32 @@ impl Storages {
     /// This provides near-optimal parallel utilization for large worlds with
     /// many tables and maps.
     pub fn check_ticks(&mut self, check: CheckTicks) {
-        let Storages { ress, tables, maps } = self;
+        let Storages {
+            res_set,
+            tables,
+            maps,
+        } = self;
+        let now = check.tick();
 
         if let Some(task_pool) = ComputeTaskPool::try_get() {
             task_pool.scope(|scope| {
                 scope.spawn(async move {
-                    ress.check_ticks(check);
+                    res_set.check_ticks(now);
                 });
-                tables.tables.iter_mut().for_each(|tb| {
-                    scope.spawn(async move { tb.check_ticks(check) });
+                tables.iter_mut().for_each(|tb| {
+                    scope.spawn(async move { tb.check_ticks(now) });
                 });
-                maps.maps.iter_mut().for_each(|mp| {
-                    scope.spawn(async move { mp.check_ticks(check) });
+                maps.iter_mut().for_each(|mp| {
+                    scope.spawn(async move { mp.check_ticks(now) });
                 });
             });
         } else {
-            ress.check_ticks(check);
-            tables.tables.iter_mut().for_each(|tb| {
-                tb.check_ticks(check);
+            res_set.check_ticks(now);
+            tables.iter_mut().for_each(|tb| {
+                tb.check_ticks(now);
             });
-            maps.maps.iter_mut().for_each(|mp| {
-                mp.check_ticks(check);
+            maps.iter_mut().for_each(|mp| {
+                mp.check_ticks(now);
             });
         }
     }

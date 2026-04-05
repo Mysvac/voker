@@ -15,7 +15,7 @@ use core::num::NonZeroUsize;
 use voker_ptr::{OwningPtr, Ptr, PtrMut, ThinSlice};
 
 use crate::borrow::{UntypedMut, UntypedRef, UntypedSliceMut, UntypedSliceRef};
-use crate::tick::{CheckTicks, Tick, TicksMut, TicksRef};
+use crate::tick::{Tick, TicksMut, TicksRef};
 use crate::tick::{TicksSliceMut, TicksSliceRef};
 use crate::utils::Dropper;
 
@@ -39,6 +39,20 @@ pub struct Column {
 // Basic methods
 
 impl Column {
+    /// Creates a new empty column.
+    ///
+    /// # Safety
+    /// - `item_layout` must correctly represent the type that will be stored
+    /// - If provided, `drop_fn` must correctly drop an item of the stored type
+    #[inline(always)]
+    pub(crate) const unsafe fn new(item_layout: Layout, dropper: Option<Dropper>) -> Self {
+        Self {
+            data: unsafe { BlobArray::new(item_layout, dropper) },
+            added: TickArray::new(),
+            changed: TickArray::new(),
+        }
+    }
+
     /// Returns the layout of individual items stored in this column.
     #[inline(always)]
     pub const fn item_layout(&self) -> Layout {
@@ -49,20 +63,6 @@ impl Column {
     #[inline(always)]
     pub const fn dropper(&self) -> Option<Dropper> {
         self.data.dropper()
-    }
-
-    /// Creates a new empty column.
-    ///
-    /// # Safety
-    /// - `item_layout` must correctly represent the type that will be stored
-    /// - If provided, `drop_fn` must correctly drop an item of the stored type
-    #[inline(always)]
-    pub const unsafe fn new(item_layout: Layout, dropper: Option<Dropper>) -> Self {
-        Self {
-            data: unsafe { BlobArray::new(item_layout, dropper) },
-            added: TickArray::new(),
-            changed: TickArray::new(),
-        }
     }
 
     /// Allocates memory for the specified capacity.
@@ -340,9 +340,7 @@ impl Column {
     /// # Safety
     /// - `len` must be the number of initialized items
     #[inline]
-    pub unsafe fn check_ticks(&mut self, len: usize, check: CheckTicks) {
-        let now = check.tick();
-
+    pub unsafe fn check_ticks(&mut self, len: usize, now: Tick) {
         unsafe {
             Tick::slice_check(self.added.get_slice_mut().as_mut(len), now);
             Tick::slice_check(self.changed.get_slice_mut().as_mut(len), now);

@@ -11,11 +11,6 @@ mod table;
 mod tables;
 
 // -----------------------------------------------------------------------------
-// Internal
-
-use table::TableBuilder;
-
-// -----------------------------------------------------------------------------
 // Exports
 
 pub use ident::{TableCol, TableId, TableRow};

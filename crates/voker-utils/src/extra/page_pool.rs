@@ -191,7 +191,7 @@ impl<const PAGE_SIZE: usize> PagePool<PAGE_SIZE> {
 
         unsafe {
             // SAFETY: The input is valid UTF-8, and we're copying it verbatim
-            core::str::from_utf8_unchecked_mut(bytes)
+            core::str::from_utf8_unchecked(bytes)
         }
     }
 

@@ -84,12 +84,30 @@ impl<'a> ComponentCollector<'a> {
         }
     }
 
+    /// Collects a component type, without required dependencies.
+    ///
+    /// This method registers the component if needed.
+    #[inline(never)] // we prohibit inlining to speed up compilation.
+    pub fn collect_explicit<T: Component>(&mut self) {
+        let id = self.components.register::<T>();
+        if self.collected.insert(id) {
+            match T::STORAGE {
+                ComponentStorage::Dense => {
+                    self.dense.push(id);
+                }
+                ComponentStorage::Sparse => {
+                    self.sparse.push(id);
+                }
+            }
+        }
+    }
+
     /// Collects a component type and its required dependencies.
     ///
     /// This method registers the component if needed, then recursively
     /// collects all components required by it.
     #[inline(never)] // we prohibit inlining to speed up compilation.
-    pub fn collect<T: Component>(&mut self) {
+    pub fn collect_required<T: Component>(&mut self) {
         let id = self.components.register::<T>();
         if self.collected.insert(id) {
             match T::STORAGE {

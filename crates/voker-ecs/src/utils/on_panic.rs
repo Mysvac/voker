@@ -31,7 +31,7 @@ impl Drop for ForgetEntityOnPanic<'_> {
             }
         }
 
-        for (_, table) in world.storages.tables.iter_mut() {
+        for table in world.storages.tables.iter_mut() {
             if let Some(row) = table.get_table_row(entity) {
                 let moved = unsafe { table.swap_remove_and_forget(row) };
                 unsafe {
@@ -40,7 +40,7 @@ impl Drop for ForgetEntityOnPanic<'_> {
             }
         }
 
-        for (_, map) in world.storages.maps.iter_mut() {
+        for map in world.storages.maps.iter_mut() {
             let _ = unsafe { map.deallocate(entity) };
         }
     }

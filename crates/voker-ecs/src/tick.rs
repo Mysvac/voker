@@ -142,7 +142,22 @@ impl Tick {
 
         since_system > since_insert
     }
+}
 
+impl core::hash::Hash for Tick {
+    #[inline(always)]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        state.write_u32(self.0);
+    }
+}
+
+impl core::fmt::Debug for Tick {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("Tick").field(&self.0).finish()
+    }
+}
+
+impl Tick {
     /// Clamps a single tick value if it is older than `MAX_TICK_AGE`.
     ///
     /// `fall_back` should be computed as `now.relative_to(Tick::MAX_AGE)`.
@@ -172,19 +187,6 @@ impl Tick {
                 *x = fall_back;
             }
         });
-    }
-}
-
-impl core::hash::Hash for Tick {
-    #[inline(always)]
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.0);
-    }
-}
-
-impl core::fmt::Debug for Tick {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("Tick").field(&self.0).finish()
     }
 }
 

@@ -1,11 +1,11 @@
-use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::{fmt::Debug, iter::FusedIterator};
+use core::fmt::Debug;
 
+use voker_os::sync::Arc;
 use voker_utils::hash::HashMap;
 use voker_utils::hash::hash_map::RawEntryMut;
 
-use super::{Table, TableBuilder, TableId};
+use super::{Table, TableId};
 use crate::component::{ComponentId, ComponentInfo, Components};
 
 // -----------------------------------------------------------------------------
@@ -18,37 +18,92 @@ use crate::component::{ComponentId, ComponentInfo, Components};
 /// - A precise map from component sets to table IDs (for exact matches)
 /// - A rough index for fast filtering by component presence
 pub struct Tables {
-    pub(crate) tables: Vec<Table>,
-    mapper: HashMap<Box<[ComponentId]>, TableId>,
+    tables: Vec<Table>,
+    mapper: HashMap<Arc<[ComponentId]>, TableId>,
 }
+
+// -----------------------------------------------------------------------------
+// Private
+
+impl Tables {
+    /// Creates a new empty table registry with the default empty table.
+    pub(crate) fn new() -> Self {
+        let mut val = Self {
+            tables: Vec::new(),
+            mapper: HashMap::new(),
+        };
+
+        let table = Table::new(TableId::EMPTY, &Components::new(), &[]);
+        val.tables.push(table);
+        val.mapper.insert(Arc::new([]), TableId::EMPTY);
+
+        val
+    }
+
+    /// Prepares the rough index for a new component type.
+    #[inline(always)]
+    pub(crate) fn prepare(&mut self, _info: &ComponentInfo) {
+        // nothing
+    }
+
+    /// Registers a new table with the given component set, or returns an existing one.
+    ///
+    /// # Safety
+    /// - `idents` must be sorted and contain valid component IDs
+    /// - All component infos must be accessible from `components`
+    pub(crate) unsafe fn register(
+        &mut self,
+        components: &Components,
+        idents: &[ComponentId],
+    ) -> TableId {
+        debug_assert!(idents.is_sorted());
+
+        match self.mapper.raw_entry_mut().from_key(idents) {
+            RawEntryMut::Occupied(entry) => *entry.get(),
+            RawEntryMut::Vacant(entry) => {
+                let table_id = TableId::new(self.tables.len() as u32);
+                let table = Table::new(table_id, components, idents);
+                let key = table.clone_components();
+                self.tables.push(table);
+                entry.insert(key, table_id);
+
+                table_id
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tables
 
 impl Debug for Tables {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_map().entries(self.tables.iter().enumerate()).finish()
+        Debug::fmt(self.tables.as_slice(), f)
     }
 }
 
 impl Tables {
-    /// Creates a new empty table registry with the default empty table.
+    /// Returns the number of registered archetypes.
     #[inline]
-    pub(crate) fn new() -> Self {
-        let mut tables: Vec<Table> = Vec::new();
-        let mut mapper: HashMap<Box<[ComponentId]>, TableId> = HashMap::new();
+    #[expect(clippy::len_without_is_empty, reason = "len > 0")]
+    pub fn len(&self) -> usize {
+        self.tables.len()
+    }
 
-        tables.push(TableBuilder::new(0).build());
-        mapper.insert(Box::new([]), TableId::EMPTY);
-
-        Tables { tables, mapper }
+    /// Returns the ID of the table exactly matching the given component set, if any.
+    #[inline]
+    pub fn get_id(&self, components: &[ComponentId]) -> Option<TableId> {
+        self.mapper.get(components).copied()
     }
 
     /// Returns a reference to the table with the given ID, if it exists.
-    #[inline(always)]
+    #[inline]
     pub fn get(&self, id: TableId) -> Option<&Table> {
         self.tables.get(id.index())
     }
 
     /// Returns a mutable reference to the table with the given ID, if it exists.
-    #[inline(always)]
+    #[inline]
     pub fn get_mut(&mut self, id: TableId) -> Option<&mut Table> {
         self.tables.get_mut(id.index())
     }
@@ -75,66 +130,15 @@ impl Tables {
         unsafe { self.tables.get_unchecked_mut(id.index()) }
     }
 
-    /// Returns the ID of the table exactly matching the given component set, if any.
-    #[inline]
-    pub fn get_id(&self, components: &[ComponentId]) -> Option<TableId> {
-        self.mapper.get(components).copied()
-    }
-
     /// Returns an iterator over the tables.
     #[inline]
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (TableId, &Table)> + FusedIterator {
-        self.tables
-            .iter()
-            .enumerate()
-            .map(|(id, table)| (TableId::new(id as u32), table))
+    pub fn iter(&self) -> core::slice::Iter<'_, Table> {
+        self.tables.iter()
     }
 
     /// Returns an iterator that allows modifying each table.
     #[inline]
-    pub fn iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = (TableId, &mut Table)> + FusedIterator {
-        self.tables
-            .iter_mut()
-            .enumerate()
-            .map(|(id, table)| (TableId::new(id as u32), table))
-    }
-
-    /// Prepares the rough index for a new component type.
-    #[inline(always)]
-    pub(crate) fn prepare(&mut self, _info: &ComponentInfo) {
-        // nothing
-    }
-
-    /// Registers a new table with the given component set, or returns an existing one.
-    ///
-    /// # Safety
-    /// - `idents` must be sorted and contain valid component IDs
-    /// - All component infos must be accessible from `components`
-    pub(crate) unsafe fn register(
-        &mut self,
-        components: &Components,
-        idents: &[ComponentId],
-    ) -> TableId {
-        debug_assert!(idents.is_sorted());
-
-        match self.mapper.raw_entry_mut().from_key(idents) {
-            RawEntryMut::Occupied(entry) => *entry.get(),
-            RawEntryMut::Vacant(entry) => {
-                let table_id = TableId::new(self.tables.len() as u32);
-                let mut builder = TableBuilder::new(idents.len());
-
-                idents.iter().for_each(|&id| unsafe {
-                    let info = components.get_unchecked(id);
-                    builder.insert(id, info.layout(), info.dropper());
-                });
-
-                self.tables.push(builder.build());
-                entry.insert(Box::from(idents), table_id);
-
-                table_id
-            }
-        }
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, Table> {
+        self.tables.iter_mut()
     }
 }

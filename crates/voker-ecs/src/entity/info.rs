@@ -1,9 +1,10 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::iter::FusedIterator;
 
 use crate::archetype::{ArcheId, ArcheRow};
 use crate::entity::error::{DespawnError, FetchError, MoveError, SpawnError};
-use crate::entity::{Entity, EntityError, EntityGeneration, EntityId};
+use crate::entity::{Entity, EntityError, EntityId, EntityTag};
 use crate::storage::{TableId, TableRow};
 
 // -----------------------------------------------------------------------------
@@ -28,7 +29,7 @@ pub struct EntityLocation {
 /// Internal tracking information for a single entity.
 #[derive(Debug, Clone, Copy)]
 struct EntityInfo {
-    generation: EntityGeneration,
+    tag: EntityTag,
     location: Option<EntityLocation>,
 }
 
@@ -38,13 +39,13 @@ struct EntityInfo {
 /// Central registry for all entity metadata in the ECS world.
 ///
 /// `Entities` maintains a sparse set of all entity IDs that have ever been
-/// allocated, tracking their current generation and storage location. It
+/// allocated, tracking their current tag and storage location. It
 /// provides methods for spawning, despawning, and locating entities while
-/// ensuring type safety through generation counters.
+/// ensuring type safety through tag counters.
 ///
 /// # Generations
 ///
-/// Each entity slot has a generation counter that increments when the entity
+/// Each entity slot has a tag counter that increments when the entity
 /// is despawned and the slot becomes available for reuse. This prevents the
 /// "stale reference" problem where a component reference could accidentally
 /// access data belonging to a different entity that now occupies the same slot.
@@ -60,20 +61,18 @@ pub struct Entities {
 
 impl Debug for Entities {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        fn entity_from(id: usize, generation: EntityGeneration) -> Entity {
-            let id = Entity::from_bits(id as u64).id();
-            Entity::new(id, generation)
+        fn entity_from(id: usize, tag: EntityTag) -> Entity {
+            Entity::new(EntityId::without_provenance(id), tag)
         }
 
-        f.debug_list()
-            .entries(
-                self.infos
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, info)| info.location.is_some())
-                    .map(|(id, info)| entity_from(id, info.generation)),
-            )
-            .finish()
+        let iter = self
+            .infos
+            .iter()
+            .enumerate()
+            .filter(|(_, info)| info.location.is_some())
+            .map(|(id, info)| entity_from(id, info.tag));
+
+        f.debug_list().entries(iter).finish()
     }
 }
 
@@ -99,23 +98,24 @@ impl Entities {
         self.infos.iter().all(|info| info.location.is_none())
     }
 
-    /// Resolves an entity ID to its current entity with correct generation.
+    /// Resolves an entity ID to its current entity with correct tag.
     ///
     /// # Complexity
     /// time: O(1)
     pub fn resolve(&self, id: EntityId) -> Entity {
-        if let Some(info) = self.infos.get(id.index()) {
-            Entity::new(id, info.generation)
-        } else {
-            Entity::from_id(id)
-        }
+        let tag = self
+            .infos
+            .get(id.index())
+            .map(|info| info.tag)
+            .unwrap_or(EntityTag::FIRST);
+        Entity::new(id, tag)
     }
 
     /// Retrieves the location of a spawned entity.
     ///
     /// # Returns
     /// - `Ok(EntityLocation)` - The entity's current storage location
-    /// - `Err(EntityError)` - If the entity doesn't exist, generation mismatches,
+    /// - `Err(EntityError)` - If the entity doesn't exist, tag mismatches,
     ///   or the entity is not spawned
     ///
     /// # Errors
@@ -126,10 +126,11 @@ impl Entities {
         let Some(info) = self.infos.get(entity.index()) else {
             return Err(FetchError::NotFound(entity.id()).into());
         };
-        if info.generation != entity.generation() {
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(FetchError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
@@ -139,7 +140,7 @@ impl Entities {
     /// Resizes the internal storage to accommodate a new entity index.
     ///
     /// This is a cold path called when an entity index exceeds current capacity.
-    /// New slots are initialized with the first generation and no location.
+    /// New slots are initialized with the first tag and no location.
     #[cold]
     #[inline(never)]
     fn resize(&mut self, len: usize) {
@@ -148,7 +149,7 @@ impl Entities {
             self.infos.capacity(),
             const {
                 EntityInfo {
-                    generation: EntityGeneration::FIRST,
+                    tag: EntityTag::FIRST,
                     location: None,
                 }
             },
@@ -157,8 +158,8 @@ impl Entities {
 
     /// Frees an entity slot for reuse.
     ///
-    /// This advances the generation counter, making the slot available for
-    /// new entities. Any future references to the old generation will fail.
+    /// This advances the tag counter, making the slot available for
+    /// new entities. Any future references to the old tag will fail.
     ///
     /// Useually, we will call this function after despawn a entity, then we
     /// can recycle it.
@@ -169,8 +170,8 @@ impl Entities {
     /// - The slot is valid for the given ID
     ///
     /// # Returns
-    /// The new entity with advanced generation.
-    pub unsafe fn free(&mut self, id: EntityId, generation: u32) -> Entity {
+    /// The new entity with advanced tag.
+    pub unsafe fn free(&mut self, id: EntityId, version: u32) -> Entity {
         let index = id.index();
         if index >= self.infos.len() {
             self.resize(index + 1);
@@ -179,13 +180,14 @@ impl Entities {
         let info = unsafe { self.infos.get_unchecked_mut(index) };
         debug_assert!(info.location.is_none());
 
-        let (new_gen, wrapping) = info.generation.checked_add(generation);
-        info.generation = new_gen;
+        let (new_tag, wrapping) = info.tag.checked_add(version);
+
+        info.tag = new_tag;
         if wrapping {
-            log::warn!("Entity({id}) generation wrapped on Entities::free, aliasing may occur.");
+            log::warn!("Entity({id}) tag wrapped on Entities::free, aliasing may occur.");
         }
 
-        Entity::new(id, new_gen)
+        Entity::new(id, new_tag)
     }
 
     /// Checks if an entity can be spawned.
@@ -203,10 +205,11 @@ impl Entities {
         if info.location.is_some() {
             return Err(SpawnError::AlreadySpawned(entity).into());
         }
-        if info.generation != entity.generation() {
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(SpawnError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
@@ -236,18 +239,22 @@ impl Entities {
         let index = entity.index();
         if index >= self.infos.len() {
             self.resize(index + 1);
-            let info = unsafe { self.infos.get_unchecked_mut(index) };
-            info.generation = entity.generation();
+            unsafe {
+                self.infos.get_unchecked_mut(index).tag = entity.tag();
+            }
         }
 
         let info = unsafe { self.infos.get_unchecked_mut(index) };
-        if info.generation != entity.generation() {
+
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(SpawnError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
+
         if info.location.is_some() {
             return Err(SpawnError::AlreadySpawned(entity).into());
         }
@@ -269,10 +276,11 @@ impl Entities {
         let Some(info) = self.infos.get_mut(entity.index()) else {
             return Err(DespawnError::NotFound(entity.id()).into());
         };
-        if info.generation != entity.generation() {
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(DespawnError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
@@ -292,19 +300,20 @@ impl Entities {
         let Some(info) = self.infos.get_mut(entity.index()) else {
             return Err(MoveError::NotFound(entity.id()).into());
         };
-        if info.generation != entity.generation() {
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(MoveError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
-        if let Some(l) = &mut info.location {
-            *l = location;
-            Ok(())
-        } else {
-            Err(MoveError::NotSpawned(entity).into())
-        }
+        let Some(loc) = &mut info.location else {
+            return Err(MoveError::NotSpawned(entity).into());
+        };
+
+        *loc = location;
+        Ok(())
     }
 
     /// Updates an entity's location after a move between storages.
@@ -323,10 +332,11 @@ impl Entities {
         let Some(info) = self.infos.get_mut(entity.index()) else {
             return Err(MoveError::NotFound(entity.id()).into());
         };
-        if info.generation != entity.generation() {
+        if info.tag != entity.tag() {
+            let actual = Entity::new(entity.id(), info.tag);
             return Err(MoveError::Mismatch {
                 expect: entity,
-                actual: Entity::new(entity.id(), info.generation),
+                actual,
             }
             .into());
         }
@@ -340,11 +350,12 @@ impl Entities {
         Ok(())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (Entity, EntityLocation)> {
+    pub fn iter(&self) -> impl FusedIterator<Item = (Entity, EntityLocation)> {
         self.infos.iter().enumerate().filter_map(|(idx, info)| {
             if let Some(location) = info.location {
+                // faster then without_provenance
                 let temp = Entity::from_bits(idx as u64);
-                let entity = Entity::new(temp.id(), info.generation);
+                let entity = Entity::new(temp.id(), info.tag);
                 Some((entity, location))
             } else {
                 None

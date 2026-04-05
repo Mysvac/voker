@@ -43,7 +43,7 @@ impl World {
     pub fn clear_query_state<D: QueryData + 'static, F: QueryFilter + 'static>(&mut self) {
         let type_id = TypeId::of::<QueryState<D, F>>();
         if let Some(id) = self.resources.get_id(type_id)
-            && let Some(data) = self.storages.ress.get_mut(id)
+            && let Some(data) = self.storages.res_set.get_mut(id)
         {
             unsafe {
                 data.clear();

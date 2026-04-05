@@ -175,7 +175,7 @@ where
 ///
 /// - [`pipe`](IntoSystem::pipe): Chain two systems, feeding output of first as input to second
 /// - [`map`](IntoSystem::map): Transform system output using a function
-/// - [`with_marker`](IntoSystem::with_marker): Conditionally run the system based on another system's output
+/// - [`mark`](IntoSystem::mark): Conditionally run the system based on another system's output
 pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
     type System: System<Input = I, Output = O>;
 
@@ -201,8 +201,8 @@ pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
         IntoMapSystem { s: self, f: func }
     }
 
-    fn with_marker<Marker: 'static>(self) -> IntoMarkerSystem<Self, Marker> {
-        IntoMarkerSystem {
+    fn mark<Marker: 'static>(self) -> IntoMarkSystem<Self, Marker> {
+        IntoMarkSystem {
             s: self,
             _marker: PhantomData,
         }
@@ -379,34 +379,34 @@ where
 }
 
 // -----------------------------------------------------------------------------
-// IntoMarkerSystem
+// IntoMarkSystem
 
-pub struct IntoMarkerSystem<S, M> {
+pub struct IntoMarkSystem<S, M> {
     s: S,
     _marker: PhantomData<M>,
 }
 
-pub struct MarkerSystem<S, M> {
+pub struct MarkSystem<S, M> {
     id: SystemId,
     s: S,
     _marker: PhantomData<M>,
 }
 
-unsafe impl<S: Send, M> Send for IntoMarkerSystem<S, M> {}
-unsafe impl<S: Send, M> Send for MarkerSystem<S, M> {}
-unsafe impl<S: Sync, M> Sync for IntoMarkerSystem<S, M> {}
-unsafe impl<S: Sync, M> Sync for MarkerSystem<S, M> {}
+unsafe impl<S: Send, M> Send for IntoMarkSystem<S, M> {}
+unsafe impl<S: Send, M> Send for MarkSystem<S, M> {}
+unsafe impl<S: Sync, M> Sync for IntoMarkSystem<S, M> {}
+unsafe impl<S: Sync, M> Sync for MarkSystem<S, M> {}
 
-impl<I, O, S, M1, M2> IntoSystem<I, O, (M1, fn(I) -> O, M2)> for IntoMarkerSystem<S, M2>
+impl<I, O, S, M1, M2> IntoSystem<I, O, (M1, fn(I) -> O, M2)> for IntoMarkSystem<S, M2>
 where
     I: SystemInput,
     S: IntoSystem<I, O, M1>,
     M2: 'static,
 {
-    type System = MarkerSystem<S::System, M2>;
+    type System = MarkSystem<S::System, M2>;
 
     fn into_system(this: Self) -> Self::System {
-        MarkerSystem {
+        MarkSystem {
             id: Self::system_id(&this),
             s: IntoSystem::into_system(this.s),
             _marker: PhantomData,
@@ -419,7 +419,7 @@ where
     }
 }
 
-impl<I, O, S, M> System for MarkerSystem<S, M>
+impl<I, O, S, M> System for MarkSystem<S, M>
 where
     I: SystemInput,
     S: System<Input = I, Output = O>,

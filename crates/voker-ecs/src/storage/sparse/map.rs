@@ -1,49 +1,93 @@
 use alloc::collections::BinaryHeap;
-use core::alloc::Layout;
 use core::cmp::Reverse;
 use core::fmt::Debug;
 use core::num::NonZeroUsize;
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
 use voker_utils::hash::SparseHashMap;
 
+use super::{MapId, MapRow};
 use crate::borrow::{UntypedMut, UntypedRef};
+use crate::component::{ComponentId, ComponentInfo};
 use crate::entity::Entity;
-use crate::storage::{AbortOnPanic, Column, MapRow};
-use crate::tick::{CheckTicks, Tick};
-use crate::utils::Dropper;
+use crate::storage::{AbortOnPanic, Column};
+use crate::tick::Tick;
+
+// -----------------------------------------------------------------------------
+// Map
 
 /// A mapping table from entities to component data.
 ///
 /// `Map` manages the mapping from [`Entity`] to component data of a specific type.
-/// It uses a [`Column`] as the underlying storage and maintains a [`SparseHashMap`]
-/// for entity-to-location lookups.
 ///
-/// # Storage Structure
-/// - `column`: Stores the actual component data in a contiguous array
-/// - `free`: A stack of available row indices for reuse
-/// - `mapper`: Maps entities to their corresponding storage rows
+/// It uses a [`Column`] as the underlying storage and maintains a `HashMap`
+/// for entity-to-location lookups.
 pub struct Map {
+    id: MapId,
     column: Column,
+    component: ComponentId,
+    entities: SparseHashMap<Entity, MapRow>,
     free: BinaryHeap<Reverse<MapRow>>,
     capacity: usize,
-    mapper: SparseHashMap<Entity, MapRow>,
 }
 
 unsafe impl Sync for Map {}
 unsafe impl Send for Map {}
+impl UnwindSafe for Map {}
+impl RefUnwindSafe for Map {}
+
+// -----------------------------------------------------------------------------
+// Private
+
+impl Map {
+    /// Creates a new `Map` with the specified component layout and drop function.
+    pub(crate) fn new(map_id: MapId, info: &ComponentInfo) -> Self {
+        let id = info.id();
+        let layout = info.layout();
+        let dropper = info.dropper();
+
+        Self {
+            id: map_id,
+            component: id,
+            column: unsafe { Column::new(layout, dropper) },
+            free: BinaryHeap::new(),
+            capacity: 0,
+            entities: SparseHashMap::new(),
+        }
+    }
+
+    /// Updates tick information for all components in this map.
+    ///
+    /// This is used during change detection to update component access ticks.
+    pub(crate) fn check_ticks(&mut self, now: Tick) {
+        if let Some(&row) = self.entities.values().max() {
+            unsafe {
+                self.column.check_ticks(row.0 as usize, now);
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Basic
 
 impl Debug for Map {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Map").field("entities", &self.mapper.keys()).finish()
+        f.debug_struct("Map")
+            .field("id", &self.id)
+            .field("component", &self.component)
+            .field("entities", &self.entities.keys())
+            .finish()
     }
 }
 
 impl Drop for Map {
     fn drop(&mut self) {
-        self.mapper.values().for_each(|v| unsafe {
+        self.entities.values().for_each(|v| unsafe {
             self.column.drop_item(v.0 as usize);
         });
+
         unsafe {
             self.column.dealloc(self.capacity);
         }
@@ -51,16 +95,6 @@ impl Drop for Map {
 }
 
 impl Map {
-    /// Creates a new `Map` with the specified component layout and drop function.
-    pub(crate) fn new(layout: Layout, dropper: Option<Dropper>) -> Self {
-        Self {
-            column: unsafe { Column::new(layout, dropper) },
-            free: BinaryHeap::new(),
-            capacity: 0,
-            mapper: SparseHashMap::new(),
-        }
-    }
-
     /// Allocates a new storage row for the given entity.
     ///
     /// This function either reuses a free row or reserves new memory when needed.
@@ -68,7 +102,6 @@ impl Map {
     /// # Safety
     /// - The entity must not already exist in the map
     /// - The returned `MapRow` is valid until explicitly removed
-    #[inline]
     #[must_use]
     pub unsafe fn allocate(&mut self, entity: Entity) -> MapRow {
         #[cold]
@@ -99,9 +132,8 @@ impl Map {
             Reverse(row)
         }
 
-        debug_assert!(!self.mapper.contains_key(&entity));
         let row = self.free.pop().unwrap_or_else(|| reserve_many(self));
-        self.mapper.insert(entity, row.0);
+        self.entities.insert(entity, row.0);
         row.0
     }
 
@@ -120,7 +152,7 @@ impl Map {
     #[inline]
     #[must_use]
     pub unsafe fn deallocate(&mut self, entity: Entity) -> Option<MapRow> {
-        let map_row = self.mapper.remove(&entity)?;
+        let map_row = self.entities.remove(&entity)?;
         self.free.push(Reverse(map_row));
         Some(map_row)
     }
@@ -128,7 +160,7 @@ impl Map {
     /// Gets the storage row for the given entity, if it exists.
     #[inline]
     pub fn get_map_row(&self, entity: Entity) -> Option<MapRow> {
-        self.mapper.get(&entity).copied()
+        self.entities.get(&entity).copied()
     }
 
     /// Gets a raw pointer to the component data at the specified row.
@@ -275,16 +307,5 @@ impl Map {
     pub unsafe fn drop_item(&mut self, map_row: MapRow) {
         debug_assert!((map_row.0 as usize) < self.capacity);
         unsafe { self.column.drop_item(map_row.0 as usize) }
-    }
-
-    /// Updates tick information for all components in this map.
-    ///
-    /// This is used during change detection to update component access ticks.
-    pub(crate) fn check_ticks(&mut self, check: CheckTicks) {
-        if let Some(&row) = self.mapper.values().max() {
-            unsafe {
-                self.column.check_ticks(row.0 as usize, check);
-            }
-        }
     }
 }

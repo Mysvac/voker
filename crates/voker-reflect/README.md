@@ -110,7 +110,6 @@ struct Enemy {
 let type_id = TypeId::of::<Enemy>();
 
 // Dynamic operation
-
 let mut registry = TypeRegistry::default();
 registry.auto_register();
 
@@ -122,7 +121,6 @@ let dyn_struct: &mut dyn Struct = dyn_obj.reflect_mut().as_struct().unwrap();
 dyn_struct.field_mut("hp").unwrap().apply(&100u32);
 
 // Downcast
-
 let enemy: Enemy = dyn_obj.take::<Enemy>().unwrap();
 assert!(enemy.species.is_empty());
 assert_eq!(enemy.hp, 100);

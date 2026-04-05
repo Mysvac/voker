@@ -1,10 +1,15 @@
+use alloc::vec::Vec;
+use core::fmt::Debug;
+use core::iter::FusedIterator;
+
 use super::ResData;
 use crate::resource::{ResourceId, ResourceInfo};
 use crate::storage::AbortOnPanic;
-use crate::tick::{CheckTicks, Tick};
+use crate::tick::Tick;
 use crate::utils::DebugCheckedUnwrap;
-use alloc::vec::Vec;
-use core::fmt::Debug;
+
+// -----------------------------------------------------------------------------
+// ResSet
 
 /// A collection of all resources in the world.
 ///
@@ -14,21 +19,8 @@ pub struct ResSet {
     data: Vec<Option<ResData>>,
 }
 
-unsafe impl Send for ResSet {}
-unsafe impl Sync for ResSet {}
-
-impl Debug for ResSet {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_map()
-            .entries(
-                self.data
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, v)| v.as_ref().map(|v| (idx, v))),
-            )
-            .finish()
-    }
-}
+// -----------------------------------------------------------------------------
+// Private
 
 impl ResSet {
     /// Creates a new empty resource collection.
@@ -37,52 +29,10 @@ impl ResSet {
         Self { data: Vec::new() }
     }
 
-    /// Check whether a certain resource has been registered
-    ///
-    /// Having registered indicates that we have allocated space for it,
-    /// and `get` must return `Some(&ResData)`, but the specific data may
-    /// still be uninitialized.
-    #[inline]
-    pub fn contains(&self, id: ResourceId) -> bool {
-        self.data.get(id.index()).is_some_and(Option::is_some)
-    }
-
-    /// Returns a shared reference to the resource data for the given ID, if it exists.
-    #[inline]
-    pub fn get(&self, id: ResourceId) -> Option<&ResData> {
-        self.data.get(id.index()).and_then(Option::as_ref)
-    }
-
-    /// Returns a mutable reference to the resource data for the given ID, if it exists.
-    #[inline]
-    pub fn get_mut(&mut self, id: ResourceId) -> Option<&mut ResData> {
-        self.data.get_mut(id.index()).and_then(Option::as_mut)
-    }
-
-    /// Returns a shared reference to the resource data for the given ID.
-    ///
-    /// # Safety
-    /// - The caller must ensure the resource is prepared (instead of registered)..
-    #[inline]
-    pub unsafe fn get_unchecked(&self, id: ResourceId) -> &ResData {
-        debug_assert!(id.index() < self.data.len());
-        unsafe { self.data.get_unchecked(id.index()).as_ref().debug_checked_unwrap() }
-    }
-
-    /// Returns a mutable reference to the resource data for the given ID.
-    ///
-    /// # Safety
-    /// - The caller must ensure the resource is prepared (instead of registered).
-    #[inline]
-    pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResData {
-        debug_assert!(id.index() < self.data.len());
-        unsafe { self.data.get_unchecked_mut(id.index()).as_mut().debug_checked_unwrap() }
-    }
-
     /// Updates all resource ticks to prevent overflow.
-    pub(crate) fn check_ticks(&mut self, check: CheckTicks) {
-        let now = check.tick();
+    pub(crate) fn check_ticks(&mut self, now: Tick) {
         let fall_back = now.relative_to(Tick::MAX_AGE);
+
         self.data.iter_mut().for_each(|data| {
             if let Some(data) = data {
                 data.quick_check(now, fall_back);
@@ -119,8 +69,72 @@ impl ResSet {
             }
         }
 
-        if !self.contains(info.id()) {
+        if self.data.get(info.id().index()).is_none_or(Option::is_none) {
             prepare_internal(self, info);
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Basic
+
+impl Debug for ResSet {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.data.iter().filter_map(Option::as_ref))
+            .finish()
+    }
+}
+
+impl ResSet {
+    /// Returns the number of Maps.
+    #[inline]
+    #[expect(clippy::len_without_is_empty, reason = "consistency")]
+    pub fn len(&self) -> usize {
+        self.data.iter().filter_map(Option::as_ref).count()
+    }
+
+    /// Returns a shared reference to the resource data for the given ID, if it exists.
+    #[inline]
+    pub fn get(&self, id: ResourceId) -> Option<&ResData> {
+        self.data.get(id.index()).and_then(Option::as_ref)
+    }
+
+    /// Returns a mutable reference to the resource data for the given ID, if it exists.
+    #[inline]
+    pub fn get_mut(&mut self, id: ResourceId) -> Option<&mut ResData> {
+        self.data.get_mut(id.index()).and_then(Option::as_mut)
+    }
+
+    /// Returns a shared reference to the resource data for the given ID.
+    ///
+    /// # Safety
+    /// - The caller must ensure the resource is prepared (instead of registered)..
+    #[inline(always)]
+    pub unsafe fn get_unchecked(&self, id: ResourceId) -> &ResData {
+        debug_assert!(id.index() < self.data.len());
+        unsafe { self.data.get_unchecked(id.index()).as_ref().debug_checked_unwrap() }
+    }
+
+    /// Returns a mutable reference to the resource data for the given ID.
+    ///
+    /// # Safety
+    /// - The caller must ensure the resource is prepared (instead of registered).
+    #[inline(always)]
+    pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResData {
+        debug_assert!(id.index() < self.data.len());
+        unsafe { self.data.get_unchecked_mut(id.index()).as_mut().debug_checked_unwrap() }
+    }
+
+    /// Returns an iterator over the resources.
+    #[inline]
+    pub fn iter(&self) -> impl FusedIterator<Item = &'_ ResData> {
+        self.data.iter().filter_map(Option::as_ref)
+    }
+
+    /// Returns an iterator that allows modifying each resource.
+    #[inline]
+    pub fn iter_mut(&mut self) -> impl FusedIterator<Item = &'_ mut ResData> {
+        self.data.iter_mut().filter_map(Option::as_mut)
     }
 }

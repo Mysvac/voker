@@ -53,10 +53,10 @@ impl World {
     /// let mut world = World::alloc();
     ///
     /// let id = world.register_resource::<Foo>();
-    /// assert!(world.storages.ress.get(id).is_none());
+    /// assert!(world.storages.res_set.get(id).is_none());
     ///
     /// world.prepare_resource(id);
-    /// assert!(world.storages.ress.get(id).is_some());
+    /// assert!(world.storages.res_set.get(id).is_some());
     /// ```
     #[inline]
     pub fn prepare_resource(&mut self, id: ResourceId) {
@@ -148,35 +148,65 @@ impl World {
     ///
     /// This is called automatically by entity spawning APIs.
     #[inline]
-    pub fn register_bundle<T: Bundle>(&mut self) -> BundleId {
-        if let Some(id) = self.bundles.get_id_by_type(TypeId::of::<T>()) {
+    pub fn register_explicit_bundle<T: Bundle>(&mut self) -> BundleId {
+        #[cold]
+        #[inline(never)]
+        fn register_cold(
+            world: &mut World,
+            type_id: TypeId,
+            collect_explicit: fn(&mut ComponentCollector),
+        ) -> BundleId {
+            let mut collector = ComponentCollector::new(&mut world.components);
+            collect_explicit(&mut collector);
+
+            let CollectResult {
+                mut dense,
+                mut sparse,
+            } = collector.sorted();
+
+            let dense_len = dense.len();
+            dense.append(&mut sparse);
+
+            unsafe { world.bundles.register_explicit(type_id, &dense, dense_len) }
+        }
+
+        if let Some(id) = self.bundles.get_explicit_id(TypeId::of::<T>()) {
             id
         } else {
-            self.register_bundle_slow(TypeId::of::<T>(), T::collect_components)
+            register_cold(self, TypeId::of::<T>(), T::collect_explicit)
         }
     }
 
-    #[cold]
-    #[inline(never)]
-    fn register_bundle_slow(
-        &mut self,
-        type_id: TypeId,
-        register_fn: unsafe fn(&mut ComponentCollector),
-    ) -> BundleId {
-        let mut collector = ComponentCollector::new(&mut self.components);
-        unsafe {
-            register_fn(&mut collector);
+    /// Registers a bundle type and returns its [`BundleId`].
+    ///
+    /// This is called automatically by entity spawning APIs.
+    #[inline]
+    pub fn register_required_bundle<T: Bundle>(&mut self) -> BundleId {
+        #[cold]
+        #[inline(never)]
+        fn register_cold(
+            world: &mut World,
+            type_id: TypeId,
+            collect_required: fn(&mut ComponentCollector),
+        ) -> BundleId {
+            let mut collector = ComponentCollector::new(&mut world.components);
+            collect_required(&mut collector);
+
+            let CollectResult {
+                mut dense,
+                mut sparse,
+            } = collector.sorted();
+
+            let dense_len = dense.len();
+            dense.append(&mut sparse);
+
+            unsafe { world.bundles.register_required(type_id, &dense, dense_len) }
         }
 
-        let CollectResult {
-            mut dense,
-            mut sparse,
-        } = collector.sorted();
-
-        // 0 <= ComponentId < u32::MAX, so dense_len < u32::MAX.
-        let dense_len = dense.len() as u32;
-
-        dense.append(&mut sparse);
-        unsafe { self.bundles.register(type_id, &dense, dense_len) }
+        if let Some(id) = self.bundles.get_required_id(TypeId::of::<T>()) {
+            id
+        } else {
+            register_cold(self, TypeId::of::<T>(), T::collect_required)
+        }
     }
 }

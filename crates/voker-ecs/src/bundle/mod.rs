@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------------
 // Modules
 
+mod bundles;
 mod ident;
 mod impls;
 mod info;
@@ -15,6 +16,7 @@ mod info;
 
 pub use voker_ecs_derive::Bundle;
 
+pub use bundles::Bundles;
 pub use ident::BundleId;
 pub use impls::Bundle;
-pub use info::{BundleInfo, Bundles};
+pub use info::BundleInfo;

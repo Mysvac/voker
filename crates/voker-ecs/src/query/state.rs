@@ -1,14 +1,15 @@
 use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use voker_utils::hash::NoOpHashSet;
 
+use super::{QueryData, QueryFilter};
 use crate::archetype::{ArcheId, Archetypes};
+use crate::component::ComponentId;
 use crate::entity::StorageId;
-use crate::query::{QueryData, QueryFilter};
 use crate::resource::Resource;
+use crate::storage::{TableId, Tables};
 use crate::system::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
 use crate::utils::DebugName;
 use crate::world::{World, WorldId};
@@ -98,7 +99,6 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// and collects the initial matched storage set.
     pub fn new(world: &mut World) -> Self {
         let world_id = world.id();
-        let version = world.archetypes.len();
 
         let d_state = D::build_state(world);
         let f_state = F::build_state(world);
@@ -115,10 +115,19 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         D::build_filter(&d_state, &mut builders);
         let filter_params: Box<[FilterParam]> = collect_param(builders);
 
-        let storages: Vec<StorageId> = if Self::IS_DENSE {
-            collect_tables(&filter_params, &world.archetypes)
+        let mut version: usize = 0;
+        let mut storages: Vec<StorageId> = Vec::new();
+
+        if Self::IS_DENSE {
+            let tables = &world.storages.tables;
+            let size_hint = (tables.len() >> 2).next_power_of_two() >> 1;
+            storages.reserve(size_hint);
+            updata_table_state(&mut version, &mut storages, &filter_params, tables);
         } else {
-            collect_arches(&filter_params, &world.archetypes)
+            let arches = &world.archetypes;
+            let size_hint = (arches.len() >> 2).next_power_of_two() >> 1;
+            storages.reserve(size_hint);
+            updata_arche_state(&mut version, &mut storages, &filter_params, arches);
         };
 
         QueryState {
@@ -139,21 +148,24 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub fn update(&mut self, world: &World) {
         assert!(self.world_id == world.id());
 
-        let archetypes = &world.archetypes;
-        if archetypes.len() > self.version {
-            if Self::IS_DENSE {
-                updata_dense_state(
+        if Self::IS_DENSE {
+            let tables = &world.storages.tables;
+            if tables.len() > self.version {
+                updata_table_state(
                     &mut self.version,
                     &mut self.storages,
                     &self.filter_params,
-                    archetypes,
+                    tables,
                 );
-            } else {
-                updata_sparse_state(
+            }
+        } else {
+            let arches = &world.archetypes;
+            if arches.len() > self.version {
+                updata_arche_state(
                     &mut self.version,
                     &mut self.storages,
                     &self.filter_params,
-                    archetypes,
+                    arches,
                 );
             }
         }
@@ -170,82 +182,6 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 }
 
 #[inline(never)]
-fn updata_dense_state(
-    version: &mut usize,
-    storages: &mut Vec<StorageId>,
-    filter_params: &[FilterParam],
-    archetypes: &Archetypes,
-) {
-    let old_len = storages.len();
-    let new_version = archetypes.len();
-
-    let mut buffer: Vec<StorageId> = Vec::with_capacity(new_version - old_len);
-
-    for arche_id in (*version)..new_version {
-        let arche_id = unsafe { ArcheId::new_unchecked(arche_id as u32) };
-        let archetype = unsafe { archetypes.get_unchecked(arche_id) };
-        let storage_id = StorageId {
-            table_id: archetype.table_id(),
-        };
-
-        if storages.binary_search(&storage_id).is_err() {
-            let matched = filter_params
-                .iter()
-                .any(|param| archetype.matches_sorted(param.with(), param.without()));
-
-            if matched {
-                buffer.push(storage_id);
-            }
-        }
-    }
-
-    // Assuming the max table ID in storages is A, which represents
-    // the maximum ID that met the criteria during the last update.
-    //
-    // Obviously, we only need to determine whether the newly added
-    // table meets the conditions. An important discovery is that,
-    // the table ID that meets the conditions and is not in storages
-    // must have a value greater than `A`. If its value is less than
-    // or equal to A, then this table must have been processed in a
-    // previous update, If the conditions are met, it should already
-    // be in storages.
-    //
-    // Therefore, we only need to sort the newly added parts.
-
-    buffer.sort_unstable();
-    buffer.dedup();
-    storages.append(&mut buffer);
-
-    *version = new_version;
-}
-
-#[inline(never)]
-fn updata_sparse_state(
-    version: &mut usize,
-    storages: &mut Vec<StorageId>,
-    filter_params: &[FilterParam],
-    archetypes: &Archetypes,
-) {
-    let new_version = archetypes.len();
-
-    for arche_id in (*version)..new_version {
-        let arche_id = unsafe { ArcheId::new_unchecked(arche_id as u32) };
-        let archetype = unsafe { archetypes.get_unchecked(arche_id) };
-
-        let matched = filter_params
-            .iter()
-            .any(|param| archetype.matches_sorted(param.with(), param.without()));
-        if matched {
-            storages.push(StorageId { arche_id });
-        }
-    }
-
-    // The pushed arche_ids are already sorted.
-
-    *version = new_version;
-}
-
-#[inline(never)]
 fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
     // We use NoOpHash because FilterParam is pre-hased.
     let mut params: NoOpHashSet<FilterParam> = NoOpHashSet::with_capacity(builders.len());
@@ -259,52 +195,138 @@ fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
 }
 
 #[inline(never)]
-fn collect_arches(params: &[FilterParam], archetypes: &Archetypes) -> Vec<StorageId> {
-    // N: the number of archetypes
-    // M: the average number of components in an achetype
-    // X: the number of filter_params
-    // Y: the average number of components in a filter_param
-    // Then:
-    // Collect From ArcheFilter: X * Y * F(N, M), F == ??
-    // Collect From Each Arche : X * Y * N * log M
-    let arche_filter = archetypes.filter();
+fn updata_table_state(
+    version: &mut usize,
+    storages: &mut Vec<StorageId>,
+    filter_params: &[FilterParam],
+    tables: &Tables,
+) {
+    let new_version = tables.len();
 
-    // We hope the results are in order.
-    let mut collector = BTreeSet::<StorageId>::new();
+    for table_id in (*version)..new_version {
+        let table_id = unsafe { TableId::new_unchecked(table_id as u32) };
+        let table = unsafe { tables.get_unchecked(table_id) };
+        let dense = table.components();
 
-    params.iter().for_each(|param| {
-        // default filter without any contents,
-        // so it's Clone is cheap (only stack copy).
-        let mut filter = arche_filter.clone();
-        param.with().iter().for_each(|id| {
-            filter.with(*id);
-        });
-        param.without().iter().for_each(|id| {
-            filter.without(*id);
-        });
-        // ↓ collect_arche, instead of collect_table
-        filter.collect_arche(&mut collector);
-    });
+        let matched = filter_params
+            .iter()
+            .any(|p| matches_sorted(dense, &[], p.with(), p.without()));
 
-    collector.into_iter().collect()
+        if matched {
+            storages.push(StorageId { table_id });
+        }
+    }
+
+    // The pushed table_ids are already sorted.
+    *version = new_version;
 }
 
 #[inline(never)]
-fn collect_tables(params: &[FilterParam], archetypes: &Archetypes) -> Vec<StorageId> {
-    let arche_filter = archetypes.filter();
-    let mut collector = BTreeSet::<StorageId>::new();
+fn updata_arche_state(
+    version: &mut usize,
+    storages: &mut Vec<StorageId>,
+    filter_params: &[FilterParam],
+    arches: &Archetypes,
+) {
+    let new_version = arches.len();
 
-    params.iter().for_each(|param| {
-        let mut filter = arche_filter.clone();
-        param.with().iter().for_each(|id| {
-            filter.with(*id);
-        });
-        param.without().iter().for_each(|id| {
-            filter.without(*id);
-        });
-        // ↓ collect_table, instead of collect_arche
-        filter.collect_table(&mut collector);
-    });
+    for arche_id in (*version)..new_version {
+        let arche_id = unsafe { ArcheId::new_unchecked(arche_id as u32) };
+        let arche = unsafe { arches.get_unchecked(arche_id) };
+        let dense = arche.dense_components();
+        let sparse = arche.sparse_components();
 
-    collector.into_iter().collect()
+        let matched = filter_params
+            .iter()
+            .any(|p| matches_sorted(dense, sparse, p.with(), p.without()));
+
+        if matched {
+            storages.push(StorageId { arche_id });
+        }
+    }
+
+    // The pushed arche_ids are already sorted.
+    *version = new_version;
+}
+
+/// Fast archetype matching requiring sorted input slices.
+///
+/// # Complexity
+/// - Time: O(min(m + n, m * log n)) where m = len(with) + len(without), n = total components
+/// - Space: O(1)
+#[inline]
+fn matches_sorted(
+    dense: &[ComponentId],
+    sparse: &[ComponentId],
+    with: &[ComponentId],
+    without: &[ComponentId],
+) -> bool {
+    fn jump_search(id: ComponentId, slice: &[ComponentId]) -> Result<usize, usize> {
+        let mut index = 0usize;
+        let len = slice.len();
+
+        loop {
+            if index == len || slice[index] > id {
+                return Err(index);
+            }
+            if slice[index] == id {
+                return Ok(index);
+            }
+
+            let mut step = 1usize;
+            loop {
+                let offset = index + step;
+                if offset < len && slice[offset] <= id {
+                    step <<= 1;
+                } else {
+                    break;
+                }
+            }
+            // index + (step >> 1) < len
+            // index + max(step >> 1, 1) <= len
+            index += core::cmp::max(step >> 1, 1);
+        }
+    }
+
+    {
+        // with
+        let mut dense = dense;
+        let mut sparse = sparse;
+        let result = with.iter().all(|&id| {
+            // `with` has been sorted and deduplicated, the `[..=idx]` can be skipped.
+            // we can skip `[idx]` because it's `==` specific id.
+            if let Ok(idx) = jump_search(id, dense) {
+                dense = &dense[(idx + 1)..];
+                return true;
+            }
+            if let Ok(idx) = jump_search(id, sparse) {
+                sparse = &sparse[(idx + 1)..];
+                return true;
+            }
+            false
+        });
+        if !result {
+            return false;
+        }
+    }
+    {
+        // without
+        let mut dense = dense;
+        let mut sparse = sparse;
+        // `without` has been sorted and deduplicated, the `[..idx]` can be skipped.
+        // cannot skip `[idx]` because it's `>` specific id (or the end of slice).
+        without.iter().all(|&id| {
+            if let Err(idx) = jump_search(id, dense) {
+                dense = &dense[idx..];
+            } else {
+                return false;
+            }
+            if let Err(idx) = jump_search(id, sparse) {
+                sparse = &sparse[idx..];
+            } else {
+                return false;
+            }
+            true
+        })
+    }
 }

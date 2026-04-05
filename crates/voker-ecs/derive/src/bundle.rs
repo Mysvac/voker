@@ -84,9 +84,15 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let collect_calls = field_access.iter().map(|(_, ty)| {
+    let collect_explicit_calls = field_access.iter().map(|(_, ty)| {
         quote! {
-            <#ty as #bundle_>::collect_components(__collector__);
+            <#ty as #bundle_>::collect_explicit(__collector__);
+        }
+    });
+
+    let collect_required_calls = field_access.iter().map(|(_, ty)| {
+        quote! {
+            <#ty as #bundle_>::collect_required(__collector__);
         }
     });
 
@@ -111,8 +117,12 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
         const _: () = {
             #[expect(unsafe_code, reason = "bundle implementation is unsafe.")]
             unsafe impl #impl_generics #bundle_ for #type_ident #ty_generics #where_clause {
-                fn collect_components(__collector__: &mut #component_collector_) {
-                    #(#collect_calls)*
+                fn collect_explicit(__collector__: &mut #component_collector_) {
+                    #(#collect_explicit_calls)*
+                }
+
+                fn collect_required(__collector__: &mut #component_collector_) {
+                    #(#collect_required_calls)*
                 }
 
                 unsafe fn write_explicit(__writer__: &mut #component_writer_, __base__: usize) {

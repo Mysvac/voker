@@ -16,7 +16,7 @@ use voker_reflect::derive::Reflect;
 /// version of [`Entity`].
 ///
 /// This differs from [`Entity`] in that [`Entity`] is unique for all entities
-/// total (unless the [`EntityGeneration`] wraps), but this is only unique for
+/// total (unless the [`EntityTag`] wraps), but this is only unique for
 /// entities that are active.
 ///
 /// The valid range is `1..u32::MAX`, not including `u32::MAX`.
@@ -38,6 +38,19 @@ impl EntityId {
     #[inline(always)]
     const fn to_bits(self) -> u32 {
         unsafe { mem::transmute::<EntityId, u32>(self) }
+    }
+
+    /// Creates a new `ComponentId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id` >= u32::MAX.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id == 0 || id > u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("ComponentId must be > 0 and <= u32::MAX");
+        }
+        unsafe { Self(NonZeroU32::new_unchecked(id as u32)) }
     }
 
     /// Gets the index of the entity.
@@ -78,36 +91,36 @@ impl Display for EntityId {
 }
 
 // -----------------------------------------------------------------------------
-// EntityGeneration
+// EntityTag
 
-/// This tracks different versions or generations of an [`EntityId`].
+/// This tracks different versions(generations) of an [`EntityId`].
 ///
-/// Importantly, this can wrap, meaning each generation is not necessarily
+/// Importantly, this can wrap, meaning each tag is not necessarily
 /// unique per [`EntityId`].
 ///
 /// # Aliasing
 ///
-/// Internally [`EntityGeneration`] wraps a `u32`, so it can't represent *every*
+/// Internally [`EntityTag`] wraps a `u32`, so it can't represent *every*
 /// possible generation. Eventually, generations can (and do) wrap or alias.
 ///
-/// This can cause [`Entity`] and [`EntityGeneration`] values to be equal while
+/// This can cause [`Entity`] and [`EntityTag`] values to be equal while
 /// still referring to different conceptual entities. Therefore, users should not
 /// hold an `Entity` for a long time.
 ///
 /// [`Entity`]: crate::entity::Entity
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct EntityGeneration(u32);
+pub struct EntityTag(u32);
 
-impl EntityGeneration {
+impl EntityTag {
     /// Represents the first generation of an [`EntityId`].
-    pub(crate) const FIRST: Self = Self(0);
+    pub const FIRST: Self = Self(0);
 
     /// Non-wrapping difference between two generations after which a
     /// signed interpretation becomes negative.
     const DIFF_MAX: u32 = 1u32 << 31;
 
-    /// Returns the [`EntityGeneration`] that would result from this many
+    /// Returns the [`EntityTag`] that would result from this many
     /// more `versions` of the corresponding [`EntityId`] from passing.
     #[inline(always)]
     pub const fn wrapping_add(self, versions: u32) -> Self {
@@ -126,13 +139,13 @@ impl EntityGeneration {
     }
 }
 
-impl PartialOrd for EntityGeneration {
+impl PartialOrd for EntityTag {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(Ord::cmp(self, other))
     }
 }
 
-impl Ord for EntityGeneration {
+impl Ord for EntityTag {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.0.wrapping_sub(other.0) {
             0 => Ordering::Equal,
@@ -142,21 +155,21 @@ impl Ord for EntityGeneration {
     }
 }
 
-impl Hash for EntityGeneration {
+impl Hash for EntityTag {
     #[inline(always)]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         state.write_u32(self.0);
     }
 }
 
-impl Debug for EntityGeneration {
+impl Debug for EntityTag {
     #[inline(always)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Debug::fmt(&self.0, f)
     }
 }
 
-impl Display for EntityGeneration {
+impl Display for EntityTag {
     #[inline(always)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Display::fmt(&self.0, f)
@@ -185,7 +198,7 @@ pub struct Entity {
     // Field ordering is endianness-dependent to ensure consistent u64 representation
     #[cfg(target_endian = "little")]
     id: EntityId,
-    generation: EntityGeneration,
+    tag: EntityTag,
     #[cfg(target_endian = "big")]
     id: EntityId,
 }
@@ -201,17 +214,8 @@ impl Entity {
 
     /// Creates a new `Entity` from its constituent parts.
     #[inline(always)]
-    pub const fn new(id: EntityId, generation: EntityGeneration) -> Entity {
-        Self { id, generation }
-    }
-
-    /// Creates an `Entity` with the given ID and the first generation.
-    #[inline(always)]
-    pub const fn from_id(id: EntityId) -> Entity {
-        Self {
-            id,
-            generation: EntityGeneration::FIRST,
-        }
+    pub const fn new(id: EntityId, tag: EntityTag) -> Entity {
+        Self { id, tag }
     }
 
     /// Returns the entity's index as a `usize`.
@@ -228,10 +232,10 @@ impl Entity {
         self.id
     }
 
-    /// Returns the `EntityGeneration` of this entity.
+    /// Returns the `EntityTag` of this entity.
     #[inline(always)]
-    pub const fn generation(self) -> EntityGeneration {
-        self.generation
+    pub const fn tag(self) -> EntityTag {
+        self.tag
     }
 
     /// Converts the entity to its raw `u64` representation.
@@ -255,7 +259,10 @@ impl Entity {
     pub const fn from_bits(bits: u64) -> Self {
         unsafe {
             let entity = mem::transmute::<u64, Entity>(bits);
-            assert!(mem::transmute::<EntityId, u32>(entity.id) != 0);
+            assert!(
+                mem::transmute::<EntityId, u32>(entity.id) != 0,
+                "EntityId cannot be zero"
+            );
             entity
         }
     }
@@ -319,7 +326,7 @@ impl Display for Entity {
         if *self == Self::PLACEHOLDER {
             f.pad("PLACEHOLDER")
         } else {
-            f.pad(&alloc::format!("{}v{}", self.index(), self.generation()))
+            f.pad(&alloc::format!("{}v{}", self.id(), self.tag()))
         }
     }
 }

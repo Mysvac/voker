@@ -40,6 +40,16 @@ impl Schedules {
         }
     }
 
+    /// Returns the number of elements in the schedules.
+    pub fn len(&self) -> usize {
+        self.mapper.len()
+    }
+
+    /// Returns true if the schedules contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.mapper.is_empty()
+    }
+
     /// Inserts a schedule by its label.
     ///
     /// Returns the previous schedule with the same label, if any.

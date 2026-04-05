@@ -2,81 +2,46 @@ use voker_utils::range_invoke;
 
 use crate::component::{Component, ComponentCollector, ComponentWriter};
 
-/// A trait for types that can be used as bundles of components.
-///
-/// # Overview
-/// Bundles provide a way to group multiple components together for efficient
-/// insertion and spawning operations. They serve as a convenience layer that
-/// abstracts away the complexity of managing individual components when creating
-/// or modifying entities.
-///
-/// # Implementation
-/// Bundles can be created in two ways:
-/// - **Derived automatically**: For tuples of components (up to 16 elements)
-/// - **Manual implementation**: For custom bundle types with special requirements
-///
-/// # Bundle Lifecycle
-/// When a bundle is used to spawn an entity, the following process occurs:
-/// 1. **Component Collection**: All component types in the bundle are collected
-///    via [`collect_components`](Self::collect_components). This phase determines
-///    which component types this bundle provides.
-/// 2. **Archetype Resolution**: The ECS finds or creates an archetype matching
-///    the collected component set.
-/// 3. **Storage Allocation**: Space is allocated in the appropriate archetype.
-/// 4. **Component Writing**: Component values are written to storage via
-///    [`write_explicit`](Self::write_explicit) and [`write_required`](Self::write_required).
-///
-/// # Writing Semantics
-/// The bundle trait distinguishes between two types of component writes:
-///
-/// ## Explicit Fields ([`write_explicit`](Self::write_explicit))
-/// - Writes components that are explicitly provided in the bundle
-/// - Later fields override earlier ones if duplicates occur
-/// - Used for primary component initialization
-///
-/// ## Required Components ([`write_required`](Self::write_required))
-/// - Writes components that must exist but may not be explicitly provided
-/// - Only writes if the component hasn't been written yet
-/// - Useful for default values or required dependencies
+/// A trait for types that represent a bundle (combination) of component data.
 ///
 /// # Safety
 ///
-/// Implementing this trait manually requires careful attention to memory layout
-/// and component invariants. The implementor must ensure:
+/// Implementations must satisfy the following invariants:
+/// - `collect_explicit` must register exactly the component types that can be
+///   written by `write_explicit`.
+/// - `collect_required` must register every component type that may exist after
+///   bundle initialization, including explicit types and dependency-required
+///   types.
+/// - `write_explicit` and `write_required` must only write component values for
+///   types previously registered by `collect_required`.
+/// - `write_required` must not overwrite explicitly provided values; it should
+///   only initialize required components that are still missing.
+/// - Every write performed through `ComponentWriter` must respect storage
+///   bounds, alignment, and type correctness expected by the target storage.
 ///
-/// ## Collection Safety
-/// - [`collect_components`](Self::collect_components) must register **all**
-///   component types that this bundle can write (both explicit and required)
-/// - Component IDs must be valid and properly initialized
-/// - Duplicate registrations are allowed and will be deduplicated
-/// - Registration order does **not** need to match write order
-///
-/// ## Writing Safety
-/// - [`write_explicit`](Self::write_explicit) and [`write_required`](Self::write_required)
-///   must write components at the correct memory offsets
-/// - Writes must not overflow the allocated storage
-/// - Component data must be properly aligned
-/// - Type safety: The written data must match the registered component type
+/// [`collect_explicit`]: Self::collect_explicit
+/// [`collect_required`]: Self::collect_required
+/// [`write_explicit`]: Self::write_explicit
+/// [`write_required`]: Self::write_required
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a bundle",
     label = "invalid bundle",
     note = "Consider annotating `{Self}` with `#[derive(Bundle)]`."
 )]
 pub unsafe trait Bundle: Sized + Sync + Send + 'static {
-    /// Collects all component types that this bundle can provide.
+    /// Registers and collects all explicitly declared component types
+    /// provided by this bundle.
     ///
-    /// This method is called during bundle processing to determine the complete
-    /// set of component types that this bundle might write. The collected set
-    /// is used to find or create the appropriate archetype for entities spawned
-    /// with this bundle.
-    ///
-    /// # Safety
-    /// - Every component type written in [`write_explicit`](Self::write_explicit) or
-    ///   [`write_required`](Self::write_required) **must** be registered here.
-    /// - Registering extra component types that are never written is disallowed.
-    fn collect_components(collector: &mut ComponentCollector);
+    /// This is usually used for removing components.
+    fn collect_explicit(collector: &mut ComponentCollector);
 
-    /// Writes explicitly provided component values to storage.
+    /// Registers and collects all required component types for this bundle.
+    ///
+    /// Required components include both explicitly declared components and
+    /// their dependency-required components.
+    fn collect_required(collector: &mut ComponentCollector);
+
+    /// Writes all explicitly provided component data to storage.
     ///
     /// This method handles components that are directly provided in the bundle.
     /// If duplicate components exist (e.g., in tuple implementations), later
@@ -84,23 +49,21 @@ pub unsafe trait Bundle: Sized + Sync + Send + 'static {
     ///
     /// # Safety
     /// - All component writes must be to types that were registered in
-    ///   [`collect_components`](Self::collect_components)
+    ///   `collect_explicit` or `collect_required` .
     /// - All writes must be within allocated storage bounds
     /// - Component data must be properly aligned
     /// - The type being written must match the registered component type
     /// - The `base` offset must be valid for the current storage context
     unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize);
 
-    /// Writes required component values that haven't been provided explicitly.
+    /// Writes required component values that **haven't** been provided explicitly.
     ///
-    /// This method ensures that all necessary components exist for an entity,
-    /// even if they weren't included in the explicit bundle fields. It only
-    /// writes components that haven't been written yet, preserving any
-    /// user-provided values.
+    /// This method initializes required-but-missing components via default
+    /// construction, while preserving explicitly provided values.
     ///
     /// # Safety
     /// - All component writes must be to types that were registered in
-    ///   [`collect_components`](Self::collect_components)
+    ///   [`collect_required`](Self::collect_required).
     /// - All writes must be within allocated storage bounds
     /// - Component data must be properly aligned
     /// - The type being written must match the registered component type
@@ -112,8 +75,12 @@ pub unsafe trait Bundle: Sized + Sync + Send + 'static {
 /// This allows using individual component types directly as bundles for
 /// convenience when spawning entities with only one component.
 unsafe impl<T: Component> Bundle for T {
-    fn collect_components(collector: &mut ComponentCollector) {
-        collector.collect::<T>();
+    fn collect_explicit(collector: &mut ComponentCollector) {
+        collector.collect_explicit::<T>();
+    }
+
+    fn collect_required(collector: &mut ComponentCollector) {
+        collector.collect_required::<T>();
     }
 
     unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize) {
@@ -134,7 +101,8 @@ unsafe impl<T: Component> Bundle for T {
 macro_rules! impl_bundle_for_tuple {
     (0: []) => {
         unsafe impl Bundle for () {
-            fn collect_components(_collector: &mut ComponentCollector) {}
+            fn collect_explicit(_collector: &mut ComponentCollector) {}
+            fn collect_required(_collector: &mut ComponentCollector) {}
             unsafe fn write_explicit( _writer: &mut ComponentWriter, _base: usize,) {}
             unsafe fn write_required(_writer: &mut ComponentWriter) {}
         }
@@ -143,8 +111,12 @@ macro_rules! impl_bundle_for_tuple {
         #[cfg_attr(docsrs, doc(fake_variadic))]
         #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
         unsafe impl<$name: Bundle> Bundle for ($name,) {
-            fn collect_components(collector: &mut ComponentCollector) {
-                <$name>::collect_components(collector)
+            fn collect_explicit(collector: &mut ComponentCollector) {
+                <$name>::collect_explicit(collector)
+            }
+
+            fn collect_required(collector: &mut ComponentCollector) {
+                <$name>::collect_required(collector)
             }
 
             unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize) {
@@ -160,8 +132,12 @@ macro_rules! impl_bundle_for_tuple {
     ($num:literal : [$($index:tt : $name:ident),*]) => {
         #[cfg_attr(docsrs, doc(hidden))]
         unsafe impl<$($name: Bundle),*> Bundle for ($($name,)*) {
-            fn collect_components(collector: &mut ComponentCollector) {
-                $( <$name>::collect_components(collector); )*
+            fn collect_explicit(collector: &mut ComponentCollector) {
+                $( <$name>::collect_explicit(collector); )*
+            }
+
+            fn collect_required(collector: &mut ComponentCollector) {
+                $( <$name>::collect_required(collector); )*
             }
 
             unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize) {
