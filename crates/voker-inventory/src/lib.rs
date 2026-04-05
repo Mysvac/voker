@@ -27,9 +27,6 @@
 //! }
 //! ```
 //!
-//! Re-submitting the same [`Item`] is idempotent. However, iteration consumers
-//! should still tolerate duplicate logical values.
-//!
 //! # Platform Support
 //!
 //! This crate supports Wasm, Windows, Linux, macOS, Android, iOS, and other
@@ -49,16 +46,21 @@
 //!
 //! at your option.
 #![expect(clippy::new_without_default, reason = "default is not const")]
-#![expect(unsafe_code, reason = "FFI")]
+#![expect(unsafe_code, reason = "pointer operation")]
 #![no_std]
 
 use core::cell::UnsafeCell;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-const PLACEHOLDER: *mut bool = ptr::without_provenance_mut(8);
+#[cfg(debug_assertions)]
+use core::any::TypeId;
+
+const PENDING: usize = 0;
+const RUNNING: usize = 1;
+const COMPLETED: usize = 2;
 
 struct Node {
     // Type-erased pointer to static data.
@@ -69,9 +71,11 @@ struct Node {
     // itself does not need to be atomic.
     next: UnsafeCell<Option<&'static Node>>,
     // Following the constraints in `voker-os`, we require the target
-    // platform to support `AtomicPtr`, but not necessarily `AtomicBool`.
+    // platform to support `AtomicPtr`, but not necessarily `AtomicU8`.
     // So we use `AtomicPtr` instead, maintain the same type size.
-    submitted: AtomicPtr<bool>,
+    state: AtomicUsize,
+    #[cfg(debug_assertions)]
+    type_id: TypeId, // Ensure type correctness in Debug mode.
 }
 
 /// Registry storage for one inventory type.
@@ -158,25 +162,52 @@ impl<T: Inventory> Item<T> {
             node: Node {
                 data: val as *const T as *const (),
                 next: UnsafeCell::new(None),
-                submitted: AtomicPtr::new(ptr::null_mut()),
+                state: AtomicUsize::new(PENDING),
+                #[cfg(debug_assertions)]
+                type_id: TypeId::of::<T>(),
             },
         }
     }
 
     /// Returns whether this item has already been submitted.
     pub fn is_submitted(&self) -> bool {
-        self.node.submitted.load(Ordering::Acquire) == PLACEHOLDER
+        self.node.state.load(Ordering::Acquire) == COMPLETED
     }
 
     /// Submits this item into `T`'s registry.
     ///
     /// Repeated calls are idempotent.
     pub fn submit(&'static self) {
-        use Ordering::{Relaxed, Release};
+        use Ordering::{Acquire, Relaxed, Release};
+
         let node = &self.node;
 
-        if node.submitted.swap(PLACEHOLDER, Relaxed) == PLACEHOLDER {
-            return; // already submitted
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            node.type_id,
+            TypeId::of::<T>(),
+            "\n\
+            ════════════════════════════════════════════════════════════════\n\
+                Type Safety Violation in Inventory Registry                 \n\
+            ════════════════════════════════════════════════════════════════\n\
+                Operation: submit \n\
+                Note: The submitted data type does not match the registry.\n\
+                Expected type: `{}`(TypeId: {:?})\n\
+                Found type:    `?`(TypeId: {:?})\n\
+            ════════════════════════════════════════════════════════════════\n\
+            ",
+            core::any::type_name::<T>(),
+            TypeId::of::<T>(),
+            node.type_id,
+        );
+
+        if let Err(mut state) = node.state.compare_exchange(PENDING, RUNNING, Relaxed, Acquire) {
+            while state != COMPLETED {
+                core::hint::spin_loop();
+                state = node.state.load(Acquire);
+            }
+
+            return;
         }
 
         let reg = <T as Inventory>::registry();
@@ -186,13 +217,16 @@ impl<T: Inventory> Item<T> {
             unsafe {
                 *node.next.get() = head.as_ref();
             }
-            let new = node as *const Node as *mut Node;
 
-            match reg.head.compare_exchange(head, new, Release, Relaxed) {
-                Ok(_) => return,
-                Err(prev) => head = prev,
+            let new_head = node as *const Node as *mut Node;
+
+            if let Err(prev) = reg.head.compare_exchange(head, new_head, Release, Relaxed) {
+                head = prev;
+                continue;
             }
-            // core::hint::spin_loop();
+
+            node.state.store(COMPLETED, Release);
+            return;
         }
     }
 }
@@ -215,9 +249,30 @@ impl<T: Inventory> Iterator for Iter<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.node?;
+
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            node.type_id,
+            TypeId::of::<T>(),
+            "\n\
+            ════════════════════════════════════════════════════════════════\n\
+                Type Safety Violation in Inventory Registry                 \n\
+            ════════════════════════════════════════════════════════════════\n\
+                Operation: iter\n\
+                Note: The same Registry may reused for different types. \n\
+                Expected type: `{}`(TypeId: {:?})\n\
+                Found type:    `?`(TypeId: {:?})\n\
+            ════════════════════════════════════════════════════════════════\n\
+            ",
+            core::any::type_name::<T>(),
+            TypeId::of::<T>(),
+            node.type_id,
+        );
+
         let ptr = node.data as *const T;
-        self.node = unsafe { *node.next.get() };
         debug_assert!(ptr.is_aligned());
+
+        self.node = unsafe { *node.next.get() };
         unsafe { Some(&*ptr) }
     }
 }
@@ -258,12 +313,12 @@ fn call_ctor_in_wasm() {
         unsafe fn __wasm_call_ctors();
     }
 
-    static ONCE_FLAG: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
-    if ONCE_FLAG.load(Ordering::Acquire) != PLACEHOLDER {
+    static ONCE_FLAG: AtomicUsize = AtomicUsize::new(PENDING);
+    if ONCE_FLAG.load(Ordering::Acquire) != COMPLETED {
         unsafe {
             __wasm_call_ctors();
         }
-        ONCE_FLAG.store(PLACEHOLDER, Ordering::Release);
+        ONCE_FLAG.store(COMPLETED, Ordering::Release);
     }
 }
 
@@ -359,7 +414,7 @@ macro_rules! __call_ctor {
         #[used]
         #[cfg_attr(windows, unsafe(link_section = ".CRT$XCU"))]
         #[cfg_attr(
-            any(target_os = "macos", target_os = "ios"),
+            any(target_os = "macos", target_os = "ios", target_os = "tvos",),
             unsafe(link_section = "__DATA,__mod_init_func,mod_init_funcs")
         )]
         #[cfg_attr(
@@ -369,12 +424,15 @@ macro_rules! __call_ctor {
                 target_os = "android",
                 target_os = "dragonfly",
                 target_os = "freebsd",
-                target_os = "haiku",
+                target_os = "fuchsia",
                 target_os = "illumos",
                 target_os = "netbsd",
-                target_os = "nto",
                 target_os = "openbsd",
+                target_os = "redox",
+                target_os = "solaris",
+                target_os = "haiku",
                 target_os = "vxworks",
+                target_os = "nto",
                 target_os = "none",
             ),
             unsafe(link_section = ".init_array")
