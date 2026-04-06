@@ -1,8 +1,9 @@
 //! Archetype topology and component-set grouping.
 //!
 //! Archetypes represent unique component-set layouts.
-//! Query prefiltering and entity storage routing rely on archetype metadata,
-//! including archetype-to-table relationships.
+//!
+//! Query prefiltering and entity storage routing rely on archetype
+//! metadata, including archetype-to-table relationships.
 
 // -----------------------------------------------------------------------------
 // Modules

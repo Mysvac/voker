@@ -167,7 +167,8 @@ impl World {
             let dense_len = dense.len();
             dense.append(&mut sparse);
 
-            unsafe { world.bundles.register_explicit(type_id, &dense, dense_len) }
+            let components = crate::utils::SlicePool::component(&dense);
+            unsafe { world.bundles.register_explicit(type_id, components, dense_len) }
         }
 
         if let Some(id) = self.bundles.get_explicit_id(TypeId::of::<T>()) {
@@ -200,7 +201,8 @@ impl World {
             let dense_len = dense.len();
             dense.append(&mut sparse);
 
-            unsafe { world.bundles.register_required(type_id, &dense, dense_len) }
+            let components = crate::utils::SlicePool::component(&dense);
+            unsafe { world.bundles.register_required(type_id, components, dense_len) }
         }
 
         if let Some(id) = self.bundles.get_required_id(TypeId::of::<T>()) {

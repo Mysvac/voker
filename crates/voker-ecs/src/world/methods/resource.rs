@@ -6,7 +6,7 @@ use voker_ptr::{OwningPtr, PtrMut};
 use crate::borrow::{NonSendMut, NonSendRef, ResMut, ResRef, UntypedMut};
 use crate::resource::{Resource, ResourceId};
 use crate::tick::TicksMut;
-use crate::utils::DebugCheckedUnwrap;
+use crate::utils::{DebugCheckedUnwrap, DebugName};
 use crate::world::{FromWorld, World};
 
 #[inline(never)]
@@ -22,6 +22,17 @@ fn insert_internal<'a, 'b>(
         data.insert_untyped(value, tick);
         data.get_data_mut().debug_checked_unwrap()
     }
+}
+
+#[cold]
+#[inline(never)]
+fn uninitialized_resource(name: DebugName) -> ! {
+    panic!(
+        "Requested resource {name} does not exist in the `World`.
+        Did you forget to add it using `app.insert_resource` / `app.init_resource`?
+        Resources are also implicitly added via `app.add_message`,
+        and can be added by plugins."
+    )
 }
 
 impl World {
@@ -43,7 +54,7 @@ impl World {
     ///
     /// assert_eq!(*world.insert_resource(Counter(1)), Counter(1));
     /// assert_eq!(*world.insert_resource(Counter(2)), Counter(2));
-    /// assert_eq!(world.resource::<Counter>(), Some(&Counter(2)));
+    /// assert_eq!(world.get_resource::<Counter>(), Some(&Counter(2)));
     /// ```
     ///
     /// [`Res`]: crate::borrow::Res
@@ -93,7 +104,7 @@ impl World {
     ///
     /// world.insert_resource(Temp);
     /// world.drop_resource::<Temp>();
-    /// assert!(world.resource::<Temp>().is_none());
+    /// assert!(world.get_resource::<Temp>().is_none());
     /// ```
     pub fn drop_resource<T: Resource + Send>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
@@ -103,7 +114,7 @@ impl World {
         }
     }
 
-    /// Returns a shared reference to a `Send + Sync` resource without change detection.
+    /// Returns a shared reference to a resource without change detection.
     ///
     /// This mirrors the behavior of the [`Res`](crate::borrow::Res) system parameter.
     ///
@@ -117,9 +128,9 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_resource(Bar(20));
-    /// assert_eq!(world.resource::<Bar>(), Some(&Bar(20)));
+    /// assert_eq!(world.get_resource::<Bar>(), Some(&Bar(20)));
     /// ```
-    pub fn resource<T: Resource + Sync>(&self) -> Option<&T> {
+    pub fn get_resource<T: Resource + Sync>(&self) -> Option<&T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get(id)
             && let Some(ptr) = data.get_data()
@@ -129,6 +140,19 @@ impl World {
         } else {
             None
         }
+    }
+
+    /// Returns a shared reference to a resource without change detection.
+    ///
+    /// Similar to `get_resource().unwrap()`. Use [`World::get_resource`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    pub fn resource<T: Resource + Sync>(&self) -> &T {
+        self.get_resource()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
     }
 
     /// Returns a shared resource borrow with change detection.
@@ -146,11 +170,11 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_resource(Bar(20));
-    /// let res = world.resource_ref::<Bar>().unwrap();
+    /// let res = world.get_resource_ref::<Bar>().unwrap();
     /// assert!(res.is_added());
     /// assert!(res.is_changed());
     /// ```
-    pub fn resource_ref<T: Resource + Sync>(&self) -> Option<ResRef<'_, T>> {
+    pub fn get_resource_ref<T: Resource + Sync>(&self) -> Option<ResRef<'_, T>> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get(id)
         {
@@ -161,6 +185,19 @@ impl World {
         } else {
             None
         }
+    }
+
+    /// Returns a shared resource borrow with change detection.
+    ///
+    /// Similar to `get_resource_ref().unwrap()`. Use [`World::get_resource_ref`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    pub fn resource_ref<T: Resource + Sync>(&self) -> ResRef<'_, T> {
+        self.get_resource_ref()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
     }
 
     /// Returns an exclusive resource borrow with change detection.
@@ -178,11 +215,11 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_resource(Bar(20));
-    /// let mut res = world.resource_mut::<Bar>().unwrap();
+    /// let mut res = world.get_resource_mut::<Bar>().unwrap();
     /// *res = Bar(50);
     /// assert!(res.is_changed());
     /// ```
-    pub fn resource_mut<T: Resource + Send>(&mut self) -> Option<ResMut<'_, T>> {
+    pub fn get_resource_mut<T: Resource + Send>(&mut self) -> Option<ResMut<'_, T>> {
         // self is `data_mut`, instead of `full_mut`
         let this_run = self.this_run();
         let last_run = self.last_run();
@@ -197,7 +234,34 @@ impl World {
         }
     }
 
+    /// Returns an exclusive resource borrow with change detection.
+    ///
+    /// Similar to `get_resource_mut().unwrap()`. Use [`World::get_resource_mut`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    pub fn resource_mut<T: Resource + Send>(&mut self) -> ResMut<'_, T> {
+        self.get_resource_mut()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+
     /// Initialize resource if it does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::resource::Resource;
+    /// # use voker_ecs::world::World;
+    /// # let mut world = World::alloc();
+    /// #[derive(Resource, Default)]
+    /// struct Bar(u64);
+    ///
+    /// world.init_resource::<Bar>();
+    ///
+    /// assert_eq!(*world.resource::<Bar>(), 0);
+    /// ```
     pub fn init_resource<T: Resource + Send + FromWorld>(&mut self) {
         let id = self.register_resource::<T>();
         self.prepare_resource(id);
@@ -244,7 +308,9 @@ impl World {
             unsafe {
                 let data = this.storages.res_set.get_unchecked_mut(id);
                 data.insert(value, this_run);
-                data.get_mut(last_run, this_run).debug_checked_unwrap().into_resource()
+                data.get_mut(last_run, this_run)
+                    .debug_checked_unwrap()
+                    .into_resource()
             }
         }
 
@@ -282,7 +348,7 @@ impl World {
     /// struct LocalCache(u64);
     ///
     /// world.insert_non_send(LocalCache(1));
-    /// assert_eq!(world.non_send::<LocalCache>(), Some(&LocalCache(1)));
+    /// assert_eq!(world.get_non_send::<LocalCache>(), Some(&LocalCache(1)));
     /// ```
     pub fn insert_non_send<T: Resource>(&mut self, value: T) -> &mut T {
         assert! {
@@ -348,7 +414,7 @@ impl World {
     ///
     /// world.insert_non_send(LocalTemp);
     /// world.drop_non_send::<LocalTemp>();
-    /// assert!(world.non_send::<LocalTemp>().is_none());
+    /// assert!(world.get_non_send::<LocalTemp>().is_none());
     /// ```
     pub fn drop_non_send<T: Resource>(&mut self) {
         assert! {
@@ -378,9 +444,9 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_non_send(Bar(99));
-    /// assert_eq!(world.non_send::<Bar>(), Some(&Bar(99)));
+    /// assert_eq!(world.get_non_send::<Bar>(), Some(&Bar(99)));
     /// ```
-    pub fn non_send<T: Resource>(&mut self) -> Option<&T> {
+    pub fn get_non_send<T: Resource>(&mut self) -> Option<&T> {
         assert! {
             self.thread_hash() == voker_os::thread::thread_hash(),
             "!Sync Resource can only be accessed on the main thread.",
@@ -395,6 +461,19 @@ impl World {
         } else {
             None
         }
+    }
+
+    /// Returns a shared reference to a main-thread resource without change detection.
+    ///
+    /// Similar to `get_non_send().unwrap()`. Use [`World::get_non_send`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    /// - Panics if called from a thread other than the world's main thread.
+    /// - Panics if the resource does not exist.
+    pub fn non_send<T: Resource>(&mut self) -> &T {
+        self.get_non_send::<T>()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
     }
 
     /// Returns a shared main-thread resource borrow with change detection.
@@ -415,11 +494,11 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_non_send(Bar(7));
-    /// let res = world.non_send_ref::<Bar>().unwrap();
+    /// let res = world.get_non_send_ref::<Bar>().unwrap();
     /// assert!(res.is_added());
     /// assert!(res.is_changed());
     /// ```
-    pub fn non_send_ref<T: Resource>(&self) -> Option<NonSendRef<'_, T>> {
+    pub fn get_non_send_ref<T: Resource>(&self) -> Option<NonSendRef<'_, T>> {
         assert! {
             self.thread_hash() == voker_os::thread::thread_hash(),
             "!Sync Resource can only be accessed on the main thread.",
@@ -435,6 +514,19 @@ impl World {
         } else {
             None
         }
+    }
+
+    /// Returns a shared main-thread resource borrow with change detection.
+    ///
+    /// Similar to `get_non_send_ref().unwrap()`. Use [`World::get_non_send_ref`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    /// - Panics if called from a thread other than the world's main thread.
+    /// - Panics if the resource does not exist.
+    pub fn non_send_ref<T: Resource>(&mut self) -> NonSendRef<'_, T> {
+        self.get_non_send_ref::<T>()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
     }
 
     /// Returns an exclusive main-thread resource borrow with change detection.
@@ -455,11 +547,11 @@ impl World {
     /// struct Bar(u64);
     ///
     /// world.insert_non_send(Bar(7));
-    /// let mut res = world.non_send_mut::<Bar>().unwrap();
+    /// let mut res = world.get_non_send_mut::<Bar>().unwrap();
     /// *res = Bar(8);
     /// assert!(res.is_changed());
     /// ```
-    pub fn non_send_mut<T: Resource>(&mut self) -> Option<NonSendMut<'_, T>> {
+    pub fn get_non_send_mut<T: Resource>(&mut self) -> Option<NonSendMut<'_, T>> {
         assert! {
             self.thread_hash() == voker_os::thread::thread_hash(),
             "!Send Resource can only be accessed mut on the main thread.",
@@ -478,7 +570,23 @@ impl World {
         }
     }
 
+    /// Returns an exclusive main-thread resource borrow with change detection.
+    ///
+    /// Similar to `get_non_send_mut().unwrap()`. Use [`World::get_non_send_mut`]
+    /// instead if you want to handle this case.
+    ///
+    /// # Panics
+    /// - Panics if called from a thread other than the world's main thread.
+    /// - Panics if the resource does not exist.
+    pub fn non_send_mut<T: Resource>(&mut self) -> NonSendMut<'_, T> {
+        self.get_non_send_mut::<T>()
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+
     /// Initialize resource if it does not exist.
+    ///
+    /// # Panics
+    /// - Panics if called from a thread other than the world's main thread.
     pub fn init_non_send<T: Resource + FromWorld>(&mut self) {
         assert! {
             self.thread_hash() == voker_os::thread::thread_hash(),
@@ -532,7 +640,9 @@ impl World {
             unsafe {
                 let data = this.storages.res_set.get_unchecked_mut(id);
                 data.insert(value, this_run);
-                data.get_mut(last_run, this_run).debug_checked_unwrap().into_non_send()
+                data.get_mut(last_run, this_run)
+                    .debug_checked_unwrap()
+                    .into_non_send()
             }
         }
 
@@ -679,17 +789,17 @@ mod tests {
         assert_eq!(*world.insert_resource(Foo), Foo);
         assert_eq!(*world.insert_resource(Bar(234)), Bar(234));
 
-        assert_eq!(world.resource::<Foo>(), Some(&Foo));
+        assert_eq!(world.resource::<Foo>(), &Foo);
         assert_eq!(world.remove_resource::<Foo>(), Some(Foo));
-        assert_eq!(world.resource::<Foo>(), None);
-        assert_eq!(world.non_send::<Foo>(), None);
+        assert_eq!(world.get_resource::<Foo>(), None);
+        assert_eq!(world.get_non_send::<Foo>(), None);
         assert_eq!(world.remove_non_send::<Foo>(), None);
         assert_eq!(world.remove_resource::<Foo>(), None);
 
-        assert_eq!(world.resource::<Bar>(), Some(&Bar(234)));
+        assert_eq!(world.resource::<Bar>(), &Bar(234));
         assert_eq!(world.remove_non_send::<Bar>(), Some(Bar(234)));
-        assert_eq!(world.resource::<Bar>(), None);
-        assert_eq!(world.non_send::<Bar>(), None);
+        assert_eq!(world.get_resource::<Bar>(), None);
+        assert_eq!(world.get_non_send::<Bar>(), None);
         assert_eq!(world.remove_non_send::<Bar>(), None);
         assert_eq!(world.remove_resource::<Bar>(), None);
     }
@@ -699,16 +809,16 @@ mod tests {
         let mut world = World::alloc();
 
         world.insert_resource(Bar(100));
-        assert_eq!(world.resource::<Bar>(), Some(&Bar(100)));
-        assert_eq!(world.non_send::<Bar>(), Some(&Bar(100)));
+        assert_eq!(world.get_resource::<Bar>(), Some(&Bar(100)));
+        assert_eq!(world.get_non_send::<Bar>(), Some(&Bar(100)));
 
         world.insert_resource(Bar(200));
-        assert_eq!(world.resource::<Bar>(), Some(&Bar(200)));
-        assert_eq!(world.non_send::<Bar>(), Some(&Bar(200)));
+        assert_eq!(world.get_resource::<Bar>(), Some(&Bar(200)));
+        assert_eq!(world.get_non_send::<Bar>(), Some(&Bar(200)));
 
         world.insert_non_send(Bar(800));
-        assert_eq!(world.resource::<Bar>(), Some(&Bar(800)));
-        assert_eq!(world.non_send::<Bar>(), Some(&Bar(800)));
+        assert_eq!(world.get_resource::<Bar>(), Some(&Bar(800)));
+        assert_eq!(world.get_non_send::<Bar>(), Some(&Bar(800)));
     }
 
     #[test]
@@ -716,14 +826,14 @@ mod tests {
         let mut world = World::alloc();
 
         assert!(world.remove_resource::<Foo>().is_none());
-        assert!(world.resource::<Foo>().is_none());
-        assert!(world.resource_ref::<Foo>().is_none());
-        assert!(world.resource_mut::<Foo>().is_none());
+        assert!(world.get_resource::<Foo>().is_none());
+        assert!(world.get_resource_ref::<Foo>().is_none());
+        assert!(world.get_resource_mut::<Foo>().is_none());
 
         assert!(world.remove_non_send::<Foo>().is_none());
-        assert!(world.non_send::<Foo>().is_none());
-        assert!(world.non_send_ref::<Foo>().is_none());
-        assert!(world.non_send_mut::<Foo>().is_none());
+        assert!(world.get_non_send::<Foo>().is_none());
+        assert!(world.get_non_send_ref::<Foo>().is_none());
+        assert!(world.get_non_send_mut::<Foo>().is_none());
     }
 
     #[test]
@@ -731,18 +841,18 @@ mod tests {
         let mut world = World::alloc();
         world.insert_resource(Bar(20));
 
-        let res_ref = world.resource_ref::<Bar>().unwrap();
+        let res_ref = world.resource_ref::<Bar>();
         assert!(res_ref.is_changed());
         assert!(res_ref.is_added());
 
         world.update_tick();
 
-        let res_ref = world.resource_ref::<Bar>().unwrap();
+        let res_ref = world.resource_ref::<Bar>();
         assert_eq!(*res_ref, Bar(20));
         assert!(!res_ref.is_changed());
         assert!(!res_ref.is_added());
 
-        let res_ref = world.non_send_ref::<Bar>().unwrap();
+        let res_ref = world.non_send_ref::<Bar>();
         assert_eq!(*res_ref, Bar(20));
         assert!(!res_ref.is_changed());
         assert!(!res_ref.is_added());
@@ -753,12 +863,12 @@ mod tests {
         let mut world = World::alloc();
         world.insert_resource(Bar(20));
 
-        let res_mut = world.resource_mut::<Bar>().unwrap();
+        let res_mut = world.resource_mut::<Bar>();
         assert!(res_mut.is_changed());
         assert!(res_mut.is_added());
 
         world.update_tick();
-        let mut res_mut = world.resource_mut::<Bar>().unwrap();
+        let mut res_mut = world.resource_mut::<Bar>();
         assert_eq!(*res_mut, Bar(20));
         assert!(!res_mut.is_changed());
         assert!(!res_mut.is_added());
@@ -768,7 +878,7 @@ mod tests {
         assert!(!res_mut.is_added());
 
         world.update_tick();
-        let mut res_mut = world.non_send_mut::<Bar>().unwrap();
+        let mut res_mut = world.non_send_mut::<Bar>();
         assert_eq!(*res_mut, Bar(100));
         assert!(!res_mut.is_changed());
         assert!(!res_mut.is_added());
@@ -777,8 +887,8 @@ mod tests {
         assert!(res_mut.is_changed());
         assert!(!res_mut.is_added());
 
-        assert_eq!(world.non_send::<Bar>(), Some(&Bar(50)));
-        assert_eq!(world.resource::<Bar>(), Some(&Bar(50)));
+        assert_eq!(world.non_send::<Bar>(), &Bar(50));
+        assert_eq!(world.resource::<Bar>(), &Bar(50));
     }
 
     #[test]

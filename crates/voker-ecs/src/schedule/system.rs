@@ -1,8 +1,10 @@
-use alloc::boxed::Box;
 use core::fmt::Debug;
 
 use super::{Direction, GraphNode};
-use crate::system::{AccessTable, System};
+use crate::{
+    system::{AccessTable, SystemFlags, SystemId},
+    world::{DeferredWorld, World},
+};
 
 // -----------------------------------------------------------------------------
 // SystemKey
@@ -20,31 +22,93 @@ impl GraphNode for SystemKey {
 // -----------------------------------------------------------------------------
 // SystemObject
 
-/// Erased system type used by the scheduler runtime.
-///
-/// Schedules execute systems as unit tasks with no explicit input/output,
-/// so concrete system signatures are normalized into this boxed trait object.
-pub type UnitSystem = Box<dyn System<Input = (), Output = ()>>;
+use super::{ActionSystem, ConditionSystem};
 
 /// Runtime bundle of an erased system and its access metadata.
 ///
 /// `access` is filled during initialization and later used by
 /// the scheduler to validate conflicts and build execution order.
-pub struct SystemObject {
-    pub system: UnitSystem,
-    pub access: AccessTable,
+pub enum SystemObject {
+    Action {
+        system: ActionSystem,
+        access: AccessTable,
+    },
+    Condition {
+        system: ConditionSystem,
+        access: AccessTable,
+    },
 }
 
 impl SystemObject {
-    /// Creates a system object with an empty access table.
-    ///
-    /// The returned value is uninitialized from a scheduling perspective:
-    /// access data must be populated before graph building and execution.
     #[inline]
-    pub fn new_uninit(system: UnitSystem) -> Self {
-        Self {
+    pub fn new_action(system: ActionSystem) -> Self {
+        Self::Action {
             system,
             access: AccessTable::new(),
+        }
+    }
+
+    #[inline]
+    pub fn new_condition(system: ConditionSystem) -> Self {
+        Self::Condition {
+            system,
+            access: AccessTable::new(),
+        }
+    }
+
+    #[inline]
+    pub fn id(&self) -> SystemId {
+        match self {
+            SystemObject::Action { system, .. } => system.id(),
+            SystemObject::Condition { system, .. } => system.id(),
+        }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> SystemFlags {
+        match self {
+            SystemObject::Action { system, .. } => system.flags(),
+            SystemObject::Condition { system, .. } => system.flags(),
+        }
+    }
+
+    #[inline]
+    pub fn is_deferred(&self) -> bool {
+        match self {
+            SystemObject::Action { system, .. } => system.is_deferred(),
+            SystemObject::Condition { system, .. } => system.is_deferred(),
+        }
+    }
+
+    #[inline]
+    pub fn is_exclusive(&self) -> bool {
+        match self {
+            SystemObject::Action { system, .. } => system.is_exclusive(),
+            SystemObject::Condition { system, .. } => system.is_exclusive(),
+        }
+    }
+
+    #[inline]
+    pub fn is_non_send(&self) -> bool {
+        match self {
+            SystemObject::Action { system, .. } => system.is_non_send(),
+            SystemObject::Condition { system, .. } => system.is_non_send(),
+        }
+    }
+
+    #[inline]
+    pub fn defer(&mut self, world: DeferredWorld) {
+        match self {
+            SystemObject::Action { system, .. } => system.defer(world),
+            SystemObject::Condition { system, .. } => system.defer(world),
+        }
+    }
+
+    #[inline]
+    pub fn apply_deferred(&mut self, world: &mut World) {
+        match self {
+            SystemObject::Action { system, .. } => system.apply_deferred(world),
+            SystemObject::Condition { system, .. } => system.apply_deferred(world),
         }
     }
 }

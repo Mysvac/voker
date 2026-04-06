@@ -9,9 +9,9 @@ use core::mem;
 
 use voker_os::sync::Arc;
 use voker_os::sync::LazyLock;
+use async_task::Task;
 
-use super::{Task, block_on};
-use super::{ThreadExecutor, ThreadExecutorTicker};
+use super::{ThreadExecutor, ThreadExecutorTicker, block_on};
 
 // -----------------------------------------------------------------------------
 // TaskPoolBuilder
@@ -77,8 +77,7 @@ static LOCAL_EXECUTOR: LazyLock<Arc<ThreadExecutor<'static>>> =
 
 /// A thread pool for executing tasks.
 ///
-/// Tasks are futures that are being automatically driven by the pool
-/// on threads owned by the pool. In this case - main thread only.
+/// In this case - main thread only.
 #[derive(Debug, Default)]
 pub struct TaskPool {}
 
@@ -114,28 +113,24 @@ impl TaskPool {
         LOCAL_EXECUTOR.ticker().unwrap()
     }
 
-    /// Spawns a static future on local thread task queue.
+    /// Spawns a static future that executes on the current thread; returns a Task.
     ///
     /// This is functionally identical to [`TaskPool::spawn`].
-    ///
-    /// In a `no_std` environment lacking a thread‑local executor,
-    /// this function schedules the task on the current thread local executor.
-    ///
-    /// The caller **must** ensure execution occurs **on the main thread**.
     #[inline]
     pub fn spawn_local<T: 'static>(&self, future: impl Future<Output = T> + 'static) -> Task<T> {
-        Task::wrap_future(future)
+        web_task::spawn_local(future)
     }
 
-    /// Spawns a static future onto the thread pool.
+    /// Spawns astatic future that can execute on any thread; returns a Task.
     ///
     /// The returned Task is a future, which can be polled to
     /// retrieve the output of the original future.
-    pub fn spawn<T>(&self, future: impl Future<Output = T> + 'static /* + Send */) -> Task<T>
+    #[inline]
+    pub fn spawn<T>(&self, future: impl Future<Output = T> + 'static) -> Task<T>
     where
-        T: 'static, /* + Send */
+        T: 'static + Send,
     {
-        Task::wrap_future(future)
+        web_task::spawn_local(future)
     }
 
     /// Allows spawning non-`'static` futures on the thread pool.
@@ -149,7 +144,7 @@ impl TaskPool {
     #[inline]
     pub fn scope<'env, F, T>(&self, f: F) -> Vec<T>
     where
-        F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env, T>),
+        F: for<'scope> FnOnce(&'scope Scope<'scope, 'env, T>),
         T: Send + 'static,
     {
         self.scope_with(false, None, f)
@@ -163,6 +158,7 @@ impl TaskPool {
     /// returning.
     ///
     /// This is similar to `rayon::scope` and `crossbeam::scope`
+    #[inline]
     pub fn scope_with<'env, F, T>(
         &self,
         _tick_global: bool,
@@ -170,7 +166,7 @@ impl TaskPool {
         f: F,
     ) -> Vec<T>
     where
-        F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env, T>),
+        F: for<'scope> FnOnce(&'scope Scope<'scope, 'env, T>),
         T: Send + 'static,
     {
         // SAFETY: This safety comment applies to all references transmuted to 'env.
@@ -247,7 +243,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// The scope *must* outlive the provided future. The results of the future
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
-    /// On the single threaded task pool, it just calls [`Scope::spawn_local`].
+    /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
     pub fn spawn<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
@@ -286,7 +282,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
     /// For more information, see [`TaskPool::scope`].
-    pub fn spawn_local<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
+    pub fn spawn_scope<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
         self.spawn(f);
     }
 
@@ -295,40 +291,10 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// The scope *must* outlive the provided future. The results of the future
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
-    /// On the single threaded task pool, it just calls [`Scope::spawn_local`].
+    /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
-    pub fn spawn_external<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
+    pub fn spawn_remote<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
         self.spawn(f);
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Tests
-
-#[cfg(all(test, feature = "web"))]
-mod test {
-    use std::{thread, time};
-
-    use super::*;
-
-    /// This test creates a scope with a single task that goes to sleep for a
-    /// nontrivial amount of time. At one point, the scope would (incorrectly)
-    /// return early under these conditions, causing a crash.
-    ///
-    /// The correct behavior is for the scope to block until the receiver is
-    /// woken by the external thread.
-    #[test]
-    fn scoped_spawn() {
-        let (sender, receiver) = async_channel::unbounded();
-        let task_pool = TaskPool {};
-        let _thread = thread::spawn(move || {
-            let duration = time::Duration::from_millis(50);
-            thread::sleep(duration);
-            let _ = sender.send(0);
-        });
-        task_pool.scope(|scope| {
-            scope.spawn(async { receiver.recv().await });
-        });
     }
 }

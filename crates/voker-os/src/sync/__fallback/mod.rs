@@ -14,11 +14,12 @@
 mod poison;
 mod mutex;
 mod rwlock;
-mod condvar;
-mod barrier;
-mod channel;
 mod lazylock;
 mod once;
+
+// mod condvar;
+// mod barrier;
+// mod channel;
 
 // -----------------------------------------------------------------------------
 // Exports
@@ -26,8 +27,9 @@ mod once;
 pub use poison::{LockResult, PoisonError, TryLockError, TryLockResult};
 pub use mutex::{Mutex, MutexGuard};
 pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-pub use condvar::{Condvar, WaitTimeoutResult};
-pub use barrier::{Barrier, BarrierWaitResult};
 pub use once::{Once, OnceLock, OnceState};
 pub use lazylock::LazyLock;
-pub use channel::mpsc;
+
+// pub use channel::mpsc;
+// pub use condvar::{Condvar, WaitTimeoutResult};
+// pub use barrier::{Barrier, BarrierWaitResult};

@@ -9,7 +9,7 @@ use crate::component::ComponentWriter;
 use crate::entity::{AllocEntitiesIter, Entity, EntityLocation};
 use crate::storage::Table;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
-use crate::world::{EntityOwned, UnsafeWorld, World};
+use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
 
 struct BundleSpawner<'a> {
     world: UnsafeWorld<'a>,
@@ -27,21 +27,17 @@ impl<'a> BundleSpawner<'a> {
         bundle_id: BundleId,
         write_explicit: unsafe fn(&mut ComponentWriter, usize),
         write_required: unsafe fn(&mut ComponentWriter),
-        location: DebugLocation,
+        caller: DebugLocation,
     ) -> BundleSpawner<'a> {
         #[cold]
         #[inline(never)]
         fn register_archetype(world: &mut World, bundle_id: BundleId) -> ArcheId {
-            let info = world.bundles.get(bundle_id).unwrap();
+            let info = unsafe { world.bundles.get_unchecked(bundle_id) };
             if let Some(id) = world.archetypes.get_id(info.components()) {
-                unsafe {
-                    world.archetypes.set_bundle_map(bundle_id, id);
-                }
+                world.archetypes.map_bundle_id(bundle_id, id);
                 return id;
             }
 
-            let dense_len = info.dense_components().len();
-            let components = info.clone_components();
             let table_id = unsafe {
                 let sparses = info.sparse_components();
                 world.storages.maps.register(&world.components, sparses);
@@ -49,11 +45,16 @@ impl<'a> BundleSpawner<'a> {
                 world.storages.tables.register(&world.components, denses)
             };
 
-            unsafe {
-                let id = world.archetypes.register(table_id, dense_len, components);
-                world.archetypes.set_bundle_map(bundle_id, id);
-                id
-            }
+            let dense_len = info.dense_components().len();
+            let idents = info.components();
+
+            let id = unsafe {
+                world
+                    .archetypes
+                    .register_unique(table_id, dense_len, idents, &world.components)
+            };
+            world.archetypes.map_bundle_id(bundle_id, id);
+            id
         }
 
         let arche_id = world
@@ -71,13 +72,14 @@ impl<'a> BundleSpawner<'a> {
             world: world.into(),
             write_explicit,
             write_required,
-            location,
+            location: caller,
         }
     }
 
     #[inline(never)]
     fn spawn_at(&mut self, data: OwningPtr<'_>, entity: Entity) -> EntityLocation {
-        let world = unsafe { self.world.full_mut() };
+        let unsafe_world = self.world;
+        let world = unsafe { unsafe_world.full_mut() };
 
         if ::core::cfg!(debug_assertions) {
             world.entities.can_spawn(entity).unwrap();
@@ -87,7 +89,7 @@ impl<'a> BundleSpawner<'a> {
         let arche = unsafe { self.arche.as_mut() };
         let table = unsafe { self.table.as_mut() };
         let arche_id = arche.id();
-        let table_id = arche.table_id();
+        let table_id = table.id();
 
         let guard = ForgetEntityOnPanic {
             entity,
@@ -122,6 +124,14 @@ impl<'a> BundleSpawner<'a> {
         }
 
         ::core::mem::forget(guard);
+
+        {
+            let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
+            arche.trigger_on_add(entity, world.reborrow());
+            arche.trigger_on_insert(entity, world.reborrow());
+        }
+
+        world.flush();
 
         location
     }
@@ -162,6 +172,15 @@ impl World {
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityOwned<'_> {
+        self.spawn_with_caller(bundle, DebugLocation::caller())
+    }
+
+    #[inline]
+    pub(crate) fn spawn_with_caller<B: Bundle>(
+        &mut self,
+        bundle: B,
+        caller: DebugLocation,
+    ) -> EntityOwned<'_> {
         let bundle_id = self.register_required_bundle::<B>();
 
         let mut spawner = BundleSpawner::new(
@@ -169,7 +188,7 @@ impl World {
             bundle_id,
             B::write_explicit,
             B::write_required,
-            DebugLocation::caller(),
+            caller,
         );
 
         let entity = spawner.alloc();
@@ -213,6 +232,16 @@ impl World {
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
     pub fn spawn_at<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityOwned<'_> {
+        self.spawn_at_with_caller(bundle, entity, DebugLocation::caller())
+    }
+
+    #[inline]
+    pub(crate) fn spawn_at_with_caller<B: Bundle>(
+        &mut self,
+        bundle: B,
+        entity: Entity,
+        caller: DebugLocation,
+    ) -> EntityOwned<'_> {
         let bundle_id = self.register_required_bundle::<B>();
 
         let mut spawner = BundleSpawner::new(
@@ -220,7 +249,7 @@ impl World {
             bundle_id,
             B::write_explicit,
             B::write_required,
-            DebugLocation::caller(),
+            caller,
         );
 
         voker_ptr::into_owning!(bundle as data);
@@ -306,13 +335,26 @@ impl World {
         B: Bundle,
         I: IntoIterator<Item = B>,
     {
+        self.spawn_batch_with_caller(iter, DebugLocation::caller())
+    }
+
+    #[inline]
+    pub fn spawn_batch_with_caller<I, B>(
+        &mut self,
+        iter: I,
+        caller: DebugLocation,
+    ) -> SpawnBatchIter<'_, I::IntoIter>
+    where
+        B: Bundle,
+        I: IntoIterator<Item = B>,
+    {
         let bundle_id = self.register_required_bundle::<B>();
         let mut spawner = BundleSpawner::new(
             self,
             bundle_id,
             B::write_explicit,
             B::write_required,
-            DebugLocation::caller(),
+            caller,
         );
 
         let inner = iter.into_iter();
@@ -329,23 +371,23 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use crate::component::{Component, ComponentStorage};
+    use crate::component::{Component, StorageMode};
     use crate::world::World;
     use alloc::string::String;
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Baz(String);
 
     impl Component for Foo {}
     impl Component for Bar {}
     impl Component for Baz {
-        const STORAGE: ComponentStorage = ComponentStorage::Sparse;
+        const STORAGE: StorageMode = StorageMode::Sparse;
     }
 
     #[test]

@@ -8,51 +8,25 @@ use alloc::vec::Vec;
 use fixedbitset::FixedBitSet;
 use slotmap::{SecondaryMap, SlotMap};
 use voker_utils::extra::PagePool;
-use voker_utils::hash::{HashMap, HashSet, NoOpHashMap};
+use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, SparseHashMap};
 
-use super::{Dag, SystemKey, SystemObject, UnitSystem};
+use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
+use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
-use super::{InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use crate::schedule::AnonymousSchedule;
 use crate::system::{IntoSystem, SystemId};
+use crate::utils::DebugCheckedUnwrap;
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
 // Schedule
 
-/// A schedulable collection of systems with ordering and conflict constraints.
-///
-/// `Schedule` stores systems, explicit ordering edges, and access metadata, then
-/// compiles them into an executable graph.
-///
-/// # Execution Graph and Parallelism
-///
-/// On [`Schedule::update`], when the schedule is marked as changed:
-/// - New/updated systems are initialized to collect their [`AccessTable`].
-/// - Pairwise access conflicts are recorded.
-/// - User-provided ordering edges are merged with conflict/exclusive constraints.
-/// - A reduced DAG is built and converted into compact runtime arrays
-///   (`incoming` / `outgoing`) for the executor.
-///
-/// During [`Schedule::run`], the selected executor uses that DAG to run
-/// independent systems in parallel while respecting:
-/// - explicit ordering constraints,
-/// - access conflicts,
-/// - and exclusive systems.
-///
-/// # Change Tracking
-///
-/// Structural edits such as system insertion/removal and explicit order edits
-/// mark the schedule as changed. The next [`Schedule::update`] (or [`Schedule::run`])
-/// will rebuild the compiled graph.
-///
-/// [`AccessTable`]: crate::system::AccessTable
 pub struct Schedule {
     label: InternedScheduleLabel,
     allocator: Allocator,
     buffer: SystemBuffer,
     ordering: OrderingGraph,
-    conflict: ConflictTable,
+    conflict: ConflictGraph,
     schedule: SystemSchedule,
     executor: Box<dyn SystemExecutor>,
     executor_initialized: bool,
@@ -82,16 +56,25 @@ struct SystemBuffer {
 
 #[derive(Default)]
 struct OrderingGraph {
-    ordering: Dag<SystemKey>,
+    dependency: Dag<SystemKey>,
+    condition: Dag<SystemKey>,
 }
 
 // -----------------------------------------------------------------------------
 // ConflictTable
 
 #[derive(Default)]
-struct ConflictTable {
+struct ConflictGraph {
     exclusive: HashSet<SystemKey>,
     conflicts: HashMap<SystemKey, HashSet<SystemKey>>,
+}
+
+#[derive(Default)]
+pub struct ConflictTable {
+    // We use complete matrices instead of triangles.
+    // This has better cache affinity during traversal.
+    lines: usize,
+    table: FixedBitSet,
 }
 
 // -----------------------------------------------------------------------------
@@ -104,21 +87,14 @@ struct ConflictTable {
 /// counts, and `outgoing` stores adjacency lists by index.
 #[derive(Default)]
 pub struct SystemSchedule {
-    /// Collection of system keys
     keys: Vec<SystemKey>,
-    /// Collection of system objects
     systems: Vec<SystemObject>,
-    /// In-degree of each system in the execution graph
-    incoming: Vec<u16>,
-    /// Successor nodes of each system in the execution graph
-    ///
-    /// When a system completes, we iterate through its successors and decrement
-    /// their in-degree. Systems with an in-degree of zero are ready to run.
-    ///
-    /// A local memory pool is used here to manage data and avoid excessive
-    /// memory fragmentation.
-    outgoing: Vec<&'static [u16]>,
-    pool: PagePool,
+    conflict: ConflictTable,
+    incoming: Vec<u32>,
+    outgoing: Vec<&'static [u32]>,
+    condition_incoming: Vec<u32>,
+    condition_outgoing: Vec<&'static [u32]>,
+    pool: PagePool<2048>,
 }
 
 unsafe impl Sync for SystemSchedule {}
@@ -128,8 +104,11 @@ unsafe impl Send for SystemSchedule {}
 pub struct SystemScheduleView<'s> {
     pub keys: &'s [SystemKey],
     pub systems: &'s mut [SystemObject],
-    pub incoming: &'s [u16],
-    pub outgoing: &'s [&'s [u16]],
+    pub conflict: &'s ConflictTable,
+    pub incoming: &'s [u32],
+    pub outgoing: &'s [&'s [u32]],
+    pub condition_incoming: &'s [u32],
+    pub condition_outgoing: &'s [&'s [u32]],
 }
 
 impl SystemSchedule {
@@ -137,17 +116,27 @@ impl SystemSchedule {
         let SystemSchedule {
             keys,
             systems,
+            conflict,
             incoming,
             outgoing,
+            condition_incoming,
+            condition_outgoing,
             ..
         } = self;
 
         SystemScheduleView {
             keys,
             systems,
+            conflict,
             incoming,
             outgoing,
+            condition_incoming,
+            condition_outgoing,
         }
+    }
+
+    pub fn systems_mut(&mut self) -> &mut [SystemObject] {
+        &mut self.systems
     }
 
     pub fn keys(&self) -> &[SystemKey] {
@@ -158,12 +147,24 @@ impl SystemSchedule {
         &self.systems
     }
 
-    pub fn incoming(&self) -> &[u16] {
+    pub fn conflict(&self) -> &ConflictTable {
+        &self.conflict
+    }
+
+    pub fn incoming(&self) -> &[u32] {
         &self.incoming
     }
 
-    pub fn outgoing(&self) -> &[&[u16]] {
+    pub fn outgoing(&self) -> &[&[u32]] {
         &self.outgoing
+    }
+
+    pub fn condition_incoming(&self) -> &[u32] {
+        &self.condition_incoming
+    }
+
+    pub fn condition_outgoing(&self) -> &[&[u32]] {
+        &self.condition_outgoing
     }
 }
 
@@ -171,8 +172,8 @@ impl SystemSchedule {
 // Allocator Implementation
 
 impl Allocator {
-    fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemId, &SystemKey)> + '_ {
-        self.idents.iter()
+    fn iter(&self) -> impl ExactSizeIterator<Item = (SystemId, SystemKey)> + '_ {
+        self.idents.iter().map(|(&x, &y)| (x, y))
     }
 
     fn len(&self) -> usize {
@@ -187,7 +188,7 @@ impl Allocator {
         self.idents.get(&id).copied()
     }
 
-    fn get_name(&self, key: SystemKey) -> Option<SystemId> {
+    fn get_id(&self, key: SystemKey) -> Option<SystemId> {
         self.slots.get(key).copied()
     }
 
@@ -211,8 +212,14 @@ impl Allocator {
 // SystemBuffer Implementation
 
 impl SystemBuffer {
-    fn insert(&mut self, key: SystemKey, system: UnitSystem) {
-        let obj = SystemObject::new_uninit(system);
+    fn insert_action(&mut self, key: SystemKey, system: ActionSystem) {
+        let obj = SystemObject::new_action(system);
+        self.nodes.insert(key, Some(obj));
+        self.uninit.push(key);
+    }
+
+    fn insert_condition(&mut self, key: SystemKey, system: ConditionSystem) {
+        let obj = SystemObject::new_condition(system);
         self.nodes.insert(key, Some(obj));
         self.uninit.push(key);
     }
@@ -242,27 +249,37 @@ impl SystemBuffer {
 // OrderingGraph Implementation
 
 impl OrderingGraph {
-    fn insert(&mut self, a: SystemKey, b: SystemKey) {
-        self.ordering.insert_edge(a, b);
+    fn insert_order(&mut self, before: SystemKey, after: SystemKey) {
+        self.dependency.insert_edge(before, after);
     }
 
-    fn remove(&mut self, a: SystemKey, b: SystemKey) -> bool {
-        self.ordering.remove_edge(a, b)
+    fn remove_order(&mut self, before: SystemKey, after: SystemKey) -> bool {
+        self.dependency.remove_edge(before, after)
+    }
+
+    fn insert_condition(&mut self, runnable: SystemKey, condition: SystemKey) {
+        self.condition.insert_edge(condition, runnable);
+    }
+
+    fn remove_condition(&mut self, runnable: SystemKey, condition: SystemKey) -> bool {
+        self.condition.remove_edge(condition, runnable)
     }
 
     fn insert_node(&mut self, key: SystemKey) {
-        self.ordering.insert_node(key)
+        self.dependency.insert_node(key);
+        self.condition.insert_node(key); // optional
     }
 
     fn remove_node(&mut self, key: SystemKey) {
-        self.ordering.remove_node(key)
+        self.dependency.remove_node(key);
+        self.condition.remove_node(key);
     }
 }
 
 // -----------------------------------------------------------------------------
 // ConflictTable Implementation
 
-impl ConflictTable {
+impl ConflictGraph {
     fn set_exclusive(&mut self, key: SystemKey) {
         self.exclusive.insert(key);
     }
@@ -292,6 +309,39 @@ impl ConflictTable {
     }
 }
 
+impl ConflictTable {
+    fn new(lines: usize) -> Self {
+        Self {
+            lines,
+            table: FixedBitSet::with_capacity(lines * lines),
+        }
+    }
+
+    pub unsafe fn set_conflict(&mut self, a: u32, b: u32) {
+        let index = a as usize * self.lines + b as usize;
+        debug_assert!(index <= self.lines * self.lines);
+        unsafe { self.table.insert_unchecked(index) }
+    }
+
+    pub unsafe fn set_exclusive(&mut self, a: u32) {
+        for line in 0..self.lines {
+            let index = a as usize * self.lines + line;
+            unsafe { self.table.insert_unchecked(index) };
+        }
+        for line in 0..self.lines {
+            let index = a as usize + line * self.lines;
+            unsafe { self.table.insert_unchecked(index) };
+        }
+    }
+
+    #[inline(always)]
+    pub unsafe fn is_conflict(&self, a: u32, b: u32) -> bool {
+        let index = a as usize * self.lines + b as usize;
+        debug_assert!(index <= self.lines * self.lines);
+        unsafe { self.table.contains_unchecked(index) }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Schedule Implementation
 
@@ -312,6 +362,8 @@ impl Default for Schedule {
 
 impl Schedule {
     fn init_systems(&mut self, world: &mut World) {
+        use SystemObject::{Action, Condition};
+
         let buffer = &mut self.buffer;
         let conflict = &mut self.conflict;
 
@@ -319,30 +371,55 @@ impl Schedule {
 
         uninit.iter().for_each(|&key| {
             if let Some(obj) = buffer.get_system_mut(key) {
-                obj.access = obj.system.initialize(world);
-            } else {
-                voker_utils::cold_path();
-                unreachable!();
-            }
-        });
-
-        uninit.iter().for_each(|&a| {
-            if let Some(obj) = buffer.get_system(a) {
-                if obj.system.is_exclusive() {
-                    conflict.set_exclusive(a);
-                } else {
-                    for (b, v) in buffer.nodes.iter() {
-                        if let Some(v) = v
-                            && a != b
-                            && !obj.access.parallelizable(&v.access)
-                        {
-                            conflict.set_conflict(a, b);
-                        }
+                match obj {
+                    Action { system, access } => {
+                        *access = system.initialize(world);
+                    }
+                    Condition { system, access } => {
+                        *access = system.initialize(world);
                     }
                 }
             } else {
                 voker_utils::cold_path();
-                unreachable!();
+                unreachable!(
+                    "A non-existent uninitialized system: {:?}.",
+                    self.allocator.get_id(key)
+                );
+            }
+        });
+
+        uninit.iter().for_each(|&a| {
+            let obj = unsafe { buffer.get_system(a).debug_checked_unwrap() };
+
+            let a_access = match obj {
+                Action { system, access } => {
+                    if system.is_exclusive() {
+                        conflict.set_exclusive(a);
+                        return; // next loop
+                    }
+                    access
+                }
+                Condition { system, access } => {
+                    if system.is_exclusive() {
+                        conflict.set_exclusive(a);
+                        return; // next loop
+                    }
+                    access
+                }
+            };
+
+            for (b, v) in buffer.nodes.iter() {
+                if let Some(v) = v
+                    && a != b
+                {
+                    match v {
+                        Action { access, .. } | Condition { access, .. } => {
+                            if !a_access.parallelizable(access) {
+                                conflict.set_conflict(a, b);
+                            }
+                        }
+                    }
+                }
             }
         });
     }
@@ -350,8 +427,12 @@ impl Schedule {
     fn recycle_schedule(&mut self) {
         let schedule = &mut self.schedule;
         let buffer = &mut self.buffer;
+        schedule.conflict.lines = 0;
+        schedule.conflict.table.clear();
         schedule.incoming.clear();
         schedule.outgoing.clear();
+        schedule.condition_incoming.clear();
+        schedule.condition_outgoing.clear();
         schedule.pool = PagePool::new();
         schedule
             .keys
@@ -363,46 +444,105 @@ impl Schedule {
     }
 
     fn build_schedule(&mut self) {
-        let buffer = &mut self.buffer;
-        let schedule = &mut self.schedule;
-        let conflict = &mut self.conflict;
-        let ordering = &mut self.ordering;
+        let buffer: &mut SystemBuffer = &mut self.buffer;
+        let schedule: &mut SystemSchedule = &mut self.schedule;
+        let ordering: &mut OrderingGraph = &mut self.ordering;
+        let conflict: &mut ConflictGraph = &mut self.conflict;
         assert!(schedule.keys.is_empty() && schedule.systems.is_empty());
         assert!(schedule.outgoing.is_empty() && schedule.incoming.is_empty());
+        assert!(schedule.condition_incoming.is_empty() && schedule.condition_outgoing.is_empty());
 
-        let mut dag = transitive_reduction(conflict, ordering);
+        // mix dependency and condition order
+        let mut dag = ordering.dependency.clone();
+        ordering.condition.all_edges().for_each(|(a, b)| {
+            dag.insert_edge(a, b);
+        });
 
+        // toposort
         schedule.keys.extend(dag.toposort().unwrap());
         let topo: &[SystemKey] = &schedule.keys;
-
-        schedule.systems.extend(topo.iter().map(|&key| buffer.take_system(key)));
+        schedule
+            .systems
+            .extend(topo.iter().map(|&key| buffer.take_system(key)));
         debug_assert_eq!(schedule.keys.len(), schedule.systems.len());
 
-        schedule.incoming.resize(topo.len(), 0);
-        schedule.outgoing.resize(topo.len(), &[]);
-        let mut outgoing: Vec<Vec<u16>> = Vec::with_capacity(topo.len());
-        outgoing.resize_with(topo.len(), Vec::<u16>::new);
+        // map key to index
+        let mut indices: SparseHashMap<SystemKey, usize> = SparseHashMap::new();
+        indices.reserve(topo.len() + (topo.len() >> 1));
 
-        let mut indices: HashMap<SystemKey, usize> = HashMap::with_capacity(topo.len());
         topo.iter().enumerate().for_each(|(idx, &key)| {
             indices.insert(key, idx);
         });
+
+        // calculate incoming and outgoing
+        schedule.incoming.resize(topo.len(), 0);
+        schedule.outgoing.resize(topo.len(), &[]);
+        schedule.condition_incoming.resize(topo.len(), 0);
+        schedule.condition_outgoing.resize(topo.len(), &[]);
+
+        let mut outgoing: Vec<Vec<u32>> = Vec::with_capacity(topo.len());
+        let mut condition_outgoing: Vec<Vec<u32>> = Vec::with_capacity(topo.len());
+        outgoing.resize_with(topo.len(), Vec::<u32>::new);
+        condition_outgoing.resize_with(topo.len(), Vec::<u32>::new);
 
         topo.iter().enumerate().for_each(|(idx, &key)| {
             dag.neighbors(key).for_each(|to| {
                 let neighbor_index = indices[&to];
                 schedule.incoming[neighbor_index] += 1;
-                outgoing[idx].push(neighbor_index as u16);
+                outgoing[idx].push(neighbor_index as u32);
+            });
+        });
+        ::core::mem::drop(dag);
+
+        topo.iter().enumerate().for_each(|(idx, &key)| {
+            ordering.condition.neighbors(key).for_each(|to| {
+                let neighbor_index = indices[&to];
+                schedule.condition_incoming[neighbor_index] += 1;
+                condition_outgoing[idx].push(neighbor_index as u32);
+            });
+        });
+        ::core::mem::drop(indices);
+
+        // move data to pool
+        schedule.pool = PagePool::new();
+
+        outgoing.iter().enumerate().for_each(|(idx, slice)| {
+            let item: &[u32] = schedule.pool.alloc_slice(slice.as_slice());
+            schedule.outgoing[idx] = unsafe { core::mem::transmute::<&[u32], &[u32]>(item) };
+        });
+        ::core::mem::drop(outgoing);
+
+        condition_outgoing.iter().enumerate().for_each(|(idx, slice)| {
+            let item: &[u32] = schedule.pool.alloc_slice(slice.as_slice());
+            schedule.condition_outgoing[idx] =
+                unsafe { core::mem::transmute::<&[u32], &[u32]>(item) };
+        });
+        ::core::mem::drop(condition_outgoing);
+
+        // build fixed conflict table
+        let mut conflict_table = ConflictTable::new(topo.len());
+
+        topo.iter().enumerate().for_each(|(idx_a, &key_a)| {
+            if conflict.is_exclusive(key_a) {
+                unsafe {
+                    conflict_table.set_exclusive(idx_a as u32);
+                }
+                return; // next loop
+            }
+            topo[(idx_a + 1)..].iter().enumerate().for_each(|(offset, &key_b)| {
+                let idx_b = idx_a + offset + 1;
+                if conflict.is_conflict(key_a, key_b) {
+                    unsafe {
+                        conflict_table.set_conflict(idx_a as u32, idx_b as u32);
+                    }
+                    unsafe {
+                        conflict_table.set_conflict(idx_b as u32, idx_a as u32);
+                    }
+                }
             });
         });
 
-        schedule.pool = PagePool::new();
-        outgoing.iter().enumerate().for_each(|(idx, slice)| {
-            let item: &[u16] = schedule.pool.alloc_slice(slice.as_slice());
-
-            schedule.outgoing[idx] =
-                unsafe { core::mem::transmute::<&[u16], &'static [u16]>(item) };
-        });
+        schedule.conflict = conflict_table;
     }
 
     /// Rebuilds the executable schedule if structure or systems changed.
@@ -440,11 +580,11 @@ impl Schedule {
     pub fn run(&mut self, world: &mut World) {
         self.update(world);
 
-        let handler = world.default_error_handler();
+        let handler = world.fallback_error_handler();
         self.executor.run(&mut self.schedule, world, handler.0);
 
-        world.update_tick();
-        world.apply_commands();
+        world.advance_tick();
+        world.flush();
     }
 
     /// Creates a new schedule with the given label.
@@ -477,6 +617,78 @@ impl Schedule {
         self.allocator.contains(name)
     }
 
+    /// Inserts or replaces a system under `SystemId`.
+    ///
+    /// Returns `true` if this is a new insertion, `false` if an existing system
+    /// with the same Id was replaced.
+    pub fn insert_action(&mut self, system: ActionSystem) -> bool {
+        let id = system.id();
+
+        if !self.is_changed {
+            self.recycle_schedule();
+            self.is_changed = true;
+        }
+
+        if let Some(key) = self.allocator.get_key(id) {
+            self.buffer.remove(key);
+            self.buffer.insert_action(key, system);
+            let len = self.allocator.len();
+            assert!(
+                len <= u32::MAX as usize,
+                "too many systems in schedule {:?}",
+                self.label
+            );
+            false
+        } else {
+            let key = self.allocator.insert(id);
+            self.buffer.insert_action(key, system);
+            self.ordering.insert_node(key);
+            let len = self.allocator.len();
+            assert!(
+                len <= u32::MAX as usize,
+                "too many systems in schedule {:?}",
+                self.label
+            );
+            true
+        }
+    }
+
+    /// Inserts or replaces a system under `SystemId`.
+    ///
+    /// Returns `true` if this is a new insertion, `false` if an existing system
+    /// with the same Id was replaced.
+    pub fn insert_condition(&mut self, system: ConditionSystem) -> bool {
+        let id = system.id();
+
+        if !self.is_changed {
+            self.recycle_schedule();
+            self.is_changed = true;
+        }
+
+        if let Some(key) = self.allocator.get_key(id) {
+            self.buffer.remove(key);
+            self.buffer.insert_condition(key, system);
+            let len = self.allocator.len();
+            assert!(
+                len <= u32::MAX as usize,
+                "too many systems in schedule {:?}",
+                self.label
+            );
+            false
+        } else {
+            let key = self.allocator.insert(id);
+            self.buffer.insert_condition(key, system);
+            self.ordering.insert_node(key);
+            let len = self.allocator.len();
+            assert!(
+                len <= u32::MAX as usize,
+                "too many systems in schedule {:?}",
+                self.label
+            );
+            true
+        }
+    }
+
     /// Removes a system by name.
     ///
     /// Returns `true` if a system was removed.
@@ -497,52 +709,11 @@ impl Schedule {
         true
     }
 
-    /// Inserts or replaces a system under `name`.
-    ///
-    /// Returns `true` if this is a new insertion, `false` if an existing system
-    /// with the same name was replaced.
-    pub fn insert(&mut self, system: UnitSystem) -> bool {
-        let id = system.id();
-
-        if !self.is_changed {
-            self.recycle_schedule();
-            self.is_changed = true;
-        }
-
-        if let Some(key) = self.allocator.get_key(id) {
-            self.buffer.remove(key);
-            self.buffer.insert(key, system);
-            let len = self.allocator.len();
-            assert!(
-                len <= u16::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            false
-        } else {
-            let key = self.allocator.insert(id);
-            self.buffer.insert(key, system);
-            self.ordering.insert_node(key);
-            let len = self.allocator.len();
-            assert!(
-                len <= u16::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            true
-        }
-    }
-
-    /// Adds an explicit ordering edge: `before -> after`.
-    ///
-    /// Returns `false` if either system name is not present.
-    ///
-    /// If the edge already exists, this is idempotent.
     pub fn insert_order(&mut self, before: SystemId, after: SystemId) -> bool {
-        let Some(a) = self.allocator.get_key(before) else {
+        let Some(b) = self.allocator.get_key(before) else {
             return false;
         };
-        let Some(b) = self.allocator.get_key(after) else {
+        let Some(a) = self.allocator.get_key(after) else {
             return false;
         };
 
@@ -551,19 +722,16 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        self.ordering.insert(a, b);
+        self.ordering.insert_order(b, a);
 
         true
     }
 
-    /// Removes an explicit ordering edge: `before -> after`.
-    ///
-    /// Returns `false` if either system name is not present or the order is not present.
     pub fn remove_order(&mut self, before: SystemId, after: SystemId) -> bool {
-        let Some(a) = self.allocator.get_key(before) else {
+        let Some(b) = self.allocator.get_key(before) else {
             return false;
         };
-        let Some(b) = self.allocator.get_key(after) else {
+        let Some(a) = self.allocator.get_key(after) else {
             return false;
         };
 
@@ -572,7 +740,41 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        self.ordering.remove(a, b)
+        self.ordering.remove_order(b, a)
+    }
+
+    pub fn insert_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
+        let Some(r) = self.allocator.get_key(runnable) else {
+            return false;
+        };
+        let Some(c) = self.allocator.get_key(condition) else {
+            return false;
+        };
+
+        if !self.is_changed {
+            self.recycle_schedule();
+            self.is_changed = true;
+        }
+
+        self.ordering.insert_condition(r, c);
+
+        true
+    }
+
+    pub fn remove_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
+        let Some(r) = self.allocator.get_key(runnable) else {
+            return false;
+        };
+        let Some(c) = self.allocator.get_key(condition) else {
+            return false;
+        };
+
+        if !self.is_changed {
+            self.recycle_schedule();
+            self.is_changed = true;
+        }
+
+        self.ordering.remove_condition(r, c)
     }
 
     /// Returns the internal key for a system name.
@@ -581,34 +783,52 @@ impl Schedule {
     }
 
     /// Returns the system name for an internal key.
-    pub fn get_name(&self, key: SystemKey) -> Option<SystemId> {
-        self.allocator.get_name(key)
+    pub fn get_id(&self, key: SystemKey) -> Option<SystemId> {
+        self.allocator.get_id(key)
     }
 
     /// Iterates over all registered systems as `(name, key)` pairs.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&SystemId, &SystemKey)> + '_ {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (SystemId, SystemKey)> + '_ {
         self.allocator.iter()
     }
 
-    /// Returns the explicit ordering graph (without conflict-derived edges).
-    pub fn order_graph(&self) -> &Dag<SystemKey> {
-        &self.ordering.ordering
+    pub fn dependency_graph(&self) -> &Dag<SystemKey> {
+        &self.ordering.dependency
+    }
+
+    pub fn condition_graph(&self) -> &Dag<SystemKey> {
+        &self.ordering.condition
     }
 }
 
 impl Schedule {
-    /// Adds a system using its Rust type name as [`SystemId`].
     pub fn add_system<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
     {
-        self.insert(Box::new(IntoSystem::into_system(system)));
+        self.insert_action(Box::new(IntoSystem::into_system(system)));
         self
     }
 
     pub fn del_system<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
+    {
+        self.remove(system.system_id());
+        self
+    }
+
+    pub fn add_condition<S, M>(&mut self, system: S) -> &mut Self
+    where
+        S: IntoSystem<(), bool, M>,
+    {
+        self.insert_condition(Box::new(IntoSystem::into_system(system)));
+        self
+    }
+
+    pub fn del_condition<S, M>(&mut self, system: S) -> &mut Self
+    where
+        S: IntoSystem<(), bool, M>,
     {
         self.remove(system.system_id());
         self
@@ -631,69 +851,22 @@ impl Schedule {
         self.remove_order(before.system_id(), after.system_id());
         self
     }
-}
 
-fn transitive_reduction(conflict: &ConflictTable, ordering: &mut OrderingGraph) -> Dag<SystemKey> {
-    const fn bind_index(row: usize, col: usize) -> usize {
-        // 0
-        // 1 2
-        // 3 4 5
-        ((row * (row + 1)) >> 1) + col
+    pub fn add_run_if<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
+    where
+        S: IntoSystem<(), (), M2>,
+        C: IntoSystem<(), bool, M1>,
+    {
+        self.insert_run_if(system.system_id(), condition.system_id());
+        self
     }
 
-    let (topo, graph) = ordering.ordering.toposort_and_graph().unwrap();
-    debug_assert!(topo.len() <= u16::MAX as usize);
-    if topo.is_empty() {
-        return Dag::new();
+    pub fn del_run_if<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
+    where
+        S: IntoSystem<(), (), M2>,
+        C: IntoSystem<(), bool, M1>,
+    {
+        self.remove_run_if(system.system_id(), condition.system_id());
+        self
     }
-
-    let mut exec_dag = graph.clone();
-    let mut index_map = HashMap::<SystemKey, usize>::with_capacity(topo.len());
-    index_map.extend(topo.iter().enumerate().map(|(idx, &key)| (key, idx)));
-
-    let system_count = topo.len();
-    let mut exclusive_systems = FixedBitSet::with_capacity(system_count);
-    let matrix_size = system_count * (system_count + 1) / 2;
-    let mut transitive_closure = FixedBitSet::with_capacity(matrix_size);
-    topo.iter().enumerate().for_each(|(ib, &kb)| {
-        let b_is_exclusive = conflict.is_exclusive(kb);
-        if b_is_exclusive {
-            unsafe {
-                exclusive_systems.insert_unchecked(ib);
-            }
-        }
-
-        exec_dag.neighbors(kb).for_each(|km| {
-            let im = *index_map.get(&km).unwrap();
-            unsafe {
-                transitive_closure.insert_unchecked(bind_index(im, ib));
-            }
-        });
-
-        topo[0..ib].iter().enumerate().rev().for_each(|(ia, &ka)| {
-            let matrix_index = bind_index(ia, ib);
-            if unsafe { transitive_closure.contains_unchecked(matrix_index) } {
-                return;
-            }
-
-            if b_is_exclusive
-                || unsafe { exclusive_systems.contains_unchecked(ia) }
-                || conflict.is_conflict(ka, kb)
-            {
-                unsafe {
-                    transitive_closure.insert_unchecked(matrix_index);
-                }
-                let is_unreachable = exec_dag.neighbors(kb).all(|km| {
-                    let im = *index_map.get(&km).unwrap();
-                    unsafe { !transitive_closure.contains_unchecked(bind_index(im, ib)) }
-                });
-
-                if is_unreachable {
-                    exec_dag.insert_edge(ka, kb);
-                }
-            }
-        });
-    });
-
-    exec_dag.into()
 }

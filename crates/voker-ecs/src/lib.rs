@@ -2,6 +2,7 @@
 #![cfg_attr(docsrs, expect(internal_features, reason = "needed for fake_variadic"))]
 #![cfg_attr(docsrs, feature(doc_cfg, rustdoc_internals))]
 #![expect(unsafe_code, reason = "ECS requires underlying operation")]
+#![expect(clippy::missing_safety_doc, reason = "refactor...")]
 #![no_std]
 
 // -----------------------------------------------------------------------------
@@ -11,6 +12,7 @@
 pub mod cfg {
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
+        #[cfg(feature = "backtrace")] => backtrace,
         #[cfg(any(feature = "debug", debug_assertions))] => debug,
     }
 }
@@ -55,9 +57,8 @@ pub mod query;
 pub mod schedule;
 pub mod system;
 
-pub mod world;
-
 pub mod name;
+pub mod world;
 
 /// Re-exported macro internals used by derive-generated code.
 pub mod __macro_exports;

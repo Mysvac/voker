@@ -2,7 +2,6 @@
 // -----------------------------------------------------------------------------
 // Modules
 
-mod task;
 mod xor_shift;
 mod task_pool;
 mod global_executor;
@@ -17,7 +16,6 @@ use global_executor::GlobalExecutor;
 // -----------------------------------------------------------------------------
 // Exports
 
-pub use task::Task;
 pub use task_pool::{TaskPool, TaskPoolBuilder, Scope};
 
 // -----------------------------------------------------------------------------

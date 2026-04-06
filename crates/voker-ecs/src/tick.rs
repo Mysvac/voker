@@ -40,7 +40,8 @@ pub const MAX_TICK_AGE: u32 = u32::MAX - (CHECK_CYCLE << 1) - 1;
 /// built into the surrounding systems.
 ///
 /// *Note* that a system that hasn't been run yet has a `Tick` of 0.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Reflect, Clone, Copy, PartialEq, Eq)]
+#[reflect(Opaque, clone, eq, hash, debug)]
 #[repr(transparent)]
 pub struct Tick(u32);
 
@@ -248,6 +249,7 @@ pub trait DetectChanges {
 // TicksBorrow
 
 use voker_ptr::{ThinSlice, ThinSliceMut};
+use voker_reflect::Reflect;
 
 // -------------------------------------------------------------------
 // TicksRef
@@ -264,7 +266,7 @@ use voker_ptr::{ThinSlice, ThinSliceMut};
 /// [`Ref`]: crate::borrow::Ref
 /// [`Res`]: crate::borrow::Res
 /// [`UntypedRef`]: crate::borrow::UntypedRef
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TicksRef<'w> {
     // Perhaps we can directly store the value instead of referencing,
     // then we can reduce 8 Bytes per struct.
@@ -325,7 +327,7 @@ impl<'w> From<TicksMut<'w>> for TicksRef<'w> {
 ///
 /// [`SliceRef`]: crate::borrow::SliceRef
 /// [`UntypedSliceRef`]: crate::borrow::UntypedSliceRef
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TicksSliceRef<'w> {
     pub length: usize,
     pub added: ThinSlice<'w, Tick>,

@@ -16,19 +16,18 @@ mod ident;
 mod input;
 mod meta;
 mod param;
-mod registry;
 mod system;
 
 // -----------------------------------------------------------------------------
 // Exports
 
+pub use error::*;
+
 pub use access::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
-pub use error::UninitSystemError;
 pub use function::{FunctionSystem, SystemFunction};
 pub use ident::{SystemEntity, SystemId};
 pub use input::{In, InMut, InRef, SystemInput};
 pub use meta::{SystemFlags, SystemMeta};
 pub use param::{Local, ReadOnlySystemParam, SystemParam};
-pub use registry::SystemRegistry;
 pub use system::{IntoMapSystem, IntoPipeSystem};
 pub use system::{IntoSystem, MapSystem, PipeSystem, System};

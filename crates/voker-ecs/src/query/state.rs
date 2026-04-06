@@ -68,11 +68,10 @@ impl<D: QueryData + 'static, F: QueryFilter + 'static> Resource for QueryState<D
 impl<D: QueryData, F: QueryFilter> Debug for QueryState<D, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("QueryState")
+            .field("name", &DebugName::type_name::<Self>())
             .field("world_id", &self.world_id)
             .field("storages", &self.storages)
             .field("is_dense", &Self::IS_DENSE)
-            .field("filter_date", &self.filter_data)
-            .field("filter_params", &self.filter_params)
             .finish_non_exhaustive()
     }
 }
@@ -90,7 +89,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     fn invalid_query_data() -> ! {
-        panic!("invalid query data: {}", DebugName::type_name::<D>())
+        panic! {
+            "invalid query data `{}` in query `{}`",
+            DebugName::type_name::<D>(),
+            DebugName::type_name::<Self>(),
+        }
     }
 
     /// Builds a new query state from the given world.

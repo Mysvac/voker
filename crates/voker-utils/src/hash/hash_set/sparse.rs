@@ -646,6 +646,9 @@ where
 
     /// Adds a value to the set.
     ///
+    /// - If the set did not have this value present, true is returned.
+    /// - If the set did have this value present, false is returned.
+    ///
     /// # Example
     ///
     /// ```rust

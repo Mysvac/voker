@@ -3,7 +3,6 @@ use core::fmt::Debug;
 
 use alloc::vec::Vec;
 
-use voker_os::sync::Arc;
 use voker_utils::extra::TypeIdMap;
 use voker_utils::hash::HashMap;
 
@@ -13,15 +12,10 @@ use crate::component::ComponentId;
 // -----------------------------------------------------------------------------
 // Bundles
 
-/// A registry for managing all component bundles in the ECS world.
-///
-/// This structure maintains mappings between bundle types and their metadata,
-/// providing efficient lookup by both type ID and component set. It ensures
-/// that identical component sets are assigned the same bundle ID, preventing
-/// duplication and enabling bundle sharing.
+/// A collection of [`BundleInfo`]s.
 pub struct Bundles {
     infos: Vec<BundleInfo>,
-    mapper: HashMap<Arc<[ComponentId]>, BundleId>,
+    mapper: HashMap<&'static [ComponentId], BundleId>,
     explicit: TypeIdMap<BundleId>,
     required: TypeIdMap<BundleId>,
 }
@@ -33,8 +27,7 @@ impl Debug for Bundles {
 }
 
 impl Bundles {
-    /// Creates a new bundle registry, initializes with
-    /// the empty bundle (no components).
+    /// Creates a new `Bundles`, initializes with the *Empty BundleInfo*.
     pub(crate) fn new() -> Self {
         let mut val = Bundles {
             infos: Vec::new(),
@@ -43,8 +36,8 @@ impl Bundles {
             required: TypeIdMap::new(),
         };
 
-        val.infos.push(BundleInfo::new(BundleId::EMPTY, 0, Arc::new([])));
-        val.mapper.insert(Arc::new([]), BundleId::EMPTY);
+        val.infos.push(BundleInfo::new(BundleId::EMPTY, 0, &[]));
+        val.mapper.insert(&[], BundleId::EMPTY);
         val.explicit.insert(TypeId::of::<()>(), BundleId::EMPTY);
         val.required.insert(TypeId::of::<()>(), BundleId::EMPTY);
 
@@ -53,7 +46,7 @@ impl Bundles {
 
     /// Registers a new bundle for explicit components and returns its ID.
     ///
-    /// If the target bundle already exist, return it directly.
+    /// If the target bundle already exists, return it directly.
     ///
     /// # Safety
     /// - Component IDs must be valid and properly registered, not duplicated.
@@ -62,21 +55,19 @@ impl Bundles {
     pub(crate) unsafe fn register_explicit(
         &mut self,
         type_id: TypeId,
-        components: &[ComponentId],
+        components: &'static [ComponentId],
         dense_len: usize,
     ) -> BundleId {
         if let Some(&id) = self.mapper.get(components) {
             self.explicit.insert(type_id, id);
             id
         } else {
+            voker_utils::cold_path();
             let index = self.infos.len();
-            assert!(index < u32::MAX as usize, "too many bundles");
             let id = BundleId::new(index as u32);
 
-            let arc: Arc<[ComponentId]> = components.into();
-
-            self.infos.push(BundleInfo::new(id, dense_len, arc.clone()));
-            self.mapper.insert(arc, id);
+            self.infos.push(BundleInfo::new(id, dense_len, components));
+            self.mapper.insert(components, id);
             self.explicit.insert(type_id, id);
 
             id
@@ -85,9 +76,7 @@ impl Bundles {
 
     /// Registers a new bundle for required components and returns its ID.
     ///
-    /// This `required` including `explicit`.
-    ///
-    /// If the target bundle already exist, return it directly.
+    /// If the target bundle already exists, return it directly.
     ///
     /// # Safety
     /// - Component IDs must be valid and properly registered, not duplicated.
@@ -96,21 +85,19 @@ impl Bundles {
     pub(crate) unsafe fn register_required(
         &mut self,
         type_id: TypeId,
-        components: &[ComponentId],
+        components: &'static [ComponentId],
         dense_len: usize,
     ) -> BundleId {
         if let Some(&id) = self.mapper.get(components) {
             self.required.insert(type_id, id);
             id
         } else {
+            voker_utils::cold_path();
             let index = self.infos.len();
-            assert!(index < u32::MAX as usize, "too many bundles");
             let id = BundleId::new(index as u32);
 
-            let arc: Arc<[ComponentId]> = components.into();
-
-            self.infos.push(BundleInfo::new(id, dense_len, arc.clone()));
-            self.mapper.insert(arc, id);
+            self.infos.push(BundleInfo::new(id, dense_len, components));
+            self.mapper.insert(components, id);
             self.required.insert(type_id, id);
 
             id
@@ -141,7 +128,7 @@ impl Bundles {
     /// Returns the required bundle ID associated with a type ID, if it exists.
     #[inline]
     pub fn get_required_id(&self, id: TypeId) -> Option<BundleId> {
-        self.explicit.get(id).copied()
+        self.required.get(id).copied()
     }
 
     /// Returns the bundle information for a given bundle ID, if it exists.

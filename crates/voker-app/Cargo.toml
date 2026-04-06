@@ -21,6 +21,7 @@ voker-utils = { path = "../voker-utils" }
 
 voker-os = { path = "../voker-os", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
 
 [lints]

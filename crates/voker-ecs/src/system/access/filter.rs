@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use core::hash::{Hash, Hasher};
 use core::{fmt::Debug, hash::BuildHasher};
 
-use voker_os::sync::Arc;
 use voker_utils::hash::FixedHashState;
 
 use crate::component::ComponentId;
@@ -55,7 +54,8 @@ impl FilterParamBuilder {
             let mut vec = Vec::with_capacity(with_len + without_len);
             vec.extend(self.with);
             vec.extend(self.without);
-            let params: Arc<[ComponentId]> = Arc::from(vec);
+
+            let params = crate::utils::SlicePool::component(&vec);
 
             let mut hasher = FixedHashState.build_hasher();
             with_len.hash(&mut hasher);
@@ -80,7 +80,7 @@ impl FilterParamBuilder {
 pub struct FilterParam {
     hash: u64,
     with_len: usize,
-    params: Arc<[ComponentId]>,
+    params: &'static [ComponentId],
 }
 
 impl FilterParam {
@@ -117,8 +117,8 @@ impl Hash for FilterParam {
 impl Debug for FilterParam {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FilterParam")
-            .field("with", &&self.params[..self.with_len])
-            .field("without", &&self.params[self.with_len..])
+            .field("with", &self.with())
+            .field("without", &self.without())
             .finish()
     }
 }

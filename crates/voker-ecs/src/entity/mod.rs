@@ -24,5 +24,5 @@ pub use allocator::{AllocEntitiesIter, EntityAllocator, RemoteAllocator};
 pub use error::*;
 pub use ident::{Entity, EntityId, EntityTag};
 pub use info::{Entities, EntityLocation, MovedEntityRow};
-pub use mapper::{EntityMap, EntityMapper};
+pub use mapper::{EntityHashMap, EntityHashSet, EntityMapper, EntitySet};
 pub use storage::StorageId;

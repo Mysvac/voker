@@ -53,9 +53,9 @@ pub(crate) fn required_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
-pub(crate) fn component_storage_(voker_ecs_path: &syn::Path) -> TokenStream {
+pub(crate) fn storage_mode_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
-        #voker_ecs_path::component::ComponentStorage
+        #voker_ecs_path::component::StorageMode
     }
 }
 

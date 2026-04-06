@@ -67,20 +67,20 @@
 /// Additionally, sparse components should not be held by large numbers of entities to
 /// minimize random access during queries.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComponentStorage {
+pub enum StorageMode {
     #[default]
     Dense = 0,
     Sparse = 1,
 }
 
-impl ComponentStorage {
+impl StorageMode {
     #[inline]
     pub const fn is_dense(self) -> bool {
-        self as u8 == ComponentStorage::Dense as u8
+        self as u8 == StorageMode::Dense as u8
     }
 
     #[inline]
     pub const fn is_sparse(self) -> bool {
-        self as u8 == ComponentStorage::Sparse as u8
+        self as u8 == StorageMode::Sparse as u8
     }
 }

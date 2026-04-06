@@ -28,7 +28,7 @@ impl World {
     ) -> &mut QueryState<D, F> {
         let unsafe_world = self.unsafe_world();
         let data_mut = unsafe { unsafe_world.data_mut() };
-        if let Some(state) = data_mut.resource_mut::<QueryState<D, F>>() {
+        if let Some(state) = data_mut.get_resource_mut::<QueryState<D, F>>() {
             state.into_inner()
         } else {
             let full_mut = unsafe { unsafe_world.full_mut() };
@@ -127,7 +127,7 @@ impl World {
 #[cfg(test)]
 mod tests {
     use crate::borrow::{Mut, Ref};
-    use crate::component::{Component, ComponentStorage};
+    use crate::component::{Component, StorageMode};
     use crate::entity::Entity;
     use crate::query::{And, Or, With, Without};
     use crate::tick::DetectChanges;
@@ -135,25 +135,25 @@ mod tests {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Baz(String);
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct Qux(f32);
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Zaz(i32);
 
     impl Component for Foo {}
     impl Component for Bar {}
     impl Component for Baz {
-        const STORAGE: ComponentStorage = ComponentStorage::Sparse;
+        const STORAGE: StorageMode = StorageMode::Sparse;
     }
     impl Component for Qux {}
     impl Component for Zaz {}

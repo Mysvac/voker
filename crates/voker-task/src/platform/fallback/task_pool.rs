@@ -7,12 +7,11 @@ use core::future::Future;
 use core::marker::PhantomData;
 use core::mem;
 
+use async_task::Task;
 use voker_os::sync::Arc;
 use voker_os::sync::LazyLock;
 
-use super::ThreadExecutor;
-use super::{Task, block_on};
-use crate::ThreadExecutorTicker;
+use super::{ThreadExecutor, ThreadExecutorTicker, block_on};
 
 // -----------------------------------------------------------------------------
 // TaskPoolBuilder
@@ -132,7 +131,7 @@ impl TaskPool {
         // Loop until all tasks are done
         while ticker.try_tick() {}
 
-        Task(task)
+        task
     }
 
     /// Spawns a static future onto the thread pool.
@@ -151,7 +150,7 @@ impl TaskPool {
         // Loop until all tasks are done
         while ticker.try_tick() {}
 
-        Task(task)
+        task
     }
 
     /// Allows spawning non-`'static` futures on the thread pool.
@@ -165,7 +164,7 @@ impl TaskPool {
     #[inline]
     pub fn scope<'env, F, T>(&self, f: F) -> Vec<T>
     where
-        F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env, T>),
+        F: for<'scope> FnOnce(&'scope Scope<'scope, 'env, T>),
         T: Send + 'static,
     {
         self.scope_with(false, None, f)
@@ -187,7 +186,7 @@ impl TaskPool {
         f: F,
     ) -> Vec<T>
     where
-        F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env, T>),
+        F: for<'scope> FnOnce(&'scope Scope<'scope, 'env, T>),
         T: Send + 'static,
     {
         // SAFETY: This safety comment applies to all references transmuted to 'env.
@@ -264,7 +263,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// The scope *must* outlive the provided future. The results of the future
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
-    /// On the single threaded task pool, it just calls [`Scope::spawn_local`].
+    /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
     pub fn spawn<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {
@@ -312,7 +311,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// The scope *must* outlive the provided future. The results of the future
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
-    /// On the single threaded task pool, it just calls [`Scope::spawn_local`].
+    /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
     pub fn spawn_remote<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {

@@ -35,7 +35,8 @@ use crate::tick::{TicksSliceMut, TicksSliceRef};
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// #[derive(Resource)]
 /// struct Logger { /* ... */ }
 ///
@@ -61,7 +62,8 @@ pub struct Res<'w, T: Resource + Sync> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// #[derive(Resource)]
 /// struct Logger { /* ... */ }
 ///
@@ -90,7 +92,8 @@ pub struct ResRef<'w, T: Resource + Sync> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// #[derive(Resource)]
 /// struct Logger { /* ... */ }
 ///
@@ -120,7 +123,8 @@ pub struct ResMut<'w, T: Resource + Send> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// // A !Sync Resource
 /// #[derive(Resource)]
 /// struct Inputs { /* ... */ }
@@ -148,7 +152,8 @@ pub struct NonSend<'w, T: Resource> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// // A !Sync Resource
 /// #[derive(Resource)]
 /// struct Inputs { /* ... */ }
@@ -178,7 +183,8 @@ pub struct NonSendRef<'w, T: Resource> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// // A !Send Resource
 /// #[derive(Resource)]
 /// struct Inputs { /* ... */ }
@@ -213,7 +219,8 @@ pub struct NonSendMut<'w, T: Resource> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// #[derive(Component)]
 /// struct Foo { /* ... */ }
 ///
@@ -221,7 +228,7 @@ pub struct NonSendMut<'w, T: Resource> {
 /// struct Bar { /* ... */ }
 ///
 /// fn system_a(query: Query<(&Foo, Ref<Bar>)>) {
-///     query.into_iter().for_each(|(foo, bar)|{
+///     query.iter().for_each(|(foo, bar)|{
 ///         // foo is `&Foo`, a thin reference, without change detection.
 ///         // bar is `Ref<Bar>`, a reference wrapper, with change detection.
 ///         let _: bool = bar.is_changed();
@@ -254,7 +261,8 @@ pub struct Ref<'w, T: ?Sized> {
 ///
 /// As system parameter:
 ///
-/// ```ignore
+/// ```no_run
+/// # use voker_ecs::prelude::*;
 /// #[derive(Component)]
 /// struct Foo { /* ... */ }
 ///
@@ -779,6 +787,7 @@ macro_rules! impl_mut_methods {
             /// Returns a shorter-lived version of self, with borrow checker guarantees.
             ///
             /// This function does not mark the target as changed.
+            #[inline]
             pub fn reborrow(&mut self) -> $name<'_, $target> {
                 $name {
                     value: self.value,
@@ -798,7 +807,7 @@ macro_rules! impl_mut_methods {
             /// This function is assumed to only change the type, not modify data.
             /// Modifying data through the mutable reference in the closure is undefined behavior
             /// (data may be modified without triggering change events).
-            #[inline(always)]
+            #[inline]
             pub fn map_type<U: ?Sized>(
                 self,
                 f: impl FnOnce(&mut $target) -> &mut U,

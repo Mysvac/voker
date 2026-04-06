@@ -21,8 +21,8 @@ web = [
   "std",
   "dep:web-time",
   "dep:wasm-bindgen-futures",
-  "dep:js-sys",
   "dep:wasm-bindgen",
+  "dep:js-sys",
 ]
 
 [dependencies]
@@ -48,5 +48,5 @@ portable-atomic = { version = "1", default-features = false, features = [ "fallb
 workspace = true
 
 [package.metadata.docs.rs]
-rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition", "--generate-macro-expansion"]
 all-features = true

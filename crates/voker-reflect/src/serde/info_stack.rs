@@ -27,11 +27,6 @@ impl TypeInfoStack {
         self.stack.pop();
     }
 
-    /// clear the stack
-    pub fn clear(&mut self) {
-        self.stack.clear();
-    }
-
     /// Get an iterator over the stack in the order they were pushed.
     pub fn iter(&self) -> Iter<'_, &'static TypeInfo> {
         self.stack.iter()

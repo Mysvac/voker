@@ -7,13 +7,10 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = [ "std", "debug" ]
+default = [ "std" ]
 
 # Enable Type Tracing in serialization and deserialization.
 # Only effect when `std` feature is enabled.
-# 
-# The `bebug` of different modules are independent, and it is possible
-# to turn off the overall `debug` and only enable specific crate's `debug`.
 debug = []
 
 std = [
@@ -47,5 +44,5 @@ serde = { version = "1", features = ["derive"] }
 workspace = true
 
 [package.metadata.docs.rs]
-rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition", "--generate-macro-expansion"]
 all-features = true

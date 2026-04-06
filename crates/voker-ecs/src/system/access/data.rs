@@ -105,12 +105,6 @@ impl AccessParam {
         }
     }
 
-    pub fn force_reading(&mut self, id: ComponentId) {
-        if !self.entity_mut && !self.entity_ref {
-            self.reading.insert(id);
-        }
-    }
-
     #[must_use]
     pub fn is_read_only(&self) -> bool {
         self.entity_ref || (!self.entity_mut && self.writing.is_empty())
@@ -128,6 +122,12 @@ impl AccessParam {
             return self.writing.is_empty();
         }
         self.writing.is_disjoint(&other.reading) && other.writing.is_disjoint(&self.reading)
+    }
+
+    pub fn force_reading(&mut self, id: ComponentId) {
+        if !self.entity_mut && !self.entity_ref {
+            self.reading.insert(id);
+        }
     }
 
     pub fn merge_with(&mut self, other: &Self) {

@@ -58,7 +58,7 @@ impl SystemId {
     }
 
     #[inline(always)]
-    pub const fn debug_name(&self) -> DebugName {
+    pub const fn name(&self) -> DebugName {
         self.name
     }
 }

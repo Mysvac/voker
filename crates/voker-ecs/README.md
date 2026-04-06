@@ -168,7 +168,7 @@ struct TableStoredComponent;
 struct SparseStoredComponent;
 ```
 
-See [`ComponentStorage`](crate::component::ComponentStorage) for more details.
+See [`StorageMode`](crate::component::StorageMode) for more details.
 
 ### Component Bundles
 
@@ -287,7 +287,7 @@ fn despawn_disabled(mut commands: Commands, query: Query<Entity, With<Disabled>>
 }
 ```
 
-Commands are queued first, then applied later by `World::apply_commands()`
+Commands are queued first, then applied later by `World::flush()`
 (typically by schedule execution flow).
 
 ### Messages

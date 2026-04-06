@@ -6,7 +6,7 @@ use core::marker::PhantomData;
 use crate::error::EcsError;
 use crate::system::{AccessTable, SystemFlags, SystemId};
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 use super::SystemInput;
 
@@ -132,6 +132,16 @@ pub trait System: Send + Sync + 'static {
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, EcsError>;
+
+    fn defer(&mut self, world: DeferredWorld);
+
+    fn apply_deferred(&mut self, world: &mut World);
+
+    /// Returns `true` if this system is marked as `NON_SEND`.
+    #[inline]
+    fn is_deferred(&self) -> bool {
+        self.flags().intersects(SystemFlags::NON_SEND)
+    }
 
     /// Returns `true` if this system is marked as `NON_SEND`.
     #[inline]
@@ -301,6 +311,16 @@ where
         let data = unsafe { self.a.run(input, world)? };
         unsafe { self.b.run(data, world) }
     }
+
+    fn defer(&mut self, mut world: DeferredWorld) {
+        self.a.defer(world.reborrow());
+        self.b.defer(world.reborrow());
+    }
+
+    fn apply_deferred(&mut self, world: &mut World) {
+        self.a.apply_deferred(world);
+        self.b.apply_deferred(world);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -376,6 +396,14 @@ where
         let data = unsafe { self.s.run(input, world)? };
         Ok((self.f)(data))
     }
+
+    fn defer(&mut self, world: DeferredWorld) {
+        self.s.defer(world);
+    }
+
+    fn apply_deferred(&mut self, world: &mut World) {
+        self.s.apply_deferred(world);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -397,7 +425,7 @@ unsafe impl<S: Send, M> Send for MarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for IntoMarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for MarkSystem<S, M> {}
 
-impl<I, O, S, M1, M2> IntoSystem<I, O, (M1, fn(I) -> O, M2)> for IntoMarkSystem<S, M2>
+impl<I, O, S, M1, M2> IntoSystem<I, O, (M2, (M1, fn(I) -> O))> for IntoMarkSystem<S, M2>
 where
     I: SystemInput,
     S: IntoSystem<I, O, M1>,
@@ -454,5 +482,13 @@ where
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, EcsError> {
         unsafe { self.s.run(input, world) }
+    }
+
+    fn defer(&mut self, world: DeferredWorld) {
+        self.s.defer(world);
+    }
+
+    fn apply_deferred(&mut self, world: &mut World) {
+        self.s.apply_deferred(world);
     }
 }

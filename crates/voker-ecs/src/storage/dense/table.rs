@@ -4,7 +4,6 @@ use core::fmt::Debug;
 use core::num::NonZeroUsize;
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use voker_os::sync::Arc;
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
 
 use super::{TableCol, TableId, TableRow};
@@ -31,7 +30,7 @@ use crate::tick::Tick;
 pub struct Table {
     id: TableId,
     columns: Box<[Column]>,
-    compnents: Arc<[ComponentId]>,
+    compnents: &'static [ComponentId],
     entities: Vec<Entity>,
 }
 
@@ -39,7 +38,11 @@ pub struct Table {
 // Private
 
 impl Table {
-    pub(super) fn new(table_id: TableId, components: &Components, idents: &[ComponentId]) -> Self {
+    pub(super) fn new(
+        table_id: TableId,
+        components: &Components,
+        idents: &'static [ComponentId],
+    ) -> Self {
         debug_assert!(idents.is_sorted());
 
         let mut columns: Vec<Column> = Vec::with_capacity(idents.len());
@@ -53,13 +56,9 @@ impl Table {
         Self {
             id: table_id,
             columns: columns.into_boxed_slice(),
-            compnents: Arc::from(idents),
+            compnents: idents,
             entities: Vec::new(),
         }
-    }
-
-    pub(super) fn clone_components(&self) -> Arc<[ComponentId]> {
-        self.compnents.clone()
     }
 
     /// Updates change ticks for all components based on the provided check parameters.
@@ -116,6 +115,11 @@ impl RefUnwindSafe for Table {}
 // Basic
 
 impl Table {
+    #[inline(always)]
+    pub fn id(&self) -> TableId {
+        self.id
+    }
+
     #[inline(always)]
     pub fn components(&self) -> &[ComponentId] {
         &self.compnents

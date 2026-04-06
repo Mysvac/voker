@@ -1,5 +1,4 @@
-use crate::entity::{Entity, EntityError};
-use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
+use crate::entity::{Entity, FetchError};
 use crate::world::World;
 
 impl World {
@@ -34,108 +33,42 @@ impl World {
     /// assert!(world.despawn(entity).is_err());
     /// ```
     #[track_caller]
-    pub fn despawn(&mut self, entity: Entity) -> Result<(), EntityError> {
-        let entity = self.despawn_no_free(entity)?;
-
-        let new_entity = unsafe { self.entities.free(entity.id(), 1) };
-        self.allocator.free(new_entity);
+    pub fn despawn(&mut self, entity: Entity) -> Result<(), FetchError> {
+        self.get_entity_owned(entity)?.despawn();
         Ok(())
-    }
-
-    /// Despawns an entity but do not reclaim [`Entity`] handle.
-    ///
-    /// - Returns [`EntityError`] if the cannot be despawned.
-    /// - Returens [`Entity`] that equivalent to input if despawn successed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use voker_ecs::component::Component;
-    /// # use voker_ecs::world::World;
-    /// # #[derive(Component, Debug)]
-    /// # struct Foo;
-    /// #
-    /// let mut world = World::alloc();
-    ///
-    /// let entity = world.spawn(Foo).entity();
-    /// assert!(world.despawn_no_free(entity).is_ok());
-    /// assert!(world.despawn_no_free(entity).is_err());
-    ///
-    /// // reuse it
-    /// world.spawn_at(Foo, entity);
-    /// assert!(world.despawn(entity).is_ok());
-    /// ```
-    #[track_caller]
-    pub fn despawn_no_free(&mut self, entity: Entity) -> Result<Entity, EntityError> {
-        let location = unsafe { self.entities.set_despawned(entity)? };
-
-        let world = self.unsafe_world();
-
-        let guard = ForgetEntityOnPanic {
-            entity,
-            world,
-            location: DebugLocation::caller(),
-        };
-
-        let world = unsafe { world.full_mut() };
-
-        let arche_id = location.arche_id;
-        let arche_row = location.arche_row;
-        let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
-        let arche_moved = unsafe { arche.remove_entity(arche_row) };
-        let move_res1 = unsafe { world.entities.update_row(arche_moved) };
-
-        let table_id = location.table_id;
-        let table_row = location.table_row;
-        let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
-        let table_moved = unsafe { table.swap_remove_and_drop(table_row) };
-        let move_res2 = unsafe { world.entities.update_row(table_moved) };
-
-        let maps = &mut world.storages.maps;
-        arche.sparse_components().iter().for_each(|&cid| unsafe {
-            let map_id = maps.get_id(cid).debug_checked_unwrap();
-            let map = maps.get_unchecked_mut(map_id);
-            let map_row = map.deallocate(entity).unwrap();
-            map.drop_item(map_row);
-        });
-
-        ::core::mem::forget(guard);
-
-        move_res1?;
-        move_res2?;
-        Ok(entity)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::component::{Component, ComponentStorage};
+    use crate::component::{Component, StorageMode};
     use crate::world::World;
     use alloc::string::String;
     use core::sync::atomic::{AtomicUsize, Ordering};
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct Baz(String);
 
     impl Component for Foo {}
     impl Component for Bar {}
     impl Component for Baz {
-        const STORAGE: ComponentStorage = ComponentStorage::Sparse;
+        const STORAGE: StorageMode = StorageMode::Sparse;
     }
 
     #[test]
     fn drop_dense() {
         static DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        #[derive(Clone)]
         struct DropTracker;
 
         impl Component for DropTracker {
-            const STORAGE: ComponentStorage = ComponentStorage::Dense;
+            const STORAGE: StorageMode = StorageMode::Dense;
         }
         impl Drop for DropTracker {
             fn drop(&mut self) {
@@ -168,10 +101,11 @@ mod tests {
     #[test]
     fn drop_sparse() {
         static DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        #[derive(Clone)]
         struct DropTracker;
 
         impl Component for DropTracker {
-            const STORAGE: ComponentStorage = ComponentStorage::Sparse;
+            const STORAGE: StorageMode = StorageMode::Sparse;
         }
         impl Drop for DropTracker {
             fn drop(&mut self) {
@@ -205,14 +139,17 @@ mod tests {
     fn drop_world() {
         static DENSE_COUNTER: AtomicUsize = AtomicUsize::new(0);
         static SPARSE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        #[derive(Clone)]
         struct DenseTracker;
+        #[derive(Clone)]
         struct SparseTracker;
 
         impl Component for DenseTracker {
-            const STORAGE: ComponentStorage = ComponentStorage::Dense;
+            const STORAGE: StorageMode = StorageMode::Dense;
         }
         impl Component for SparseTracker {
-            const STORAGE: ComponentStorage = ComponentStorage::Sparse;
+            const STORAGE: StorageMode = StorageMode::Sparse;
         }
         impl Drop for DenseTracker {
             fn drop(&mut self) {

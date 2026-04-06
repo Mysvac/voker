@@ -95,6 +95,11 @@ impl Drop for Map {
 }
 
 impl Map {
+    #[inline]
+    pub fn id(&self) -> MapId {
+        self.id
+    }
+
     /// Allocates a new storage row for the given entity.
     ///
     /// This function either reuses a free row or reserves new memory when needed.

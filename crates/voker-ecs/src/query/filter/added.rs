@@ -3,7 +3,7 @@ use voker_ptr::ThinSlice;
 
 use super::QueryFilter;
 use crate::archetype::Archetype;
-use crate::component::{Component, ComponentId, ComponentStorage};
+use crate::component::{Component, ComponentId, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Map, Table, TableRow};
 use crate::system::{AccessParam, FilterParamBuilder};
@@ -72,12 +72,12 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
         this_run: Tick,
     ) -> Self::Cache<'w> {
         match T::STORAGE {
-            ComponentStorage::Dense => AddedView {
+            StorageMode::Dense => AddedView {
                 ticks: StorageSwitch { dense: None },
                 last_run,
                 this_run,
             },
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let maps = unsafe { &world.read_only().storages.maps };
                 if let Some(map_id) = maps.get_id(*state) {
                     AddedView {
@@ -146,7 +146,7 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
         table_row: TableRow,
     ) -> bool {
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let dense = unsafe { cache.ticks.dense };
                 let Some(slice) = dense else {
                     return false;
@@ -154,7 +154,7 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
                 let added = unsafe { *slice.get(table_row.0 as usize) };
                 added.is_newer_than(cache.last_run, cache.this_run)
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let sparse = unsafe { cache.ticks.sparse };
                 let Some(map) = sparse else {
                     return false;

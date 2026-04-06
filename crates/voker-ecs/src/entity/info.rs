@@ -4,7 +4,7 @@ use core::iter::FusedIterator;
 
 use crate::archetype::{ArcheId, ArcheRow};
 use crate::entity::error::{DespawnError, FetchError, MoveError, SpawnError};
-use crate::entity::{Entity, EntityError, EntityId, EntityTag};
+use crate::entity::{Entity, EntityId, EntityTag};
 use crate::storage::{TableId, TableRow};
 
 // -----------------------------------------------------------------------------
@@ -122,17 +122,16 @@ impl Entities {
     /// - `FetchError::NotFound` - Entity index out of bounds
     /// - `FetchError::Mismatch` - Generation counter mismatch (stale entity)
     /// - `FetchError::NotSpawned` - Entity exists but is not spawned
-    pub fn locate(&self, entity: Entity) -> Result<EntityLocation, EntityError> {
+    pub fn locate(&self, entity: Entity) -> Result<EntityLocation, FetchError> {
         let Some(info) = self.infos.get(entity.index()) else {
+            voker_utils::cold_path();
             return Err(FetchError::NotFound(entity.id()).into());
         };
         if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(FetchError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(FetchError::Mismatch { expect, actual });
         }
         info.location.ok_or(FetchError::NotSpawned(entity).into())
     }
@@ -195,7 +194,7 @@ impl Entities {
     /// # Returns
     /// - `Ok(())` - Entity can be spawned
     /// - `Err(EntityError::SpawnError)` - If spawning is not possible
-    pub fn can_spawn(&self, entity: Entity) -> Result<(), EntityError> {
+    pub fn can_spawn(&self, entity: Entity) -> Result<(), SpawnError> {
         let index = entity.index();
 
         let Some(info) = self.infos.get(index) else {
@@ -206,12 +205,9 @@ impl Entities {
             return Err(SpawnError::AlreadySpawned(entity).into());
         }
         if info.tag != entity.tag() {
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(SpawnError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(SpawnError::Mismatch { expect, actual });
         }
 
         Ok(())
@@ -235,7 +231,7 @@ impl Entities {
         &mut self,
         entity: Entity,
         location: EntityLocation,
-    ) -> Result<(), EntityError> {
+    ) -> Result<(), SpawnError> {
         let index = entity.index();
         if index >= self.infos.len() {
             self.resize(index + 1);
@@ -247,15 +243,14 @@ impl Entities {
         let info = unsafe { self.infos.get_unchecked_mut(index) };
 
         if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(SpawnError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(SpawnError::Mismatch { expect, actual });
         }
 
         if info.location.is_some() {
+            voker_utils::cold_path();
             return Err(SpawnError::AlreadySpawned(entity).into());
         }
 
@@ -272,17 +267,16 @@ impl Entities {
     /// # Returns
     /// - `Ok(EntityLocation)` - The entity's former location
     /// - `Err(EntityError)` - If entity state is invalid
-    pub unsafe fn set_despawned(&mut self, entity: Entity) -> Result<EntityLocation, EntityError> {
+    pub unsafe fn set_despawned(&mut self, entity: Entity) -> Result<EntityLocation, DespawnError> {
         let Some(info) = self.infos.get_mut(entity.index()) else {
-            return Err(DespawnError::NotFound(entity.id()).into());
+            voker_utils::cold_path();
+            return Err(DespawnError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(DespawnError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(DespawnError::Mismatch { expect, actual });
         }
         info.location.take().ok_or(DespawnError::NotSpawned(entity).into())
     }
@@ -296,19 +290,18 @@ impl Entities {
         &mut self,
         entity: Entity,
         location: EntityLocation,
-    ) -> Result<(), EntityError> {
+    ) -> Result<(), MoveError> {
         let Some(info) = self.infos.get_mut(entity.index()) else {
             return Err(MoveError::NotFound(entity.id()).into());
         };
         if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(MoveError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(MoveError::Mismatch { expect, actual });
         }
         let Some(loc) = &mut info.location else {
+            voker_utils::cold_path();
             return Err(MoveError::NotSpawned(entity).into());
         };
 
@@ -324,23 +317,23 @@ impl Entities {
     /// # Returns
     /// - `Ok(())` - Location updated successfully
     /// - `Err(EntityError)` - If entity state is invalid
-    pub unsafe fn update_row(&mut self, moved: MovedEntityRow) -> Result<(), EntityError> {
+    pub unsafe fn update_row(&mut self, moved: MovedEntityRow) -> Result<(), MoveError> {
         let Some(entity) = moved.entity else {
             return Ok(());
         };
 
         let Some(info) = self.infos.get_mut(entity.index()) else {
+            voker_utils::cold_path();
             return Err(MoveError::NotFound(entity.id()).into());
         };
         if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
-            return Err(MoveError::Mismatch {
-                expect: entity,
-                actual,
-            }
-            .into());
+            return Err(MoveError::Mismatch { expect, actual });
         }
         let Some(location) = &mut info.location else {
+            voker_utils::cold_path();
             return Err(MoveError::NotSpawned(entity).into());
         };
         match moved.new_row {

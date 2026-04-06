@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::sync::__fallback::{RwLock, RwLockWriteGuard};
+use super::{RwLock, RwLockWriteGuard};
 
 // The inner state of a barrier
 struct BarrierState {

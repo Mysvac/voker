@@ -58,17 +58,18 @@ crate::cfg::switch! {
         pub use std::sync::{
             PoisonError, TryLockError, TryLockResult, LockResult,
             Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
-            Barrier, BarrierWaitResult, Condvar, WaitTimeoutResult,
-            Once, OnceLock, OnceState, LazyLock, mpsc,
+            Once, OnceLock, OnceState, LazyLock,
         };
+
+        #[cfg(doc)]
+        mod __fallback;
     }
     _ => {
         mod __fallback;
         pub use __fallback::{
             PoisonError, TryLockError, TryLockResult, LockResult,
             Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
-            Barrier, BarrierWaitResult, Condvar, WaitTimeoutResult,
-            Once, OnceLock, OnceState, LazyLock, mpsc,
+            Once, OnceLock, OnceState, LazyLock,
         };
     }
 }

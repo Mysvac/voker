@@ -4,9 +4,13 @@
 //! must implement, along with associated configuration constants that control
 //! component behavior within the system.
 
-use super::{ComponentStorage, Required};
+use super::{Required, StorageMode};
+use crate::component::hook::ComponentHook;
 use crate::entity::EntityMapper;
 use crate::utils::{Cloner, Dropper};
+
+// -----------------------------------------------------------------------------
+// ComponentHook
 
 // -----------------------------------------------------------------------------
 // Component
@@ -59,7 +63,7 @@ use crate::utils::{Cloner, Dropper};
 /// When using the derive macro, you can set storage with
 /// `#[component(storage = "dense/sparse")]`.
 ///
-/// See [`ComponentStorage`] for implementation details.
+/// See [`StorageMode`] for implementation details.
 ///
 /// ## Mutable
 ///
@@ -111,9 +115,9 @@ use crate::utils::{Cloner, Dropper};
     label = "invalid component",
     note = "Consider annotating `{Self}` with `#[derive(Component)]`."
 )]
-pub trait Component: Sized + Send + Sync + 'static {
+pub trait Component: Clone + Send + Sync + 'static {
     /// The storage type of component, default is `Dense`.
-    const STORAGE: ComponentStorage = ComponentStorage::Dense;
+    const STORAGE: StorageMode = StorageMode::Dense;
 
     /// The mutability of the component, default is `true`.
     const MUTABLE: bool = true;
@@ -121,15 +125,19 @@ pub trait Component: Sized + Send + Sync + 'static {
     /// The function pointer of [`Drop`].
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
 
+    const CLONER: Cloner = Cloner::clonable::<Self>();
+
     /// The required components, default is `None`.
     const REQUIRED: Option<Required> = None;
 
-    #[inline(always)]
-    fn cloner() -> Option<Cloner> {
-        None
-    }
+    const ON_ADD: Option<ComponentHook> = None;
+    const ON_CLONE: Option<ComponentHook> = None;
+    const ON_INSERT: Option<ComponentHook> = None;
+    const ON_REMOVE: Option<ComponentHook> = None;
+    const ON_DISCARD: Option<ComponentHook> = None;
+    const ON_DESPAWN: Option<ComponentHook> = None;
 
     #[inline(always)]
     #[expect(unused_variables, reason = "default implementation")]
-    fn map_entities<E: EntityMapper>(this: &mut Self, mapper: &mut E) {}
+    fn map_entities(this: &mut Self, mapper: &mut dyn EntityMapper) {}
 }

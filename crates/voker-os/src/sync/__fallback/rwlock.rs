@@ -1,19 +1,13 @@
 #![expect(unsafe_code, reason = "RwLock requires unsafe code.")]
 
-use core::{
-    cell::UnsafeCell,
-    fmt,
-    ops::{Deref, DerefMut},
-    panic::{RefUnwindSafe, UnwindSafe},
-};
+use core::fmt;
+use core::cell::UnsafeCell;
+use core::ops::{Deref, DerefMut};
+use core::panic::{RefUnwindSafe, UnwindSafe};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
-use crate::sync::{
-    __fallback::{LockResult, TryLockError, TryLockResult},
-    atomic::{
-        AtomicU32,
-        Ordering::{Acquire, Relaxed, Release},
-    },
-};
+use super::{LockResult, TryLockError, TryLockResult};
+use crate::atomic::AtomicU32;
 
 /// Fallback implementation of `RwLock` from the standard library.
 ///

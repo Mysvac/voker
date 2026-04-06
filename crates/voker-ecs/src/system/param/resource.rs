@@ -1,6 +1,3 @@
-use core::error::Error;
-use core::fmt::Display;
-
 use super::{ReadOnlySystemParam, SystemParam};
 use crate::borrow::{NonSend, NonSendMut, NonSendRef};
 use crate::borrow::{Res, ResMut, ResRef};
@@ -14,16 +11,16 @@ use crate::world::{UnsafeWorld, World};
 // -----------------------------------------------------------------------------
 // Resource
 
-#[derive(Debug, Clone, Copy)]
-struct UninitResource(DebugName);
+#[cold]
+#[inline(never)]
+fn uninit_resource_error<T>() -> EcsError {
+    use crate::system::UninitResourceError;
 
-impl Display for UninitResource {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Resource {} is uninitialzed before system run.", self.0)
+    UninitResourceError {
+        name: DebugName::type_name::<T>(),
     }
+    .into()
 }
-
-impl Error for UninitResource {}
 
 // -----------------------------------------------------------------------------
 // Res
@@ -60,7 +57,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
                     value: ptr.deref::<T>(),
                 })
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }
@@ -98,7 +95,7 @@ unsafe impl<T: Resource + Sync> SystemParam for ResRef<'_, T> {
             {
                 Ok(untyped.into_resource::<T>())
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }
@@ -134,7 +131,7 @@ unsafe impl<T: Resource + Send> SystemParam for ResMut<'_, T> {
             {
                 Ok(untyped.into_resource::<T>())
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }
@@ -292,7 +289,7 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
                     value: ptr.deref::<T>(),
                 })
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }
@@ -334,7 +331,7 @@ unsafe impl<T: Resource> SystemParam for NonSendRef<'_, T> {
             {
                 Ok(ptr.into_non_send::<T>())
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }
@@ -372,7 +369,7 @@ unsafe impl<T: Resource> SystemParam for NonSendMut<'_, T> {
             {
                 Ok(ptr.into_non_send::<T>())
             } else {
-                Err(UninitResource(DebugName::type_name::<T>()).into())
+                Err(uninit_resource_error::<T>())
             }
         }
     }

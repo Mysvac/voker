@@ -1,28 +1,36 @@
+use core::ptr::NonNull;
+
 use crate::command::Commands;
-use crate::error::ErrorContext;
 use crate::world::World;
 
 impl World {
     /// Create a commands from world.
-    pub fn commands(&self) -> Commands<'_> {
-        Commands::new(self)
+    #[inline]
+    pub fn commands(&mut self) -> Commands<'_, '_> {
+        let unsafe_world = self.unsafe_world();
+        let world = unsafe { unsafe_world.read_only() };
+        let queue = unsafe { &mut unsafe_world.data_mut().command_queue };
+        Commands::new(world, queue)
     }
 
     /// Drains and executes queued deferred commands.
     ///
     /// Each command failure is forwarded to the active default error handler,
     /// and command application continues with remaining commands.
+    #[inline]
     pub fn apply_commands(&mut self) {
-        let handler = self.default_error_handler();
-
-        while let Some(cmd) = self.command_queue.pop() {
-            let location = cmd.location();
-            if let Err(err) = cmd.run(self) {
-                voker_utils::cold_path();
-                let this_run = self.this_run();
-                let ctx = ErrorContext::Command { location, this_run };
-                (handler)(err, ctx);
-            }
+        unsafe {
+            let world = Some(NonNull::from_mut(self));
+            self.command_queue.raw().apply_or_drop(world);
         }
+    }
+
+    /// Drains and executes queued deferred commands.
+    ///
+    /// Each command failure is forwarded to the active default error handler,
+    /// and command application continues with remaining commands.
+    #[inline]
+    pub fn flush(&mut self) {
+        self.apply_commands();
     }
 }

@@ -1,8 +1,8 @@
 use super::{ReadOnlySystemParam, SystemParam};
 use crate::error::EcsError;
-use crate::system::AccessTable;
+use crate::system::{AccessTable, SystemMeta};
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 macro_rules! impl_tuple {
     (0: []) => {
@@ -40,17 +40,21 @@ macro_rules! impl_tuple {
             type State = <$name>::State;
             type Item<'world, 'state> = ( <$name>::Item<'world, 'state>, );
 
+            const DEFERRED: bool = <$name>::DEFERRED;
             const NON_SEND: bool = <$name>::NON_SEND;
             const EXCLUSIVE: bool = <$name>::EXCLUSIVE;
 
+            #[inline]
             fn init_state(world: &mut World) -> Self::State {
                 <$name>::init_state(world)
             }
 
+            #[inline]
             fn mark_access(table: &mut AccessTable, state: &Self::State) -> bool {
                 <$name>::mark_access(table, state)
             }
 
+            #[inline]
             unsafe fn build_param<'w, 's>(
                 world: UnsafeWorld<'w>,
                 state: &'s mut Self::State,
@@ -58,6 +62,16 @@ macro_rules! impl_tuple {
                 this_run: Tick,
             ) -> Result<Self::Item<'w, 's>, EcsError> {
                 unsafe { Ok(( <$name>::build_param(world, state, last_run, this_run)?, )) }
+            }
+
+            #[inline]
+            fn defer(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+                <$name>::defer(state, system_meta, world);
+            }
+
+            #[inline]
+            fn apply_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+                <$name>::apply_deferred(state, system_meta, world);
             }
         }
     };
@@ -70,6 +84,7 @@ macro_rules! impl_tuple {
             type State = ( $( <$name>::State ),* );
             type Item<'world, 'state> = ( $( <$name>::Item<'world, 'state> ),* );
 
+            const DEFERRED: bool = { false $( || <$name>::DEFERRED )* };
             const NON_SEND: bool = { false $( || <$name>::NON_SEND )* };
             const EXCLUSIVE: bool = { false $( || <$name>::EXCLUSIVE )* };
 
@@ -88,6 +103,16 @@ macro_rules! impl_tuple {
                 this_run: Tick,
             ) -> Result<Self::Item<'w, 's>, EcsError> {
                 unsafe { Ok(( $( <$name>::build_param(world, &mut state.$index, last_run, this_run)? ),* )) }
+            }
+
+            #[inline]
+            fn defer(state: &mut Self::State, system_meta: &SystemMeta, mut world: DeferredWorld) {
+                $( <$name>::defer(&mut state.$index, system_meta, world.reborrow()); )*
+            }
+
+            #[inline]
+            fn apply_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+                $( <$name>::apply_deferred(&mut state.$index, system_meta, world); )*
             }
         }
     };

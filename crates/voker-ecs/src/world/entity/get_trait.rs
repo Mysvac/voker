@@ -2,7 +2,7 @@ use core::any::TypeId;
 
 use crate::archetype::ArcheId;
 use crate::borrow::{Mut, Ref};
-use crate::component::{Component, ComponentStorage};
+use crate::component::{Component, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{TableId, TableRow};
 use crate::tick::Tick;
@@ -105,8 +105,8 @@ unsafe impl<T: Component> GetComponents for T {
         };
         let arche = unsafe { world.archetypes.get_unchecked(arche_id) };
         match T::STORAGE {
-            ComponentStorage::Dense => arche.contains_dense_component(id),
-            ComponentStorage::Sparse => arche.contains_sparse_component(id),
+            StorageMode::Dense => arche.contains_dense_component(id),
+            StorageMode::Sparse => arche.contains_sparse_component(id),
         }
     }
 
@@ -119,7 +119,7 @@ unsafe impl<T: Component> GetComponents for T {
         let world = unsafe { world.read_only() };
         let id = world.components.get_id(TypeId::of::<T>())?;
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let tables = &world.storages.tables;
                 let table = unsafe { tables.get_unchecked(table_id) };
                 let table_col = table.get_table_col(id)?;
@@ -127,7 +127,7 @@ unsafe impl<T: Component> GetComponents for T {
                 ptr.debug_assert_aligned::<T>();
                 Some(unsafe { ptr.deref::<T>() })
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let maps = &world.storages.maps;
                 let map_id = maps.get_id(id)?;
                 let map = unsafe { maps.get_unchecked(map_id) };
@@ -150,14 +150,14 @@ unsafe impl<T: Component> GetComponents for T {
         let world = unsafe { world.read_only() };
         let id = world.components.get_id(TypeId::of::<T>())?;
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let tables = &world.storages.tables;
                 let table = unsafe { tables.get_unchecked(table_id) };
                 let table_col = table.get_table_col(id)?;
                 let untyped = unsafe { table.get_ref(table_row, table_col, last_run, this_run) };
                 Some(unsafe { untyped.with_type::<T>() })
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let maps = &world.storages.maps;
                 let map_id = maps.get_id(id)?;
                 let map = unsafe { maps.get_unchecked(map_id) };
@@ -183,14 +183,14 @@ unsafe impl<T: Component> GetComponents for T {
         let world = unsafe { world.data_mut() };
         let id = world.components.get_id(TypeId::of::<T>())?;
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let tables = &mut world.storages.tables;
                 let table = unsafe { tables.get_unchecked_mut(table_id) };
                 let table_col = table.get_table_col(id)?;
                 let untyped = unsafe { table.get_mut(table_row, table_col, last_run, this_run) };
                 Some(unsafe { untyped.with_type::<T>() })
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let maps = &mut world.storages.maps;
                 let map_id = maps.get_id(id)?;
                 let map = unsafe { maps.get_unchecked_mut(map_id) };

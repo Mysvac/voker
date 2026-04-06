@@ -27,11 +27,13 @@ pub struct MessageWriter<'w, M: Message> {
 
 impl<'w, M: Message> MessageWriter<'w, M> {
     /// Writes one message and returns its generated id.
+    #[inline]
     pub fn write(&mut self, message: M) -> MessageId<M> {
         self.messages.write(message)
     }
 
     /// Writes a batch of messages and returns the generated id range.
+    #[inline]
     pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIterator<M> {
         self.messages.write_batch(messages)
     }

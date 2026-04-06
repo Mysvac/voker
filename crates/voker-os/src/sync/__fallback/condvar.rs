@@ -1,13 +1,9 @@
 use core::{fmt, time::Duration};
 
-use crate::{
-    utils::Futex,
-    sync::{
-        __fallback::{LockResult, MutexGuard, mutex},
-        atomic::{AtomicU32, Ordering::Relaxed},
-    },
-    time::Instant,
-};
+use super::{LockResult, MutexGuard, mutex};
+use crate::sync::atomic::{AtomicU32, Ordering::Relaxed};
+use crate::time::Instant;
+use crate::utils::Futex;
 
 /// Fallback implementation of `WaitTimeoutResult` from the standard library.
 ///

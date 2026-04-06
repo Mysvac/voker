@@ -33,14 +33,21 @@ pub trait SystemExecutor: Send + Sync {
 }
 
 /// Execution strategy used by a schedule.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ExecutorKind {
     /// Always run systems on a single thread.
-    #[cfg_attr(any(target_arch = "wasm32", not(feature = "std")), default)]
     SingleThreaded,
     /// Run independent systems in parallel on multiple threads.
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "std"), default)]
     MultiThreaded,
+}
+
+impl Default for ExecutorKind {
+    fn default() -> Self {
+        voker_task::cfg::multi_threaded! {
+            if { Self::MultiThreaded }
+            else { Self::SingleThreaded }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

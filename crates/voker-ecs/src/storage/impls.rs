@@ -1,6 +1,6 @@
 use voker_task::ComputeTaskPool;
 
-use crate::component::{ComponentInfo, ComponentStorage};
+use crate::component::{ComponentInfo, StorageMode};
 use crate::resource::ResourceInfo;
 use crate::storage::{Maps, Tables};
 use crate::tick::CheckTicks;
@@ -24,10 +24,10 @@ use super::ResSet;
 /// # Storage Strategies
 ///
 /// Components are assigned to either dense or sparse storage based on their
-/// [`ComponentStorage`] setting:
-/// - **Dense** (`ComponentStorage::Dense`): Stored in [`Tables`] - optimized for
+/// [`StorageMode`] setting:
+/// - **Dense** (`StorageMode::Dense`): Stored in [`Tables`] - optimized for
 ///   components present on many entities
-/// - **Sparse** (`ComponentStorage::Sparse`): Stored in [`Maps`] - optimized for
+/// - **Sparse** (`StorageMode::Sparse`): Stored in [`Maps`] - optimized for
 ///   rarely-present components or large component sets
 #[derive(Debug)]
 pub struct Storages {
@@ -80,22 +80,22 @@ impl Storages {
     ///
     /// The behavior of this method differs based on the component's storage strategy:
     ///
-    /// ## Dense Components ([`ComponentStorage::Dense`])
+    /// ## Dense Components ([`StorageMode::Dense`])
     /// * **No immediate allocation** - Memory is allocated lazily when tables are created
     /// * Preparation is a no-op - Tables handle allocation on demand
     /// * Best for components present on many entities
     ///
-    /// ## Sparse Components ([`ComponentStorage::Sparse`])
+    /// ## Sparse Components ([`StorageMode::Sparse`])
     /// * **Immediate allocation** - Creates a dedicated [`crate::storage::Map`] instance
     /// * Each sparse component gets its own map for O(1) lookup
     /// * Best for rarely-present components or large component sets
     #[inline]
     pub fn prepare_component(&mut self, info: &ComponentInfo) {
         match info.storage() {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 self.tables.prepare(info);
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 self.maps.prepare(info);
             }
         }

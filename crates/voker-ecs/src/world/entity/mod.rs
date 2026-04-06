@@ -1,10 +1,13 @@
 // -----------------------------------------------------------------------------
 // Modules
 
+mod clear;
+mod despawn;
 mod fetch_trait;
 mod get_trait;
 mod insert;
 mod remove;
+mod world;
 
 pub use fetch_trait::FetchComponents;
 pub use get_trait::GetComponents;
@@ -14,7 +17,7 @@ pub use get_trait::GetComponents;
 
 use core::fmt::Debug;
 
-use crate::entity::{Entity, EntityError, EntityLocation};
+use crate::entity::{Entity, EntityLocation};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -48,63 +51,6 @@ pub struct EntityRef<'a> {
 
 // -----------------------------------------------------------------------------
 // Entity
-
-impl World {
-    /// Allocates a new entity identifier.
-    ///
-    /// The returned entity is not inserted into any archetype until you spawn
-    /// or otherwise attach components.
-    pub fn alloc_entity(&self) -> Entity {
-        self.allocator.alloc()
-    }
-
-    /// Returns an owned entity handle for direct per-entity operations.
-    ///
-    /// # Panics
-    /// Panics if `entity` is not alive in this world.
-    pub fn entity_owned(&mut self, entity: Entity) -> EntityOwned<'_> {
-        let location = self.entities.locate(entity).unwrap();
-        EntityOwned {
-            world: self.into(),
-            entity,
-            location,
-        }
-    }
-
-    /// Returns a mutable entity view with cached tick context.
-    ///
-    /// # Panics
-    /// Panics if `entity` is not alive in this world.
-    pub fn entity_mut(&mut self, entity: Entity) -> EntityMut<'_> {
-        let location = self.entities.locate(entity).unwrap();
-        let last_run = self.last_run();
-        let this_run = self.this_run();
-        EntityMut {
-            world: self,
-            entity,
-            location,
-            last_run,
-            this_run,
-        }
-    }
-
-    /// Returns a shared entity view with cached tick context.
-    ///
-    /// # Panics
-    /// Panics if `entity` is not alive in this world.
-    pub fn entity_ref(&self, entity: Entity) -> EntityRef<'_> {
-        let location = self.entities.locate(entity).unwrap();
-        let last_run = self.last_run();
-        let this_run = self.this_run();
-        EntityRef {
-            world: self,
-            entity,
-            location,
-            last_run,
-            this_run,
-        }
-    }
-}
 
 impl<'a> From<EntityOwned<'a>> for EntityMut<'a> {
     fn from(value: EntityOwned<'a>) -> Self {
@@ -214,11 +160,6 @@ impl<'a> EntityOwned<'a> {
         unsafe { self.world.read_only().last_run() }
     }
 
-    #[inline(always)]
-    fn unsafe_world(&self) -> UnsafeWorld<'_> {
-        self.world
-    }
-
     /// Gets change-aware mutable component access for `T`.
     ///
     /// See [`GetComponents`] for examples.
@@ -252,10 +193,36 @@ impl<'a> EntityOwned<'a> {
         }
     }
 
-    /// Despawns this entity from the world.
-    pub fn despawn(self) -> Result<(), EntityError> {
-        let world = unsafe { self.world.full_mut() };
-        world.despawn(self.entity)
+    pub fn update_location(&mut self) {
+        let world = unsafe { self.world.data_mut() };
+        self.location = world.entities.locate(self.entity).unwrap_or_else(|err| {
+            voker_utils::cold_path();
+            let entity = self.entity;
+            panic!("Entity {entity} despawned while EntityOwned reference is still held. {err}")
+        });
+    }
+
+    pub fn world(&self) -> &World {
+        unsafe { self.world.read_only() }
+    }
+
+    pub fn world_scope<R>(&mut self, func: impl FnOnce(&mut World) -> R) -> R {
+        struct Guard<'w, 'a>(&'a mut EntityOwned<'w>);
+
+        impl Drop for Guard<'_, '_> {
+            #[inline]
+            fn drop(&mut self) {
+                self.0.update_location();
+            }
+        }
+
+        let world = unsafe { self.world.data_mut() };
+        let _guard = Guard(self);
+        func(world)
+    }
+
+    pub fn unsafe_world(&self) -> UnsafeWorld<'_> {
+        self.world
     }
 }
 

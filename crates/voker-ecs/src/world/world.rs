@@ -12,12 +12,11 @@ use crate::bundle::Bundles;
 use crate::command::CommandQueue;
 use crate::component::Components;
 use crate::entity::{Entities, EntityAllocator};
-use crate::error::DefaultErrorHandler;
+use crate::error::FallbackErrorHandler;
 use crate::message::MessageRegistry;
 use crate::resource::Resources;
 use crate::schedule::Schedules;
 use crate::storage::Storages;
-use crate::system::SystemRegistry;
 use crate::tick::{CHECK_CYCLE, CheckTicks, Tick};
 use crate::world::WorldId;
 
@@ -43,7 +42,6 @@ pub struct World {
     pub schedules: Schedules,
     pub storages: Storages,
     pub command_queue: CommandQueue,
-    pub system_registry: SystemRegistry,
     pub message_registry: MessageRegistry,
 }
 
@@ -85,7 +83,6 @@ impl World {
             schedules: Schedules::new(),
             storages: Storages::new(),
             command_queue: CommandQueue::new(),
-            system_registry: SystemRegistry::new(),
             message_registry: MessageRegistry::new(),
         })
     }
@@ -133,16 +130,15 @@ impl World {
     ///
     /// Also updates `last_run` and may trigger periodic tick validation.
     pub fn update_tick(&mut self) -> Tick {
+        self.check_ticks();
+
         let last_run = *self.this_run.get_mut();
         let this_run = last_run.wrapping_add(1);
 
         self.last_run = Tick::new(last_run);
         *self.this_run.get_mut() = this_run;
 
-        if this_run.wrapping_sub(last_run) >= CHECK_CYCLE {
-            voker_utils::cold_path();
-            self.check_ticks();
-        }
+        self.check_ticks();
 
         Tick::new(this_run)
     }
@@ -150,12 +146,20 @@ impl World {
     /// Runs periodic tick-age validation across component/resource storages.
     ///
     /// Returns the [`CheckTicks`] event payload used for this pass.
-    pub fn check_ticks(&mut self) -> CheckTicks {
-        let this_run = Tick::new(*self.this_run.get_mut());
-        let checker = CheckTicks::new(this_run);
-        self.storages.check_ticks(checker);
-        self.last_check = this_run;
-        checker
+    pub fn check_ticks(&mut self) -> Option<CheckTicks> {
+        let this_run = *self.this_run.get_mut();
+        let last_run = self.last_run.get();
+
+        if this_run.wrapping_sub(last_run) >= CHECK_CYCLE {
+            voker_utils::cold_path();
+            let this_run = Tick::new(this_run);
+            let checker = CheckTicks::new(this_run);
+            self.storages.check_ticks(checker);
+            self.last_check = this_run;
+            return Some(checker);
+        }
+
+        None
     }
 }
 
@@ -191,7 +195,9 @@ impl World {
     /// Returns the active default error handler resource.
     ///
     /// Falls back to [`crate::error::panic`] when the resource is absent.
-    pub fn default_error_handler(&self) -> DefaultErrorHandler {
-        self.resource::<DefaultErrorHandler>().copied().unwrap_or_default()
+    pub fn fallback_error_handler(&self) -> FallbackErrorHandler {
+        self.get_resource::<FallbackErrorHandler>()
+            .copied()
+            .unwrap_or_default()
     }
 }

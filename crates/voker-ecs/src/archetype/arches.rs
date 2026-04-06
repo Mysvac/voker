@@ -1,38 +1,20 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use voker_os::sync::Arc;
 use voker_utils::hash::HashMap;
 
 use crate::archetype::{ArcheId, Archetype};
 use crate::bundle::BundleId;
-use crate::component::ComponentId;
+use crate::component::{ComponentId, Components};
 use crate::storage::TableId;
 
 // -----------------------------------------------------------------------------
 // Archetypes
 
-/// A collection of all archetypes in the ECS world.
-///
-/// # Overview
-/// `Archetypes` serves as the central registry for all archetype instances,
-/// providing efficient lookup and filtering capabilities for the ECS query system.
-/// It maintains multiple indexing structures to support different access patterns:
-///
-/// - **Direct access**: By [`ArcheId`] (primary key)
-/// - **Bundle-based**: Maps [`BundleId`] to the corresponding archetype
-/// - **Precise matching**: Maps exact component sets to their archetype IDs
-///
-/// # Initial State
-/// Always contains at least one archetype: the **empty archetype** (no components),
-/// which serves as the starting point for all entities.
+/// A collection of [`Archetype`]s.
 pub struct Archetypes {
-    // Primary storage for all archetype instances.
-    // Index corresponds directly to [`ArcheId`].
     arches: Vec<Archetype>,
-    // Maps exact component sets to archetype IDs.
-    mapper: HashMap<Arc<[ComponentId]>, ArcheId>,
-    // Maps bundle IDs to archetype IDs, optimize entity spawn.
+    mapper: HashMap<&'static [ComponentId], ArcheId>,
     bundles: Vec<Option<ArcheId>>,
 }
 
@@ -46,40 +28,25 @@ impl Debug for Archetypes {
 }
 
 impl Archetypes {
-    /// Creates a new archetypes collection, initialized with the empty archetype.
+    /// Creates a new `Archetypes`, initializes with the *Empty Archetype*.
     pub(crate) fn new() -> Self {
-        let mut val = const {
-            Archetypes {
-                arches: Vec::new(),
-                bundles: Vec::new(),
-                mapper: HashMap::new(),
-            }
+        let mut val = Archetypes {
+            arches: Vec::new(),
+            bundles: Vec::new(),
+            mapper: HashMap::new(),
         };
 
-        let arche = Archetype::new(ArcheId::EMPTY, TableId::EMPTY, 0, Arc::new([]));
+        let arche = Archetype::new(ArcheId::EMPTY, TableId::EMPTY, 0, &[], &Components::new());
+
         val.arches.push(arche);
-        val.mapper.insert(Arc::new([]), ArcheId::EMPTY);
+        val.mapper.insert(&[], ArcheId::EMPTY);
         val.bundles.push(Some(ArcheId::EMPTY));
 
         val
     }
 
-    /// Inserts a mapping from a bundle ID to an archetype ID.
-    ///
-    /// This mapping enables fast archetype lookup when spawning entities
-    /// from known bundles.
-    ///
-    /// # Safety
-    /// This method is unsafe because it modifies internal indexing structures
-    /// and requires the caller to uphold the following invariants:
-    ///
-    /// - **Bundle validity**: The `bundle_id` must be valid and properly initialized
-    ///   (i.e., corresponds to a registered bundle type).
-    /// - **Archetype validity**: The `arche_id` must reference a valid, already-registered
-    ///   archetype that exactly matches the component set of the bundle.
-    /// - **No concurrent access**: This method may resize the bundle map; ensure no
-    ///   other operations are concurrently reading or writing the bundle map.
-    pub(crate) unsafe fn set_bundle_map(&mut self, bundle_id: BundleId, arche_id: ArcheId) {
+    /// Map a bundle_id to arche_id, then you can get it through `get_id_by_bundle`.
+    pub(crate) fn map_bundle_id(&mut self, bundle_id: BundleId, arche_id: ArcheId) {
         #[cold]
         #[inline(never)]
         fn resize_bundle_map(map: &mut Vec<Option<ArcheId>>, len: usize) {
@@ -96,36 +63,34 @@ impl Archetypes {
         }
     }
 
-    /// Registers a new archetype with the given component set.
-    ///
-    /// This method creates a new archetype and updates all indexing structures
-    /// to make it discoverable through various lookup paths.
+    /// Returns the archetype ID associated with a specific bundle.
+    pub(crate) fn get_id_by_bundle(&self, id: BundleId) -> Option<ArcheId> {
+        self.bundles.get(id.index()).and_then(|t| *t)
+    }
+
+    /// Register a new Archetype from given information and return it's ID.
     ///
     /// # Safety
-    /// This method is unsafe and requires the caller to ensure:
-    ///
-    /// - **Component validity**: All `ComponentId`s in `components` must be valid and
-    ///   properly registered in the component registry.
-    /// - **Uniqueness**: The exact component set must not already have an archetype
-    ///   (no duplicates), unless intentionally creating a new archetype for the same
-    ///   set (which would violate ECS invariants).
-    /// - **Sorting**: The `components` slice must be sorted, as this is relied upon
-    ///   for binary search operations in archetype methods.
-    /// - **Bundle consistency**: If a bundle corresponds to this component set, its
-    ///   mapping should be updated separately via [`insert_bundle_id`](Self::insert_bundle_id).
-    pub(crate) unsafe fn register(
+    /// - The archetype is **unique**(unregistered).
+    /// - All `ComponentId`s in `idents` are registered.
+    /// - `idents[..dense_len]` and `[dense_len..]` are both sorted and deduplicated.
+    /// - `table_id` and `dense_len` are valid for the given component layout.
+    pub(crate) unsafe fn register_unique(
         &mut self,
         table_id: TableId,
         dense_len: usize,
-        components: Arc<[ComponentId]>,
+        idents: &'static [ComponentId],
+        components: &Components,
     ) -> ArcheId {
-        let arche_id = ArcheId::new(self.arches.len() as u32);
+        debug_assert!(idents[..dense_len].is_sorted());
+        debug_assert!(idents[dense_len..].is_sorted());
 
-        let arche = Archetype::new(arche_id, table_id, dense_len, components.clone());
+        // Panic if len == u32::MAX, so the id will not wrap.
+        let arche_id = ArcheId::new(self.arches.len() as u32);
+        let arche = Archetype::new(arche_id, table_id, dense_len, idents, components);
 
         self.arches.push(arche);
-
-        self.mapper.insert(components, arche_id);
+        self.mapper.insert(idents, arche_id);
 
         arche_id
     }
@@ -145,12 +110,6 @@ impl Archetypes {
         self.mapper.get(components).copied()
     }
 
-    /// Returns the archetype ID associated with a specific bundle.
-    #[inline]
-    pub fn get_id_by_bundle(&self, id: BundleId) -> Option<ArcheId> {
-        self.bundles.get(id.index()).and_then(|t| *t)
-    }
-
     /// Returns a reference to the archetype with the given ID, if it exists.
     #[inline]
     pub fn get(&self, id: ArcheId) -> Option<&Archetype> {
@@ -166,8 +125,7 @@ impl Archetypes {
     /// Returns a reference to the archetype with the given ID without bounds checking.
     ///
     /// # Safety
-    /// The caller must ensure that `id` is valid (within bounds of `arches`).
-    /// Violating this condition leads to undefined behavior.
+    /// `ArcheId` is valid (within bounds of `arches`).
     #[inline]
     pub unsafe fn get_unchecked(&self, id: ArcheId) -> &Archetype {
         debug_assert!(id.index() < self.arches.len());
@@ -177,8 +135,7 @@ impl Archetypes {
     /// Returns a mutable reference to the archetype with the given ID without bounds checking.
     ///
     /// # Safety
-    /// The caller must ensure that `id` is valid (within bounds of `arches`).
-    /// Violating this condition leads to undefined behavior.
+    /// `ArcheId` is valid (within bounds of `arches`).
     #[inline]
     pub unsafe fn get_unchecked_mut(&mut self, id: ArcheId) -> &mut Archetype {
         debug_assert!(id.index() < self.arches.len());

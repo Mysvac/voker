@@ -2,7 +2,8 @@ use super::{AccessTable, System, SystemFlags, SystemMeta};
 use crate::error::EcsError;
 use crate::system::{IntoSystem, SystemId, UninitSystemError};
 use crate::tick::Tick;
-use crate::world::{World, WorldId};
+use crate::utils::DebugName;
+use crate::world::{DeferredWorld, World, WorldId};
 
 use super::{SystemInput, SystemParam};
 
@@ -237,6 +238,9 @@ pub struct FunctionSystem<M, F: SystemFunction<M>> {
 impl<M, F: SystemFunction<M>> FunctionSystem<M, F> {
     pub fn new(func: F) -> Self {
         let mut meta = SystemMeta::new::<F>();
+        if <F::Param as SystemParam>::DEFERRED {
+            meta.set_deferred();
+        }
         if <F::Param as SystemParam>::EXCLUSIVE {
             meta.set_exclusive();
         }
@@ -290,7 +294,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         world: crate::world::UnsafeWorld<'_>,
     ) -> Result<Self::Output, EcsError> {
         let Some(state) = &mut self.state else {
-            return Err(uninit_system_error(self.meta.id()));
+            return Err(uninit_system_error(self.meta.id().name()));
         };
         let world_id = unsafe { world.read_only().id() };
         if state.world_id != world_id {
@@ -309,11 +313,33 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
 
         Ok(output)
     }
+
+    fn defer(&mut self, world: DeferredWorld) {
+        if <F::Param as SystemParam>::DEFERRED {
+            let Some(state) = &mut self.state else {
+                let err = uninit_system_error(self.meta.id().name());
+                panic!("System::defer: {err}");
+            };
+
+            <F::Param as SystemParam>::defer(&mut state.param, &self.meta, world);
+        }
+    }
+
+    fn apply_deferred(&mut self, world: &mut World) {
+        if <F::Param as SystemParam>::DEFERRED {
+            let Some(state) = &mut self.state else {
+                let err = uninit_system_error(self.meta.id().name());
+                panic!("System::apply_deferred: {err}");
+            };
+
+            <F::Param as SystemParam>::apply_deferred(&mut state.param, &self.meta, world);
+        }
+    }
 }
 
 #[cold]
 #[inline(never)]
-fn uninit_system_error(name: SystemId) -> EcsError {
+fn uninit_system_error(name: DebugName) -> EcsError {
     EcsError::from(UninitSystemError { name })
 }
 

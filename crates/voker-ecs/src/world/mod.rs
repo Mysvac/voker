@@ -10,6 +10,7 @@
 // -----------------------------------------------------------------------------
 // Modules
 
+mod deferred;
 mod entity;
 mod from;
 mod ident;
@@ -20,6 +21,7 @@ mod world;
 // -----------------------------------------------------------------------------
 // Exports
 
+pub use deferred::DeferredWorld;
 pub use entity::*;
 pub use from::FromWorld;
 pub use ident::WorldId;

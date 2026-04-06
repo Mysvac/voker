@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
+use voker_utils::hash::NoOpHashMap;
 
-use crate::component::Component;
-use crate::entity::Entity;
-use crate::error::ErrorContext;
-use crate::system::{IntoSystem, System, SystemInput};
+use crate::error::EcsError;
+use crate::prelude::Resource;
+use crate::system::{IntoSystem, System, SystemId, SystemInput};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -12,73 +12,70 @@ use crate::world::World;
 /// Erased system object stored in world-level registry entities.
 type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
 
-/// Component payload used to store one registered boxed system on an entity.
-///
-/// Wrapped in `Option` so a system can be temporarily taken out for execution
-/// and then placed back into storage.
-struct SystemComponent<I: SystemInput, O> {
-    system: Option<BoxedSystem<I, O>>,
+struct SystemResource<I: SystemInput, O> {
+    mapper: NoOpHashMap<SystemId, Option<BoxedSystem<I, O>>>,
 }
 
-impl<I: SystemInput + 'static, O: 'static> Component for SystemComponent<I, O> {}
+impl<I: SystemInput + 'static, O: 'static> Default for SystemResource<I, O> {
+    fn default() -> Self {
+        Self {
+            mapper: NoOpHashMap::new(),
+        }
+    }
+}
+
+impl<I: SystemInput + 'static, O: 'static> Resource for SystemResource<I, O> {}
 
 // -----------------------------------------------------------------------------
 // SystemRegistry, SystemComponent
 
 impl World {
-    #[cold]
     #[inline(never)]
-    fn register_boxed_system<I, O>(&mut self, mut system: BoxedSystem<I, O>) -> Entity
+    fn run_system_internal<I, O>(
+        &mut self,
+        mut system: BoxedSystem<I, O>,
+        input: I::Data<'_>,
+    ) -> Result<O, EcsError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        // Ensure param/access metadata is prepared before first run.
-        let _ = system.initialize(self);
-        let id = system.id();
-
-        let data = SystemComponent {
-            system: Some(system),
-        };
-        let entity = self.spawn(data).entity();
-        self.system_registry.insert(id, entity);
-
-        entity
-    }
-
-    fn run_system_internal<I, O>(&mut self, entity: Entity, input: I::Data<'_>) -> Option<O>
-    where
-        I: SystemInput + 'static,
-        O: 'static,
-    {
-        let mut entity_mut = self.entity_mut(entity);
-        let mut data = entity_mut.get_mut::<SystemComponent<I, O>>()?;
-        let mut system = data.system.take()?;
-
         // SAFETY: the registered system is executed against the current world
         // following the same contracts as schedule-driven execution.
         let ret = unsafe { system.run(input, self.unsafe_world()) };
+        let id = system.id();
 
         // Put the system back to preserve registration for future runs.
-        let mut entity_mut = self.entity_mut(entity);
-        let mut data = entity_mut.get_mut::<SystemComponent<I, O>>().unwrap();
+        let mut res = self.resource_mut_or_init::<SystemResource<I, O>>();
+        let old = res.mapper.insert(id, Some(system));
 
-        match ret {
-            Ok(ret) => {
-                data.system = Some(system);
-                Some(ret)
-            }
-            Err(e) => {
-                voker_utils::cold_path();
-                let id = system.id();
-                let last_run = system.get_last_run();
-                data.system = Some(system);
-                let hander = self.default_error_handler();
-                let ctx = ErrorContext::System { id, last_run };
-                (hander.0)(e, ctx);
-                None
-            }
+        if matches!(old, Some(Some(_))) {
+            log::warn!("The same new System `{id}` was inserted during the execution.");
         }
+
+        ret
+    }
+
+    fn try_fetch_system<I, O>(&mut self, id: SystemId) -> Option<BoxedSystem<I, O>>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        let res = self.get_resource_mut::<SystemResource<I, O>>()?;
+        res.into_inner().mapper.get_mut(&id)?.take()
+    }
+
+    pub fn build_system<I, O, M>(
+        &mut self,
+        system: impl IntoSystem<I, O, M> + 'static,
+    ) -> BoxedSystem<I, O>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        let mut system = Box::new(IntoSystem::into_system(system));
+        let _ = system.initialize(self);
+        system
     }
 
     #[inline]
@@ -86,17 +83,14 @@ impl World {
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
         input: I::Data<'_>,
-    ) -> Option<O>
+    ) -> Result<O, EcsError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        let id = system.system_id();
-        let entity = self.system_registry.get(id).unwrap_or_else(|| {
-            self.register_boxed_system(Box::new(IntoSystem::into_system(system)))
-        });
-
-        self.run_system_internal::<I, O>(entity, input)
+        let opt = self.try_fetch_system::<I, O>(system.system_id());
+        let system = opt.unwrap_or_else(|| self.build_system::<I, O, M>(system));
+        self.run_system_internal::<I, O>(system, input)
     }
 
     /// Runs a named system with unit input.
@@ -104,8 +98,10 @@ impl World {
     pub fn run_system<O: 'static, M>(
         &mut self,
         system: impl IntoSystem<(), O, M> + 'static,
-    ) -> Option<O> {
-        self.run_system_with::<(), O, M>(system, ())
+    ) -> Result<O, EcsError> {
+        let opt = self.try_fetch_system::<(), O>(system.system_id());
+        let system = opt.unwrap_or_else(|| self.build_system::<(), O, M>(system));
+        self.run_system_internal::<(), O>(system, ())
     }
 }
 
@@ -117,8 +113,8 @@ mod tests {
     fn temp() {
         let mut world = World::alloc();
 
-        world.run_system(spawn);
-        world.run_system(display);
+        world.run_system(spawn).unwrap();
+        world.run_system(display).unwrap();
 
         fn spawn(world: &mut World) {
             for id in 0..100 {

@@ -9,8 +9,8 @@ impl World {
     }
 
     /// Deregisters a message type from the global message registry.
-    pub fn deregister_message<T: Message>(&mut self) {
-        self.message_registry.deregister_message::<T>();
+    pub fn unregister_message<T: Message>(&mut self) {
+        self.message_registry.unregister_message::<T>();
         self.drop_resource::<Messages<T>>();
     }
 

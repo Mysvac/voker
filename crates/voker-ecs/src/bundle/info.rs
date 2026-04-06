@@ -1,7 +1,5 @@
 use core::fmt::Debug;
 
-use voker_os::sync::Arc;
-
 use super::BundleId;
 use crate::component::ComponentId;
 
@@ -10,27 +8,32 @@ use crate::component::ComponentId;
 
 /// Metadata information about a registered component bundle.
 ///
-/// A bundle is a collection of components that are typically inserted or
-/// removed together. This struct stores the component composition of a bundle,
-/// including which components are stored densely (in tables) versus sparsely
-/// (in maps).
+/// `BundleInfo` is similar to `Archetype`, but maintains less
+/// information (only the component list, no entity data).
+///
+/// Note that a single `BundleInfo` can be shared by multiple different
+/// `Bundle` types as long as they have the exact same component set.
+///
+/// Conversely, a concrete bundle type may have **two** associated `BundleInfo`s:
+/// the explicit component set and the complete (required) component set.
 pub struct BundleInfo {
-    // A unique identifier for a Bundle.
-    // Also the index in the archetypes array
     id: BundleId,
     // Use u32 to reduce the size of the struct.
     dense_len: u32,
     // - `[..dense_len]` are stored in Tables, sorted.
-    // - `[dense_len..]` sare stored in Maps, sorted.
-    // We use Arc to reduce memory allocation overhead.
-    components: Arc<[ComponentId]>,
+    // - `[dense_len..]` are stored in Maps, sorted.
+    components: &'static [ComponentId],
 }
 
+// -----------------------------------------------------------------------------
+// Private
+
 impl BundleInfo {
+    /// Create a `BundleInfo` from given information.
     pub(super) fn new(
         bundle_id: BundleId,
         dense_len: usize,
-        components: Arc<[ComponentId]>,
+        components: &'static [ComponentId],
     ) -> Self {
         debug_assert!(components[..dense_len].is_sorted());
         debug_assert!(components[dense_len..].is_sorted());
@@ -41,10 +44,17 @@ impl BundleInfo {
             components,
         }
     }
+}
 
-    #[inline(always)]
-    pub(crate) fn clone_components(&self) -> Arc<[ComponentId]> {
-        self.components.clone()
+// -----------------------------------------------------------------------------
+// Basic
+
+impl Debug for BundleInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Bundle")
+            .field("id", &self.id)
+            .field("components", &self.components)
+            .finish()
     }
 }
 
@@ -57,19 +67,19 @@ impl BundleInfo {
 
     /// Returns the complete list of component types in this bundle.
     #[inline(always)]
-    pub fn components(&self) -> &[ComponentId] {
+    pub fn components(&self) -> &'static [ComponentId] {
         &self.components
     }
 
     /// Returns the list of dense component types in this bundle.
     #[inline(always)]
-    pub fn dense_components(&self) -> &[ComponentId] {
+    pub fn dense_components(&self) -> &'static [ComponentId] {
         &self.components[..self.dense_len as usize]
     }
 
     /// Returns the list of sparse component types in this bundle.
     #[inline(always)]
-    pub fn sparse_components(&self) -> &[ComponentId] {
+    pub fn sparse_components(&self) -> &'static [ComponentId] {
         &self.components[self.dense_len as usize..]
     }
 
@@ -77,7 +87,6 @@ impl BundleInfo {
     ///
     /// # Complexity
     /// - Time: O(log n) where n is the total number of component types
-    /// - Space: O(1)
     pub fn contains_component(&self, id: ComponentId) -> bool {
         self.contains_dense_component(id) || self.contains_sparse_component(id)
     }
@@ -86,7 +95,6 @@ impl BundleInfo {
     ///
     /// # Complexity
     /// - Time: O(log n) where n is the number of dense components
-    /// - Space: O(1)
     pub fn contains_dense_component(&self, id: ComponentId) -> bool {
         self.dense_components().binary_search(&id).is_ok()
     }
@@ -94,18 +102,8 @@ impl BundleInfo {
     /// Checks if this archetype contains a specific sparse component type.
     ///
     /// # Complexity
-    /// - Time: O(log s) where s is the number of sparse components
-    /// - Space: O(1)
+    /// - Time: O(log n) where n is the number of sparse components
     pub fn contains_sparse_component(&self, id: ComponentId) -> bool {
         self.sparse_components().binary_search(&id).is_ok()
-    }
-}
-
-impl Debug for BundleInfo {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Bundle")
-            .field("id", &self.id)
-            .field("components", &self.components)
-            .finish()
     }
 }

@@ -538,11 +538,6 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for ReflectDeserializeDr
             }
         }
 
-        crate::cfg::debug! {
-            // Defensive cleanup for early-return paths in debug builds.
-            TYPE_INFO_STACK.with_borrow_mut(|stack|stack.clear());
-        }
-
         deserializer.deserialize_map(ReflectDeserializeDriverVisitor {
             registry: self.registry,
             processor: self.processor,

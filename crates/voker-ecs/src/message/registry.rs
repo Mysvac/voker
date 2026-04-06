@@ -34,7 +34,7 @@ impl Debug for MessageRegistry {
 impl Resource for MessageRegistry {}
 
 fn update_messages<T: Message>(world: &mut World) {
-    if let Some(mut messages) = world.resource_mut::<Messages<T>>() {
+    if let Some(mut messages) = world.get_resource_mut::<Messages<T>>() {
         messages.update();
     }
 }
@@ -50,10 +50,13 @@ impl MessageRegistry {
     /// Registers a message type for global lifecycle updates.
     ///
     /// Registration is idempotent: registering the same type twice is a no-op.
-    pub fn register_message<T: Message>(&mut self) {
+    ///
+    /// - Return `true` if it's new message.
+    /// - Return `false` if it's already registered.
+    pub fn register_message<T: Message>(&mut self) -> bool {
         let type_id = TypeId::of::<T>();
         if self.indices.contains(type_id) {
-            return;
+            return false;
         }
 
         let index = self.messages.len();
@@ -63,10 +66,15 @@ impl MessageRegistry {
         });
 
         self.indices.insert(type_id, index);
+
+        true
     }
 
     /// Deregisters a message type from global lifecycle updates.
-    pub fn deregister_message<T: Message>(&mut self) {
+    ///
+    /// - Return `true` if it's exist.
+    /// - Return `false` if it's not exist.
+    pub fn unregister_message<T: Message>(&mut self) -> bool {
         let type_id = TypeId::of::<T>();
         if let Some(index) = self.indices.remove(type_id) {
             self.messages.swap_remove(index);
@@ -75,7 +83,10 @@ impl MessageRegistry {
                 self.indices.remove(type_id);
                 self.indices.insert(type_id, index);
             }
+            return true;
         }
+
+        false
     }
 
     /// Updates all registered message resources.

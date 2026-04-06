@@ -1,23 +1,17 @@
-use core::error::Error;
-use core::fmt::{Debug, Display};
+use core::fmt::Debug;
 
-use crate::system::SystemId;
+use thiserror::Error;
 
-#[derive(Clone)]
+use crate::utils::DebugName;
+
+#[derive(Clone, Copy, Debug, Error)]
+#[error("Uninitialized system {name}.")]
 pub struct UninitSystemError {
-    pub name: SystemId,
+    pub name: DebugName,
 }
 
-impl Debug for UninitSystemError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Uninitialized system {}.", self.name)
-    }
+#[derive(Clone, Copy, Debug, Error)]
+#[error("Uninitialized resource {name}.")]
+pub struct UninitResourceError {
+    pub name: DebugName,
 }
-
-impl Display for UninitSystemError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Uninitialized system {}.", self.name)
-    }
-}
-
-impl Error for UninitSystemError {}

@@ -1,47 +1,46 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
-use voker_utils::hash::SparseHashMap;
 
-use voker_os::sync::Arc;
+use voker_utils::hash::SparseHashMap;
 
 use crate::archetype::{ArcheId, ArcheRow};
 use crate::bundle::BundleId;
-use crate::component::ComponentId;
+use crate::component::{ComponentHook, ComponentHookContext};
+use crate::component::{ComponentId, Components};
 use crate::entity::{Entity, MovedEntityRow};
 use crate::storage::TableId;
+use crate::utils::DebugLocation;
+use crate::world::DeferredWorld;
+
+type HookItem = (ComponentId, ComponentHook);
 
 // -----------------------------------------------------------------------------
 // Archetype
 
 /// A collection of entities that share the exact same set of component types.
 ///
-/// # Overview
 /// An `Archetype` represents a unique combination of component types in the ECS.
-/// All entities within the same archetype have identical component sets, enabling:
-/// - Efficient iteration over entities with specific component combinations
-/// - Optimal memory layout through columnar storage
-/// - Fast component access via table lookups
+/// All entities within the same archetype have identical component sets, enabling
+/// efficient filtering and iteration with specific component combinations.
 ///
 /// # Storage Strategy
-/// ComponentIds are split into two categories for performance optimization:
-/// - **Dense components** (`[..dense_len]`): Stored in contiguous tables for
-///   cache-efficient iteration
-/// - **Sparse components** (`[dense_len..]`): Stored in maps for memory efficiency
-///   when components are rarely present
 ///
-/// Both component lists are kept sorted to enable O(log n) lookups via binary search.
+/// ComponentIds are split into two categories for performance optimization:
+/// `[dense_components][sparse_components]`, both component lists are kept sorted
+/// to enable O(log n) lookups via binary search.
 ///
 /// # Entity Management
 /// The archetype maintains a contiguous array of entities, where the index
 /// (`ArcheRow`) serves as a stable identifier for component data locations.
 ///
-/// When entities are removed, swap-remove semantics are used to maintain
-/// contiguity, with moved entities tracked for reference updates.
+/// When entities are removed, swap-remove operation are used to maintain contiguity,
+/// with moved entities tracked for reference updates.
 ///
-/// # Query Filtering Architecture
-/// The ECS query system employs a two-level filtering strategy for optimal performance:
+/// # Query Filtering
 ///
-/// ## Level 1: Archetype Filtering (Coarse-grained)
+/// The ECS query system employs a two-level filtering: *Archetype Filtering*
+/// and *Entity Filtering*.
+///
 /// The first filtering pass operates at the archetype level, selecting entire archetypes
 /// based on component requirements:
 /// - **Required components (`with`)**: All must be present in the archetype
@@ -50,37 +49,35 @@ use crate::storage::TableId;
 /// This pass quickly eliminates large groups of entities that cannot possibly match
 /// the query, without examining individual entities.
 ///
-/// ## Level 2: Entity Filtering (Fine-grained)
-/// After archetype filtering, individual entities within matching archetypes are
-/// evaluated against additional query conditions (e.g., component value constraints,
-/// relationship conditions, or custom predicates).
+/// # Archetype and Table
 ///
-/// ## Optimization: Dense-Only Queries
-/// A special optimization applies when queries involve **only dense components**:
-/// - For such queries, matching archetypes correspond exactly to entire tables
-/// - Instead of iterating through archetype entities (which point to scattered rows),
-///   we can iterate directly over **table rows** for maximum cache efficiency
-/// - This yields significant performance gains as table storage is fully contiguous
+/// Due to the existence of sparse components, the relationship between `Archetype`
+/// and `Table` is **N:1**.
+///
+/// For queries that do not involve any sparse components, the `Archetype` can be
+/// replaced directly by the `Table` for iteration purposes.
+///
+/// However, for operations such as entity spawning or component insertion/removal,
+/// the `Archetype` contains complete information and cannot be replaced by the `Table`.
 pub struct Archetype {
-    // A unique identifier for a Archetype.
-    // Also the index in the archetypes array
     id: ArcheId,
-    // An archetype represents a unique combination of components.
-    // Since its set of components is fixed, we cache the table ID
-    // to optimize operations.
+    // Backing table for dense components, optimize query.
     table_id: TableId,
-    // The number of components stored in the table.
-    // Due to struct alignment, `usize` is equivalent to `u32`.
+    // Number of components stored in the table region.
     dense_len: usize,
-    // - `[..dense_len]` are stored in Tables, sorted.
-    // - `[dense_len..]` are stored in Maps, sorted.
-    // We use Arc to reduce memory allocation overhead.
-    components: Arc<[ComponentId]>,
-    // Maps archetype rows to their corresponding entities.
-    // The vector index = `ArcheRow`, value = `Entity`.
-    // Maintained in contiguous order for O(1) entity lookup by row.
+    // - `[..dense_len]` are stored in tables (sorted).
+    // - `[dense_len..]` are stored in sparse maps (sorted).
+    components: &'static [ComponentId],
+    // Maps archetype rows to entities.
     entities: Vec<Entity>,
-    // Optimize component insertion and removal.
+    // Cached hooks grouped by operation.
+    on_add: &'static [HookItem],
+    on_clone: &'static [HookItem],
+    on_insert: &'static [HookItem],
+    on_remove: &'static [HookItem],
+    on_discard: &'static [HookItem],
+    on_despawn: &'static [HookItem],
+    // Cached archetype transitions for bundle insertion/removal.
     after_insert: SparseHashMap<BundleId, ArcheId>,
     after_remove: SparseHashMap<BundleId, ArcheId>,
 }
@@ -89,24 +86,53 @@ pub struct Archetype {
 // Private
 
 impl Archetype {
-    /// # Requirement
-    /// - valid arche_id
-    /// - table_id matched components
-    /// - `components[..dense_len]` are stored in Tables, sorted.
-    /// - `components[dense_len..]` are stored in Maps, sorted.
+    /// Create a new `Archetype` from given information.
     pub(super) fn new(
         arche_id: ArcheId,
         table_id: TableId,
         dense_len: usize,
-        components: Arc<[ComponentId]>,
+        idents: &'static [ComponentId],
+        components: &Components,
     ) -> Self {
-        debug_assert!(components[..dense_len].is_sorted());
-        debug_assert!(components[dense_len..].is_sorted());
+        debug_assert!(idents[..dense_len].is_sorted());
+        debug_assert!(idents[dense_len..].is_sorted());
+
+        let mut on_add = Vec::new();
+        let mut on_clone = Vec::new();
+        let mut on_insert = Vec::new();
+        let mut on_remove = Vec::new();
+        let mut on_discard = Vec::new();
+        let mut on_despawn = Vec::new();
+
+        #[rustfmt::skip] // For compact format.
+        idents.iter().for_each(|&id| unsafe {
+            let info = components.get_unchecked(id);
+            if let Some(hk) = info.on_add() { on_add.push((id, hk)); }
+            if let Some(hk) = info.on_clone() { on_clone.push((id, hk)); }
+            if let Some(hk) = info.on_insert() { on_insert.push((id, hk)); }
+            if let Some(hk) = info.on_remove() { on_remove.push((id, hk)); }
+            if let Some(hk) = info.on_discard() { on_discard.push((id, hk)); }
+            if let Some(hk) = info.on_despawn() { on_despawn.push((id, hk)); }
+        });
+
+        let on_add = crate::utils::SlicePool::component_hook(&on_add);
+        let on_clone = crate::utils::SlicePool::component_hook(&on_clone);
+        let on_insert = crate::utils::SlicePool::component_hook(&on_insert);
+        let on_remove = crate::utils::SlicePool::component_hook(&on_remove);
+        let on_discard = crate::utils::SlicePool::component_hook(&on_discard);
+        let on_despawn = crate::utils::SlicePool::component_hook(&on_despawn);
+
         Archetype {
             id: arche_id,
             table_id,
             dense_len,
-            components,
+            components: idents,
+            on_add,
+            on_clone,
+            on_insert,
+            on_remove,
+            on_discard,
+            on_despawn,
             entities: Vec::new(),
             after_insert: SparseHashMap::new(),
             after_remove: SparseHashMap::new(),
@@ -143,20 +169,11 @@ impl Archetype {
 
     /// Returns the complete list of component types in this archetype.
     ///
-    /// The returned slice combines both dense and sparse components in sorted order.
-    /// Similar to `[dense_components][sparse_components]`.
+    /// The returned slice is laid out as
+    /// `[dense_components][sparse_components]`, where each region is sorted.
     #[inline(always)]
-    pub fn components(&self) -> &[ComponentId] {
+    pub fn components(&self) -> &'static [ComponentId] {
         &self.components
-    }
-
-    /// Checks if this archetype contains a specific component type.
-    ///
-    /// # Complexity
-    /// - Time: O(log n) where n is the total number of component types
-    /// - Space: O(1)
-    pub fn contains_component(&self, id: ComponentId) -> bool {
-        self.contains_dense_component(id) || self.contains_sparse_component(id)
     }
 
     /// Returns a slice of all entities in this archetype.
@@ -178,8 +195,8 @@ impl Archetype {
     /// These components benefit from cache-efficient iteration due to
     /// contiguous storage layout. The slice is guaranteed to be sorted.
     #[inline(always)]
-    pub fn dense_components(&self) -> &[ComponentId] {
-        &self.components[..self.dense_len]
+    pub fn dense_components(&self) -> &'static [ComponentId] {
+        &self.components[..self.dense_len as usize]
     }
 
     /// Returns the list of sparse component types stored in maps.
@@ -188,15 +205,23 @@ impl Archetype {
     /// when components are infrequently present. The slice is guaranteed
     /// to be sorted and non-overlapping with dense components.
     #[inline(always)]
-    pub fn sparse_components(&self) -> &[ComponentId] {
-        &self.components[self.dense_len..]
+    pub fn sparse_components(&self) -> &'static [ComponentId] {
+        &self.components[self.dense_len as usize..]
+    }
+
+    /// Checks if this archetype contains a specific component type.
+    ///
+    /// # Complexity
+    /// - Time: O(log d + log s), where `d` is the number of dense components
+    ///   and `s` is the number of sparse components.
+    pub fn contains_component(&self, id: ComponentId) -> bool {
+        self.contains_dense_component(id) || self.contains_sparse_component(id)
     }
 
     /// Checks if this archetype contains a specific dense component type.
     ///
     /// # Complexity
     /// - Time: O(log n) where n is the number of dense components
-    /// - Space: O(1)
     pub fn contains_dense_component(&self, id: ComponentId) -> bool {
         self.dense_components().binary_search(&id).is_ok()
     }
@@ -204,8 +229,7 @@ impl Archetype {
     /// Checks if this archetype contains a specific sparse component type.
     ///
     /// # Complexity
-    /// - Time: O(log s) where s is the number of sparse components
-    /// - Space: O(1)
+    /// - Time: O(log n) where n is the number of sparse components
     pub fn contains_sparse_component(&self, id: ComponentId) -> bool {
         self.sparse_components().binary_search(&id).is_ok()
     }
@@ -217,10 +241,10 @@ impl Archetype {
 impl Archetype {
     /// Finds the row index for a given entity using linear search.
     ///
+    /// Note: This is inefficient and should be avoided.
+    ///
     /// # Complexity
     /// O(n) where n is the number of entities
-    ///
-    /// Note: This is inefficient and should be avoided.
     #[must_use]
     pub fn get_arche_row(&self, entity: Entity) -> Option<ArcheRow> {
         self.entities
@@ -234,10 +258,6 @@ impl Archetype {
     /// # Safety
     /// The provided `row` must be currently occupied by an entity.
     /// Calling with an invalid or empty row leads to undefined behavior.
-    ///
-    /// # Complexity
-    /// - Time: O(1)
-    /// - Space: O(1)
     #[must_use]
     pub unsafe fn entity_at(&mut self, row: ArcheRow) -> Entity {
         debug_assert!((row.0 as usize) < self.entities.len());
@@ -246,37 +266,13 @@ impl Archetype {
 
     /// Inserts a new entity into this archetype, reserving space at the end.
     ///
-    /// This method adds an entity to the archetype, assigning it the next available
-    /// archetype row. The entity's component data must be separately initialized
-    /// in the appropriate storage locations (tables for dense components, maps for
-    /// sparse components) before or after calling this method.
-    ///
     /// # Safety
-    /// This method is unsafe because it maintains critical invariants that must be
-    /// upheld by the caller:
-    ///
     /// - **Entity uniqueness**: The entity must not already exist in this archetype.
-    ///   Duplicate entities would break the entity-to-row mapping, causing undefined
-    ///   behavior when accessing components or iterating entities.
-    ///
-    /// - **Storage preparation**: The caller must ensure that component storage
-    ///   (tables for dense components, maps for sparse components) is properly
-    ///   prepared for this entity before or immediately after insertion. This
-    ///   typically involves:
-    ///   - Allocating space in the corresponding table for dense components
-    ///   - Initializing map entries for sparse components
-    ///   - Setting initial component values
-    ///
-    /// - **Exclusive access**: This method must be called with exclusive access to
-    ///   the archetype (i.e., not while other operations are reading or writing
-    ///   the entity list).
-    ///
-    /// # Complexity
-    /// - Time: O(1)
-    /// - Space: O(1)
+    /// - **Storage preparation**: The caller must ensure that component storage is
+    ///   prepared for this entity before or immediately after insertion.
     #[must_use]
     pub unsafe fn insert_entity(&mut self, entity: Entity) -> ArcheRow {
-        // 0 < EntitIndex < u32::MAX
+        // 0 <= EntityIndex < u32::MAX
         let row = ArcheRow(self.entities.len() as u32);
         self.entities.push(entity);
         row
@@ -284,34 +280,13 @@ impl Archetype {
 
     /// Removes an entity from this archetype using swap-remove semantics.
     ///
-    /// This method removes the entity at the specified row and maintains contiguity
-    /// of the entity array by moving the last entity into the vacated position
-    /// (if the removed entity wasn't already the last one).
-    ///
     /// # Returns
-    /// - `Some(MovedEntity)` - If another entity was moved to fill the gap,
-    ///   containing the moved entity and its original location (which is now
-    ///   the row that needs updating in external references)
-    /// - `None` - If the removed entity was the last one (no entity was moved)
+    /// `MovedEntityRow` - containing the moved entity and its new location.
     ///
     /// # Safety
-    /// This method is unsafe because it modifies critical data structures and
-    /// requires the caller to maintain invariants:
-    ///
-    /// - **Row validity**: The provided `row` must be currently occupied by an
-    ///   entity. Calling with an invalid or empty row leads to undefined behavior.
-    ///
-    /// - **External reference updates**: If this method returns `MovedEntity`,
-    ///   the caller MUST update any external references that pointed to the moved
-    ///   entity's old location.
-    ///
-    /// - **Storage cleanup**: This method only removes the entity from the archetype's
-    ///   entity list. The caller is responsible for cleaning up the entity's component
-    ///   data from storage.
-    ///
-    /// # Complexity
-    /// - Time: O(1)
-    /// - Space: O(1)
+    /// - **Row validity**: The provided `row` must be currently occupied by an entity.
+    /// - **External reference updates**: The caller MUST update any external references
+    ///   that pointed to the moved entity's old location.
     #[must_use]
     pub unsafe fn remove_entity(&mut self, row: ArcheRow) -> MovedEntityRow {
         debug_assert!((row.0 as usize) < self.entities.len());
@@ -334,26 +309,145 @@ impl Archetype {
 }
 
 // -----------------------------------------------------------------------------
-// Bundle
+// Bundle - Insertion & Removal
 
 impl Archetype {
-    /// Obtain the new archetype id after inserting a Component.
+    /// Returns the cached target archetype after inserting a bundle.
     pub fn after_insert(&self, bundle: BundleId) -> Option<ArcheId> {
         self.after_insert.get(&bundle).copied()
     }
 
-    /// Obtain the new archetype id after removing a Component.
+    /// Returns the cached target archetype after removing a bundle.
     pub fn after_remove(&self, bundle: BundleId) -> Option<ArcheId> {
         self.after_remove.get(&bundle).copied()
     }
 
-    /// Set a new archetype after inserting a Component.
+    /// Caches the target archetype for an insert-bundle transition.
     pub fn set_after_insert(&mut self, bundle: BundleId, arche: ArcheId) {
         self.after_insert.insert(bundle, arche);
     }
 
-    /// Set a new archetype after removing a Component.
+    /// Caches the target archetype for a remove-bundle transition.
     pub fn set_after_remove(&mut self, bundle: BundleId, arche: ArcheId) {
         self.after_remove.insert(bundle, arche);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Component Hooks
+
+impl Archetype {
+    /// Returns cached hooks triggered when a component is added.
+    #[inline]
+    pub fn add_hooks(&self) -> &[HookItem] {
+        self.on_add
+    }
+
+    /// Returns cached hooks triggered when a component is cloned.
+    #[inline]
+    pub fn clone_hooks(&self) -> &[HookItem] {
+        self.on_clone
+    }
+
+    /// Returns cached hooks triggered when a component is inserted.
+    #[inline]
+    pub fn insert_hooks(&self) -> &[HookItem] {
+        self.on_insert
+    }
+
+    /// Returns cached hooks triggered when a component is removed.
+    #[inline]
+    pub fn remove_hooks(&self) -> &[HookItem] {
+        self.on_remove
+    }
+
+    /// Returns cached hooks triggered when a component is discarded.
+    #[inline]
+    pub fn discard_hooks(&self) -> &[HookItem] {
+        self.on_discard
+    }
+
+    /// Returns cached hooks triggered when an entity is despawned.
+    #[inline]
+    pub fn despawn_hooks(&self) -> &[HookItem] {
+        self.on_despawn
+    }
+
+    /// Triggers all cached `on_add` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_add(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_add.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
+    }
+
+    /// Triggers all cached `on_clone` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_clone(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_clone.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
+    }
+
+    /// Triggers all cached `on_insert` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_insert(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_insert.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
+    }
+
+    /// Triggers all cached `on_remove` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_remove(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_remove.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
+    }
+
+    /// Triggers all cached `on_discard` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_discard(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_discard.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
+    }
+
+    /// Triggers all cached `on_despawn` hooks for the given entity.
+    #[inline]
+    #[track_caller]
+    pub fn trigger_on_despawn(&self, entity: Entity, mut world: DeferredWorld) {
+        self.on_despawn.iter().for_each(|&(id, hook)| {
+            let caller = DebugLocation::caller();
+            hook(
+                world.reborrow(),
+                ComponentHookContext { id, entity, caller },
+            );
+        });
     }
 }

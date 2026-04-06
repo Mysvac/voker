@@ -21,11 +21,11 @@
 
 mod ident;
 mod iterators;
-mod message_mutator;
-mod message_reader;
-mod message_registry;
-mod message_writer;
 mod messages;
+mod mutator;
+mod reader;
+mod registry;
+mod writer;
 
 pub use voker_ecs_derive::Message;
 
@@ -33,8 +33,8 @@ pub use ident::{Message, MessageId};
 pub use iterators::{MessageCursor, MessageIdIterator};
 pub use iterators::{MessageIterator, MessageWithIdIterator};
 pub use iterators::{MessageMutIterator, MessageMutWithIdIterator};
-pub use message_mutator::MessageMutator;
-pub use message_reader::MessageReader;
-pub use message_registry::MessageRegistry;
-pub use message_writer::MessageWriter;
 pub use messages::Messages;
+pub use mutator::MessageMutator;
+pub use reader::MessageReader;
+pub use registry::MessageRegistry;
+pub use writer::MessageWriter;

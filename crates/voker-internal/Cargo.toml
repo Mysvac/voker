@@ -1,0 +1,52 @@
+[package]
+name = "voker-internal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+
+default = ["std"]
+
+std = [
+    "voker-os/std",
+    "voker-task/std",
+    "voker-reflect/std",
+    "voker-ecs/std",
+]
+
+web = [
+    "std",
+    "voker-os/web",
+    "voker-task/web",
+]
+
+async_io = [
+    "voker-task/async_io",
+]
+
+debug = [
+    "voker-reflect/debug",
+    "voker-ecs/debug",
+]
+
+reflect_docs = [
+    "voker-reflect/reflect_docs",
+]
+
+[dependencies]
+
+voker-cfg = { path = "../voker-cfg", default-features = false }
+voker-ptr = { path = "../voker-ptr", default-features = false }
+voker-utils = { path = "../voker-utils", default-features = false }
+voker-inventory = { path = "../voker-inventory", default-features = false }
+
+voker-os = { path = "../voker-os", default-features = false }
+voker-task = { path = "../voker-task", default-features = false }
+voker-reflect = { path = "../voker-reflect", default-features = false }
+voker-ecs = { path = "../voker-ecs", default-features = false }
+
+[lints]
+workspace = true

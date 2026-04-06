@@ -1,10 +1,9 @@
-use core::marker::PhantomData;
+use alloc::vec::Vec;
 use core::panic::AssertUnwindSafe;
 
-use crate::cfg;
 use crate::error::{EcsError, ErrorContext};
 use crate::schedule::schedule::SystemScheduleView;
-use crate::schedule::{ExecutorKind, SystemExecutor, SystemSchedule};
+use crate::schedule::{ExecutorKind, SystemExecutor, SystemObject, SystemSchedule};
 use crate::world::World;
 
 /// Runs the schedule using a single thread.
@@ -12,18 +11,14 @@ use crate::world::World;
 /// Useful if you're dealing with a single-threaded environment,
 /// saving your threads for other things, or just trying minimize overhead.
 pub struct SingleThreadedExecutor {
-    // Sealed, direct creation is prohibited
-    _marker: PhantomData<()>,
+    condition_incoming: Vec<u32>,
 }
 
 impl SingleThreadedExecutor {
     /// Creates a new single-threaded executor.
-    ///
-    /// Use this when deterministic, in-order execution on one thread is
-    /// preferred over parallel throughput.
     pub const fn new() -> Self {
         Self {
-            _marker: PhantomData,
+            condition_incoming: Vec::new(),
         }
     }
 }
@@ -40,10 +35,6 @@ impl SystemExecutor for SingleThreadedExecutor {
         ExecutorKind::SingleThreaded
     }
 
-    /// Validates schedule shape before execution.
-    ///
-    /// The single-threaded executor expects `keys` and `systems` to have the
-    /// same length and index alignment.
     fn init(&mut self, schedule: &SystemSchedule) {
         let keys = schedule.keys();
         let systems = schedule.systems();
@@ -51,12 +42,6 @@ impl SystemExecutor for SingleThreadedExecutor {
     }
 
     /// Runs all systems sequentially on the current thread.
-    ///
-    /// Execution order follows `schedule.systems` order. System-returned errors
-    /// are forwarded to `handler` with [`ErrorContext::System`].
-    ///
-    /// When `std` is available, each system call is wrapped in `catch_unwind`:
-    /// panic information is printed and then rethrown.
     fn run(
         &mut self,
         schedule: &mut SystemSchedule,
@@ -66,35 +51,93 @@ impl SystemExecutor for SingleThreadedExecutor {
         let SystemScheduleView {
             keys,
             systems,
-            incoming,
-            outgoing,
+            condition_incoming,
+            condition_outgoing,
+            ..
         } = schedule.view();
+
         let system_count = keys.len();
         assert_eq!(system_count, systems.len());
-        assert_eq!(system_count, incoming.len());
-        assert_eq!(system_count, outgoing.len());
+        assert_eq!(system_count, condition_incoming.len());
+        assert_eq!(system_count, condition_outgoing.len());
 
-        systems.iter_mut().for_each(|obj| {
-            let system = &mut obj.system;
-            let func = AssertUnwindSafe(|| unsafe {
-                if let Err(e) = system.run((), world.unsafe_world()) {
-                    let last_run = system.get_last_run();
-                    let id = system.id();
-                    let ctx = ErrorContext::System { id, last_run };
-                    handler(e, ctx);
-                }
-            });
+        self.condition_incoming.clear();
+        self.condition_incoming.extend_from_slice(condition_incoming);
 
-            cfg::std! {
-                if {
+        systems.iter_mut().enumerate().for_each(|(index, obj)| {
+            if self.condition_incoming[index] != 0 {
+                return; // next system
+            }
+
+            match obj {
+                SystemObject::Action { system, .. } => {
+                    let func = AssertUnwindSafe(|| unsafe {
+                        system.run((), world.unsafe_world()).unwrap_or_else(|e| {
+                            voker_utils::cold_path();
+                            let last_run = system.get_last_run();
+                            let name = system.id().name();
+                            let ctx = ErrorContext::System { name, last_run };
+                            handler(e, ctx);
+                        })
+                    });
+
+                    #[cfg(feature = "std")]
                     if let Err(payload) = ::std::panic::catch_unwind(func) {
+                        voker_utils::cold_path();
+                        log::error!("Encountered a panic in system `{}`!", system.id());
                         ::std::eprintln!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     }
-                } else {
+
+                    #[cfg(not(feature = "std"))]
                     (func)();
+
+                    if system.is_deferred() {
+                        system.defer(unsafe { world.unsafe_world().deferred() });
+                        system.apply_deferred(unsafe { world.unsafe_world().full_mut() });
+                    }
+
+                    condition_outgoing[index].iter().for_each(|&to| {
+                        self.condition_incoming[to as usize] -= 1;
+                    });
+                }
+                SystemObject::Condition { system, .. } => {
+                    let func = AssertUnwindSafe(|| unsafe {
+                        system.run((), world.unsafe_world()).unwrap_or_else(|e| {
+                            voker_utils::cold_path();
+                            let last_run = system.get_last_run();
+                            let name = system.id().name();
+                            let ctx = ErrorContext::System { name, last_run };
+                            handler(e, ctx);
+                            false
+                        })
+                    });
+
+                    #[cfg(feature = "std")]
+                    let condition = ::std::panic::catch_unwind(func).unwrap_or_else(|payload| {
+                        voker_utils::cold_path();
+                        log::error!("Encountered a panic in system `{}`!", system.id());
+                        ::std::eprintln!("Encountered a panic in system `{}`!", system.id());
+                        ::std::panic::resume_unwind(payload);
+                    });
+
+                    #[cfg(not(feature = "std"))]
+                    let condition = (func)();
+
+                    if system.is_deferred() {
+                        system.defer(unsafe { world.unsafe_world().deferred() });
+                        system.apply_deferred(unsafe { world.unsafe_world().full_mut() });
+                    }
+
+                    if condition {
+                        condition_outgoing[index].iter().for_each(|&to| {
+                            self.condition_incoming[to as usize] -= 1;
+                        });
+                    }
                 }
             }
         });
+
+        world.flush();
     }
 }

@@ -32,22 +32,22 @@ extern crate alloc;
 mod cond_send;
 mod macro_utils;
 
-mod platform;
-
 pub mod futures;
+mod platform;
 
 // -----------------------------------------------------------------------------
 // Exports
 
 pub use cond_send::{BoxedFuture, CondSendFuture};
 
+pub use platform::block_on;
 pub use platform::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
 pub use platform::{Scope, TaskPool, TaskPoolBuilder};
-pub use platform::{Task, block_on};
 pub use platform::{ThreadExecutor, ThreadExecutorTicker};
 
 // -----------------------------------------------------------------------------
 // Re-Exports
 
+pub use async_task::Task;
 pub use futures_lite;
 pub use futures_lite::future::poll_once;

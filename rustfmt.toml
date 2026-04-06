@@ -9,8 +9,8 @@ newline_style = "Unix"
 # Keep derive attributes separate for better diff clarity
 merge_derives = false
 
-# Wrap chained calls at 72 columns (default is 60)
-chain_width = 72
+# Wrap chained calls at 70 columns (default is 60)
+chain_width = 70
 
 # waiting for stability
 # merge_imports = false

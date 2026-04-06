@@ -17,6 +17,15 @@ mod schedules;
 mod system;
 
 // -----------------------------------------------------------------------------
+// Alias
+
+use crate::system::System;
+use alloc::boxed::Box;
+
+pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;
+pub type ActionSystem = Box<dyn System<Input = (), Output = ()>>;
+
+// -----------------------------------------------------------------------------
 // Exports
 
 pub use voker_ecs_derive::ScheduleLabel;
@@ -28,7 +37,8 @@ pub use graph::{Direction, Graph, GraphNode, SccIterator, SccNodes};
 pub use label::{AnonymousSchedule, InternedScheduleLabel, ScheduleLabel};
 pub use schedule::{Schedule, SystemSchedule};
 pub use schedules::Schedules;
-pub use system::{SystemKey, SystemObject, UnitSystem};
+
+pub use system::{SystemKey, SystemObject};
 
 // -----------------------------------------------------------------------------
 // Tests
@@ -42,20 +52,20 @@ mod tests {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    #[derive(Component, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Component, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Component, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     #[component(storage = "sparse")]
     struct Baz(String);
 
-    #[derive(Component, Debug, PartialEq)]
+    #[derive(Component, Clone, Debug, PartialEq)]
     struct Qux(f32);
 
-    #[derive(Component, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Zaz(i32);
 
     #[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]

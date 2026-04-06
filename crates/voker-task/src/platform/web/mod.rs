@@ -1,18 +1,16 @@
 // -----------------------------------------------------------------------------
 // Modules
 
-mod task;
 mod task_pool;
 
 // -----------------------------------------------------------------------------
 // Internal API
 
-use super::thread_executor::{ThreadExecutor, ThreadExecutorTicker};
+use super::{ThreadExecutor, ThreadExecutorTicker};
 
 // -----------------------------------------------------------------------------
 // Exports
 
-pub use task::Task;
 pub use task_pool::{Scope, TaskPool, TaskPoolBuilder};
 
 // -----------------------------------------------------------------------------

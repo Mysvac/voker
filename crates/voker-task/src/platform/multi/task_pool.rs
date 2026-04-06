@@ -9,7 +9,6 @@ use core::mem;
 use core::panic::AssertUnwindSafe;
 use alloc::borrow::Cow;
 use std::thread;
-use std::thread_local;
 use std::thread::JoinHandle;
 
 use voker_os::thread::available_parallelism;
@@ -18,9 +17,10 @@ use voker_os::sync::Arc;
 use futures_lite::FutureExt;
 use async_task::FallibleTask;
 
+use async_task::Task;
 use super::GlobalExecutor;
 use super::{ThreadExecutor, ThreadExecutorTicker};
-use super::{block_on, Task};
+use super::block_on;
 
 // -----------------------------------------------------------------------------
 // OnDrop
@@ -172,7 +172,7 @@ impl TaskPoolBuilder {
 // -----------------------------------------------------------------------------
 // TaskPool
 
-thread_local! {
+std::thread_local! {
     static THREAD_EXECUTOR: Arc<ThreadExecutor<'static>> = Arc::new(ThreadExecutor::new());
 }
 
@@ -195,7 +195,7 @@ thread_local! {
 /// The `spawn` family requires `'static` tasks, while `scope` supports non‑`'static` tasks.
 ///
 /// Specifically:
-/// - `spawn_local` accepts non‑`Send` tasks.
+/// - `spawn_scope` accepts non‑`Send` tasks.
 /// - `scope_with` allows sending tasks to a specific target thread.
 ///
 /// ## `spawn` APIs
@@ -203,12 +203,12 @@ thread_local! {
 /// `spawn` is the most commonly used API. Tasks submitted via `spawn` are automatically
 /// distributed across available worker threads with work-stealing load balancing.
 ///
-/// `spawn_local` is designed for thread-local tasks (e.g., ECS plugin initialization).
+/// `spawn_scope` is designed for thread-local tasks (e.g., ECS plugin initialization).
 /// - When called from the main thread, spawned tasks are **not** automatically polled
 ///   and require explicit driving via [`TaskPool::local_ticker`].
 /// - When called from a worker thread, spawned tasks are automatically executed.
 ///
-/// Both `spawn` and `spawn_local` return [`Task`] handles, which are futures themselves.
+/// Both `spawn` and `spawn_scope` return [`Task`] handles, which are futures themselves.
 /// They can be awaited with [`block_on`] or composed with other async utilities.
 ///
 /// ## `scope` APIs
@@ -223,7 +223,7 @@ thread_local! {
 ///
 /// [`Scope::spawn_remote`] submits tasks to a specific remote thread (the second argument
 /// of `scope_with`). If no remote thread is specified, it behaves identically to
-/// `Scope::spawn_local`. This API uses a thread executor that cannot be driven across
+/// `Scope::spawn_scope`. This API uses a thread executor that cannot be driven across
 /// threads; callers must ensure the remote executor is capable of polling tasks on its own.
 /// This is typically used to send tasks to the main thread.
 /// 
@@ -271,7 +271,7 @@ thread_local! {
 /// **Worker threads**: The `ThreadExecutor` on worker threads runs automatically
 /// without explicit ticking.
 ///
-/// **Main thread**: Without active scopes, tasks submitted via `spawn_local` are **not**
+/// **Main thread**: Without active scopes, tasks submitted via `spawn_scope` are **not**
 /// automatically polled and require explicit ticking via [`TaskPool::local_ticker`].
 /// However, when using [`TaskPool::scope`] (or similar), the executor is automatically driven.
 ///
@@ -428,7 +428,8 @@ impl TaskPool {
             let ex: &ThreadExecutor = ex; // From Arc to Inner
             #[expect(unsafe_code, reason = "need to transmute lifetime.")]
             let ex: &'static ThreadExecutor = unsafe { mem::transmute(ex) };
-            ex.ticker().unwrap()
+            #[expect(unsafe_code, reason = "thread local executor")]
+            unsafe { ex.ticker_unchecked() }
         })
     }
 
@@ -455,7 +456,7 @@ impl TaskPool {
     /// let value = Rc::new(Cell::new(0));
     /// let value_for_task = Rc::clone(&value);
     ///
-    /// let task = pool.spawn_local(async move {
+    /// let task = pool.spawn_scope(async move {
     ///     value_for_task.set(7);
     ///     value_for_task.get()
     /// });
@@ -472,9 +473,9 @@ impl TaskPool {
         future: impl Future<Output = T> + 'static,
     ) -> Task<T> {
         #[expect(unsafe_code, reason = "spawn local without Send is safe")]
-        Task(THREAD_EXECUTOR.with(|ex| unsafe {
+        THREAD_EXECUTOR.with(|ex| unsafe {
             ex.spawn_unchecked(future)
-        }))
+        })
     }
 
     /// Spawns a `'static` future onto the task pool.
@@ -505,7 +506,7 @@ impl TaskPool {
         &self,
         future: impl Future<Output = T> + Send + 'static,
     ) -> Task<T> {
-        Task(self.executor.spawn(future))
+        self.executor.spawn(future)
     }
 
     /// Allows spawning non‑`'static` futures on the thread pool.
@@ -670,6 +671,7 @@ impl TaskPool {
                         Err(payload) => std::panic::resume_unwind(payload),
                     }
                 } else {
+                    voker_utils::cold_path();
                     panic!("Failed to catch panic!");
                 }
             }

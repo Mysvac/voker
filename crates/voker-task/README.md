@@ -93,7 +93,7 @@ let pool = TaskPool::new();
 let value = Rc::new(Cell::new(0));
 let value_for_task = Rc::clone(&value);
 
-let task = pool.spawn_local(async move {
+let task = pool.spawn_scope(async move {
     value_for_task.set(7);
     value_for_task.get()
 });
@@ -120,10 +120,10 @@ Enable the `web` feature when targeting WebAssembly to activate WASM-specific si
 In `no_std` or WebAssembly (WASM) environments, the library operates in single-threaded mode
 with only a `ThreadExecutor`. All tasks execute on the current thread, blocking it during execution.
 
-- In WASM, tasks use `wasm_bindgen_futures::spawn_local` under the hood and task handles are
+- In WASM, tasks use `wasm_bindgen_futures::spawn_scope` under the hood and task handles are
   receiver-backed (`async_channel`). `detach` is effectively a no-op, and dropping the handle
   does not cancel the browser event-loop task.
-- In `no_std` fallback mode, `spawn` and `spawn_local` actively tick the local executor and block
+- In `no_std` fallback mode, `spawn` and `spawn_scope` actively tick the local executor and block
   until the local queue is drained. `scope` also executes tasks to completion on the current thread.
 
 ## Multi-Threaded Model

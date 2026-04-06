@@ -6,10 +6,10 @@ use voker_ecs::schedule::InternedScheduleLabel;
 use voker_ecs::system::Local;
 use voker_ecs::world::World;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Main;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedMain;
 
 #[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]

@@ -1,3 +1,5 @@
+//! Provides pre-defined `Name` component.
+
 use alloc::borrow::Cow;
 use alloc::string::String;
 use core::cmp::Ordering;
@@ -12,11 +14,10 @@ use voker_utils::hash::FixedHashState;
 
 use voker_ecs_derive::Component;
 
-/// A pre-built component for representing names.
+/// A pre-built component for representing names,
+/// stores a hash for faster comparisons.
 ///
-/// This component stores a name string along with its precomputed hash value,
-/// providing efficient comparison and lookup operations. The hash is computed
-/// automatically and cached to avoid repeated hashing overhead.
+/// The hash is eagerly re-computed upon each update to the name.
 #[derive(Component, Reflect, Clone)]
 #[reflect(Opaque, full)]
 pub struct Name {

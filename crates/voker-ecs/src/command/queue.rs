@@ -1,71 +1,294 @@
+use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::mem::MaybeUninit;
+use core::ptr::NonNull;
 
-use voker_os::utils::ListQueue;
+use super::Command;
+use crate::utils::DebugLocation;
+use crate::world::World;
 
-use super::CommandObject;
+// -----------------------------------------------------------------------------
+// CommandQueue & CommandMeta
 
-/// A thread-safe FIFO queue of deferred command objects.
+/// A queue for storing and executing deferred [`Command`]s.
 ///
-/// `CommandQueue` is the global sink used by command buffers to submit
-/// [`CommandObject`] instances for later execution.
+/// `CommandQueue` stores commands as type-erased bytes in a
+/// contiguous buffer, which is faster then `Box<dyn Command>`.
 pub struct CommandQueue {
-    queue: ListQueue<CommandObject>,
+    bytes: Vec<MaybeUninit<u8>>,
+    cursor: usize,
+    panic_recovery: Vec<Vec<MaybeUninit<u8>>>,
+    caller: DebugLocation,
 }
+
+/// Wraps pointers to a [`CommandQueue`].
+#[derive(Clone)]
+pub(crate) struct RawCommandQueue {
+    bytes: NonNull<Vec<MaybeUninit<u8>>>,
+    cursor: NonNull<usize>,
+    panic_recovery: NonNull<Vec<Vec<MaybeUninit<u8>>>>,
+}
+
+/// The function pointer used for execution(or dropping) command and move cursor.
+#[repr(transparent)]
+struct CommandMeta {
+    /// - If world is Some(_), execute the command and move cursor.
+    /// - If world is None, drop the command and move cursor.
+    apply_or_drop: unsafe fn(value: NonNull<u8>, world: Option<NonNull<World>>, cursor: &mut usize),
+}
+
+// -----------------------------------------------------------------------------
+// RawCommandQueue Methods
+
+impl RawCommandQueue {
+    /// Checks whether the queue is empty.
+    ///
+    /// # Safety
+    /// The internal pointers must be valid.
+    #[inline]
+    pub unsafe fn is_empty(&self) -> bool {
+        // SAFETY: Pointers are guaranteed to be valid by requirements on `.clone_unsafe`
+        (unsafe { *self.cursor.as_ref() }) >= (unsafe { self.bytes.as_ref().len() })
+    }
+
+    /// Appends an [`Command`] to the back of the queue.
+    ///
+    /// # Safety
+    /// The internal pointers must be valid.
+    #[inline] // Inline to reduce moving overhead.
+    pub unsafe fn push<C: Command<Output = ()>>(&mut self, command: C) {
+        // - `repr(C)` prevents the compiler from reordering the fields.
+        // - `repr(packed)` prevents the compiler from inserting padding bytes.
+        #[repr(C, packed)]
+        struct Packed<C: Command<Output = ()>> {
+            meta: CommandMeta,
+            command: C,
+        }
+
+        let _: () = const {
+            assert!(size_of::<CommandMeta>() + size_of::<C>() == size_of::<Packed<C>>());
+        };
+
+        let meta = CommandMeta {
+            apply_or_drop: |command, world, cursor| {
+                // Move cursor to the end of this Command.
+                *cursor += size_of::<C>();
+
+                // SAFETY: read_unaligned because the command pointer is unaligned.
+                let command: C = unsafe { command.cast::<C>().read_unaligned() };
+                if let Some(mut world) = world {
+                    let world = unsafe { world.as_mut() };
+                    command.apply(world);
+                    // The command may have add new deferred commands for world,
+                    // which we flush here to ensure they are also picked up.
+                    world.flush();
+                } else {
+                    // If the input world is `None`, we drop the data directly.
+                    voker_utils::cold_path();
+                    ::core::mem::drop(command)
+                }
+            },
+        };
+
+        unsafe {
+            // Write command to queue
+            let bytes = self.bytes.as_mut();
+            let old_len = bytes.len();
+
+            bytes.reserve(size_of::<Packed<C>>());
+
+            let ptr = bytes.as_mut_ptr().add(old_len);
+
+            // SAFETY: write_unaligned because the command pointer is unaligned.
+            ptr.cast::<Packed<C>>().write_unaligned(Packed { meta, command });
+            bytes.set_len(old_len + size_of::<Packed<C>>());
+        }
+    }
+
+    /// Applies or drops all commands in the queue.
+    ///
+    /// If `world` is `Some`, commands are applied to the world.
+    /// If `world` is `None`, commands are dropped without execution.
+    ///
+    /// # Safety
+    /// - The internal pointers of `World` must be valid.
+    /// - The world access is exclusive.
+    #[inline(always)]
+    pub unsafe fn apply_or_drop(&mut self, world: Option<NonNull<World>>) {
+        if unsafe { self.is_empty() } {
+            return; // Optimize World::flush.
+        }
+
+        unsafe {
+            self.apply_or_drop_inner(world);
+        }
+    }
+
+    /// Applies or drops all commands in the queue.
+    ///
+    /// If `world` is `Some`, commands are applied to the world.
+    /// If `world` is `None`, commands are dropped without execution.
+    ///
+    /// # Safety
+    /// - The internal pointers of `World` must be valid.
+    /// - The world access is exclusive.
+    unsafe fn apply_or_drop_inner(&mut self, world: Option<NonNull<World>>) {
+        let start = unsafe { *self.cursor.as_ref() };
+        let stop = unsafe { self.bytes.as_ref().len() };
+        let mut local_cursor = start;
+
+        unsafe {
+            *self.cursor.as_mut() = stop;
+        }
+
+        while local_cursor < stop {
+            let bytes_ptr = unsafe { self.bytes.as_mut().as_mut_ptr() };
+
+            // SAFETY: The cursor is either at the start of the buffer, or just after the previous command.
+            // Since we know that the cursor is in bounds, it must point to the start of a new command.
+            let meta: CommandMeta =
+                unsafe { bytes_ptr.add(local_cursor).cast::<CommandMeta>().read_unaligned() };
+
+            // Advance to the bytes just after `meta`, which represent a type-erased command.
+            local_cursor += size_of::<CommandMeta>();
+
+            let cmd: NonNull<u8> =
+                unsafe { NonNull::new_unchecked(bytes_ptr.add(local_cursor).cast()) };
+
+            let f = core::panic::AssertUnwindSafe(|| {
+                unsafe { (meta.apply_or_drop)(cmd, world, &mut local_cursor) };
+            });
+
+            #[cfg(feature = "std")]
+            if let Err(payload) = ::std::panic::catch_unwind(f) {
+                let panic_recovery = unsafe { self.panic_recovery.as_mut() };
+                let bytes = unsafe { self.bytes.as_mut() };
+                let current_stop = bytes.len();
+
+                // We need to use a stack to maintain order.
+                panic_recovery.push(Vec::from(&bytes[local_cursor..current_stop]));
+
+                unsafe {
+                    bytes.set_len(start);
+                    *self.cursor.as_mut() = start;
+                }
+
+                // Restore the remaining commands when reaching the bottom level loop.
+                if start == 0 {
+                    // The top of the stack is the most recent data.
+                    while let Some(mut top) = panic_recovery.pop() {
+                        bytes.append(&mut top); // append is faster then extend
+                    }
+                }
+
+                ::std::panic::resume_unwind(payload);
+            }
+
+            #[cfg(not(feature = "std"))]
+            (f)();
+        }
+
+        unsafe {
+            self.bytes.as_mut().set_len(start);
+            *self.cursor.as_mut() = start;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// CommandQueue Methods
+
+unsafe impl Send for CommandQueue {}
+unsafe impl Sync for CommandQueue {}
 
 impl Debug for CommandQueue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("CommmandQueue").field("len", &self.queue.len()).finish()
+        f.debug_struct("CommandQueue")
+            .field("len_bytes", &self.bytes.len())
+            .field("caller", &self.caller)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Drop for CommandQueue {
+    fn drop(&mut self) {
+        if !self.bytes.is_empty() {
+            let caller = self.caller;
+            log::warn!("CommandQueue has un-applied commands being dropped. {caller}");
+            unsafe { self.raw().apply_or_drop(None) };
+        }
+    }
+}
+
+impl Default for CommandQueue {
+    #[track_caller]
+    fn default() -> Self {
+        Self {
+            bytes: Vec::new(),
+            cursor: 0,
+            panic_recovery: Vec::new(),
+            caller: DebugLocation::caller(),
+        }
     }
 }
 
 impl CommandQueue {
-    /// Creates an empty command queue.
-    pub(crate) fn new() -> Self {
-        Self {
-            queue: ListQueue::default(),
+    /// Creates a raw handle to this command queue.
+    #[inline]
+    pub(crate) fn raw(&mut self) -> RawCommandQueue {
+        RawCommandQueue {
+            bytes: NonNull::from_mut(&mut self.bytes),
+            cursor: NonNull::from_mut(&mut self.cursor),
+            panic_recovery: NonNull::from_mut(&mut self.panic_recovery),
         }
     }
 
-    /// Returns the number of queued commands.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.queue.len()
+    /// Creates a new empty command queue.
+    #[inline]
+    #[track_caller]
+    pub const fn new() -> Self {
+        Self {
+            bytes: Vec::new(),
+            cursor: 0,
+            panic_recovery: Vec::new(),
+            caller: DebugLocation::caller(),
+        }
     }
 
-    /// Returns `true` if the queue contains no commands.
-    #[must_use]
+    /// Checks whether the queue contains any pending commands.
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.cursor >= self.bytes.len()
     }
 
-    /// Pops and returns the next command from the front of the queue.
+    /// Moves all commands from `other` into `self`.
     ///
-    /// Returns `None` if the queue is empty.
-    ///
-    /// Unlike `push`, `pop` has no batched optimized variant.
-    ///
-    /// In typical usage, popping commands happens while holding a mutable
-    /// borrow of `World` (exclusive access). In that context, cache-line
-    /// invalidation is not a concern, so pre-locking is unnecessary.
-    #[must_use]
-    pub fn pop(&self) -> Option<CommandObject> {
-        self.queue.pop()
+    /// After this operation, `other` becomes empty.
+    #[inline]
+    pub fn append(&mut self, other: &mut CommandQueue) {
+        self.bytes.append(&mut other.bytes);
+        other.cursor = 0;
     }
 
-    /// Pushes a command to the back of the queue.
-    pub fn push(&self, command: CommandObject) {
-        self.queue.push(command);
+    /// Applies all commands in the queue to the given `World`.
+    ///
+    /// This function flushes any pending world commands before applying
+    /// the queued commands. After application, the queue is cleared.
+    #[inline]
+    pub fn apply(&mut self, world: &mut World) {
+        world.apply_commands();
+        unsafe {
+            self.raw().apply_or_drop(Some(world.into()));
+        }
     }
 
-    /// Extends the queue by appending all commands from an iterator.
+    /// Pushes a command into the queue.
     ///
-    /// This method acquires the queue's push lock once and reuses it for all
-    /// inserted commands to reduce synchronization overhead.
-    pub fn extend(&self, iter: impl IntoIterator<Item = CommandObject>) {
-        let iter = iter.into_iter();
-        let mut guard = self.queue.lock_push();
-        iter.for_each(|command| {
-            self.queue.push_with_lock(&mut guard, command);
-        });
+    /// The command will be executed when [`apply`](Self::apply) is called.
+    #[inline]
+    pub fn push(&mut self, command: impl Command<Output = ()>) {
+        unsafe {
+            self.raw().push(command);
+        }
     }
 }

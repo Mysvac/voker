@@ -55,7 +55,7 @@ pub struct MessageCursor<M: Message> {
 impl<M: Message> FromWorld for MessageCursor<M> {
     fn from_world(world: &World) -> Self {
         let last_index = world
-            .resource::<Messages<M>>()
+            .get_resource::<Messages<M>>()
             .map(Messages::<M>::oldest_message_index)
             .unwrap_or_default();
         Self {

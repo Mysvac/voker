@@ -1,11 +1,15 @@
-use voker_utils::hash::SparseHashMap;
+use std::vec::Vec;
+
+use voker_utils::hash::{SparseHashMap, SparseHashSet};
 
 use super::Entity;
 
 // -----------------------------------------------------------------------------
 // EntityHashMap
 
-pub type EntityMap<T> = SparseHashMap<Entity, T>;
+pub type EntityHashMap<T> = SparseHashMap<Entity, T>;
+
+pub type EntityHashSet = SparseHashSet<Entity>;
 
 // -----------------------------------------------------------------------------
 // EntityMapper
@@ -45,7 +49,7 @@ impl EntityMapper for (Entity, Entity) {
     fn set_mapped(&mut self, _source: Entity, _target: Entity) {}
 }
 
-impl EntityMapper for EntityMap<Entity> {
+impl EntityMapper for EntityHashMap<Entity> {
     fn get_mapped(&mut self, source: Entity) -> Entity {
         self.get(&source).cloned().unwrap_or(source)
     }
@@ -62,5 +66,46 @@ impl EntityMapper for &mut dyn EntityMapper {
 
     fn set_mapped(&mut self, source: Entity, target: Entity) {
         (*self).set_mapped(source, target);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// EntitySet
+
+pub trait EntitySet {
+    fn map_entities(&mut self, mapper: &mut dyn EntityMapper);
+}
+
+impl EntitySet for Entity {
+    fn map_entities(&mut self, mapper: &mut dyn EntityMapper) {
+        *self = mapper.get_mapped(*self);
+    }
+}
+
+impl<T> EntitySet for EntityHashMap<T> {
+    fn map_entities(&mut self, mapper: &mut dyn EntityMapper) {
+        let mut buffer = EntityHashMap::with_capacity(self.len());
+        self.drain().for_each(|(e, v)| {
+            buffer.insert(mapper.get_mapped(e), v);
+        });
+        *self = buffer;
+    }
+}
+
+impl EntitySet for EntityHashSet {
+    fn map_entities(&mut self, mapper: &mut dyn EntityMapper) {
+        let mut buffer = EntityHashSet::with_capacity(self.len());
+        self.iter().for_each(|e| {
+            buffer.insert(mapper.get_mapped(*e));
+        });
+        *self = buffer;
+    }
+}
+
+impl EntitySet for Vec<Entity> {
+    fn map_entities(&mut self, mapper: &mut dyn EntityMapper) {
+        self.iter_mut().for_each(|e| {
+            *e = mapper.get_mapped(*e);
+        });
     }
 }

@@ -1,7 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use voker_os::sync::Arc;
 use voker_utils::hash::HashMap;
 use voker_utils::hash::hash_map::RawEntryMut;
 
@@ -19,7 +18,7 @@ use crate::component::{ComponentId, ComponentInfo, Components};
 /// - A rough index for fast filtering by component presence
 pub struct Tables {
     tables: Vec<Table>,
-    mapper: HashMap<Arc<[ComponentId]>, TableId>,
+    mapper: HashMap<&'static [ComponentId], TableId>,
 }
 
 // -----------------------------------------------------------------------------
@@ -35,7 +34,7 @@ impl Tables {
 
         let table = Table::new(TableId::EMPTY, &Components::new(), &[]);
         val.tables.push(table);
-        val.mapper.insert(Arc::new([]), TableId::EMPTY);
+        val.mapper.insert(&[], TableId::EMPTY);
 
         val
     }
@@ -54,7 +53,7 @@ impl Tables {
     pub(crate) unsafe fn register(
         &mut self,
         components: &Components,
-        idents: &[ComponentId],
+        idents: &'static [ComponentId],
     ) -> TableId {
         debug_assert!(idents.is_sorted());
 
@@ -63,9 +62,8 @@ impl Tables {
             RawEntryMut::Vacant(entry) => {
                 let table_id = TableId::new(self.tables.len() as u32);
                 let table = Table::new(table_id, components, idents);
-                let key = table.clone_components();
                 self.tables.push(table);
-                entry.insert(key, table_id);
+                entry.insert(idents, table_id);
 
                 table_id
             }

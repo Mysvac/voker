@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use super::QueryFilter;
 use crate::archetype::Archetype;
-use crate::component::{Component, ComponentId, ComponentStorage};
+use crate::component::{Component, ComponentId, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Table, TableRow};
 use crate::system::{AccessParam, FilterParamBuilder};
@@ -64,10 +64,10 @@ unsafe impl<T: Component> QueryFilter for Without<T> {
         _table: &'w Table,
     ) {
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 *cache = !arche.contains_dense_component(*state);
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 *cache = !arche.contains_sparse_component(*state);
             }
         }
@@ -153,10 +153,10 @@ macro_rules! impl_tuple {
                 _table: &'w Table,
             ) {
                 match <$name>::STORAGE {
-                    ComponentStorage::Dense => {
+                    StorageMode::Dense => {
                         *cache = !arche.contains_dense_component(*state);
                     },
-                    ComponentStorage::Sparse => {
+                    StorageMode::Sparse => {
                         *cache = !arche.contains_sparse_component(*state);
                     },
                 }
@@ -233,10 +233,10 @@ macro_rules! impl_tuple {
                 *cache = true;
                 $(
                     match <$name>::STORAGE {
-                        ComponentStorage::Dense => {
+                        StorageMode::Dense => {
                             *cache &= !arche.contains_dense_component(state.$index);
                         },
-                        ComponentStorage::Sparse => {
+                        StorageMode::Sparse => {
                             *cache &= !arche.contains_sparse_component(state.$index);
                         },
                     }

@@ -123,7 +123,12 @@ impl ResSet {
     #[inline(always)]
     pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResData {
         debug_assert!(id.index() < self.data.len());
-        unsafe { self.data.get_unchecked_mut(id.index()).as_mut().debug_checked_unwrap() }
+        unsafe {
+            self.data
+                .get_unchecked_mut(id.index())
+                .as_mut()
+                .debug_checked_unwrap()
+        }
     }
 
     /// Returns an iterator over the resources.

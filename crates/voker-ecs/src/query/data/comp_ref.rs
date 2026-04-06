@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use super::{QueryData, ReadOnlyQueryData};
 use crate::archetype::Archetype;
 use crate::borrow::{Mut, Ref};
-use crate::component::{Component, ComponentId, ComponentStorage};
+use crate::component::{Component, ComponentId, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Column, Map, Table, TableRow};
 use crate::system::{AccessParam, FilterParamBuilder};
@@ -94,10 +94,8 @@ unsafe impl<T: Component> QueryData for Ref<'_, T> {
         this_run: Tick,
     ) -> Self::Cache<'w> {
         match T::STORAGE {
-            ComponentStorage::Dense => ComponentView::build_dense(last_run, this_run),
-            ComponentStorage::Sparse => {
-                ComponentView::build_sparse(*state, world, last_run, this_run)
-            }
+            StorageMode::Dense => ComponentView::build_dense(last_run, this_run),
+            StorageMode::Sparse => ComponentView::build_sparse(*state, world, last_run, this_run),
         }
     }
 
@@ -141,14 +139,14 @@ unsafe impl<T: Component> QueryData for Ref<'_, T> {
         let last_run = cache.last_run;
         let this_run = cache.this_run;
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let ptr = unsafe { cache.data.dense }?;
                 let column = unsafe { &*ptr.as_ptr() };
                 let row = table_row.0 as usize;
                 let untyped = unsafe { column.get_ref(row, last_run, this_run) };
                 unsafe { Some(untyped.with_type::<T>()) }
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let ptr = unsafe { cache.data.sparse }?;
                 let map = unsafe { &*ptr.as_ptr() };
                 let row = map.get_map_row(entity)?;
@@ -241,10 +239,8 @@ unsafe impl<T: Component> QueryData for Mut<'_, T> {
         this_run: Tick,
     ) -> Self::Cache<'w> {
         match T::STORAGE {
-            ComponentStorage::Dense => ComponentView::build_dense(last_run, this_run),
-            ComponentStorage::Sparse => {
-                ComponentView::build_sparse(*state, world, last_run, this_run)
-            }
+            StorageMode::Dense => ComponentView::build_dense(last_run, this_run),
+            StorageMode::Sparse => ComponentView::build_sparse(*state, world, last_run, this_run),
         }
     }
 
@@ -288,14 +284,14 @@ unsafe impl<T: Component> QueryData for Mut<'_, T> {
         let last_run = cache.last_run;
         let this_run = cache.this_run;
         match T::STORAGE {
-            ComponentStorage::Dense => {
+            StorageMode::Dense => {
                 let ptr = unsafe { cache.data.dense }?;
                 let column = unsafe { &mut *ptr.as_ptr() };
                 let row = table_row.0 as usize;
                 let untyped = unsafe { column.get_mut(row, last_run, this_run) };
                 unsafe { Some(untyped.with_type::<T>()) }
             }
-            ComponentStorage::Sparse => {
+            StorageMode::Sparse => {
                 let ptr = unsafe { cache.data.sparse }?;
                 let map = unsafe { &mut *ptr.as_ptr() };
                 let row = map.get_map_row(entity)?;

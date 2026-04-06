@@ -1,13 +1,11 @@
 #![expect(unsafe_code, reason = "Mutex requires unsafe code.")]
 
-use core::{
-    cell::UnsafeCell,
-    fmt,
-    ops::{Deref, DerefMut},
-    panic::{RefUnwindSafe, UnwindSafe},
-};
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::opt::{Deref, DerefMut};
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use crate::sync::__fallback::{LockResult, TryLockError, TryLockResult};
+use super::{LockResult, TryLockError, TryLockResult};
 use crate::utils::Futex;
 
 /// Fallback implementation of `Mutex` from the standard library.

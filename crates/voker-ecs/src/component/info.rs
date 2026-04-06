@@ -2,7 +2,8 @@ use core::alloc::Layout;
 use core::any::TypeId;
 use core::fmt::Debug;
 
-use super::{Component, ComponentId, ComponentStorage, Required};
+use super::hook::{ComponentHook, ComponentHooks};
+use super::{Component, ComponentId, Required, StorageMode};
 use crate::utils::{Cloner, DebugName, Dropper};
 
 // -----------------------------------------------------------------------------
@@ -18,15 +19,16 @@ pub struct ComponentDescriptor {
     pub type_id: TypeId,
     pub layout: Layout,
     pub mutable: bool,
-    pub storage: ComponentStorage,
+    pub storage: StorageMode,
     pub dropper: Option<Dropper>,
-    pub cloner: Option<Cloner>,
+    pub cloner: Cloner,
     pub required: Option<Required>,
+    pub hooks: ComponentHooks,
 }
 
 impl ComponentDescriptor {
     /// Creates a new descriptor for component type `T`.
-    pub fn new<T: Component>() -> Self {
+    pub const fn new<T: Component>() -> Self {
         Self {
             name: DebugName::type_name::<T>(),
             type_id: TypeId::of::<T>(),
@@ -35,7 +37,15 @@ impl ComponentDescriptor {
             mutable: T::MUTABLE,
             dropper: T::DROPPER,
             required: T::REQUIRED,
-            cloner: T::cloner(),
+            cloner: T::CLONER,
+            hooks: ComponentHooks {
+                on_add: T::ON_ADD,
+                on_clone: T::ON_CLONE,
+                on_insert: T::ON_INSERT,
+                on_remove: T::ON_REMOVE,
+                on_discard: T::ON_DISCARD,
+                on_despawn: T::ON_DESPAWN,
+            },
         }
     }
 }
@@ -101,7 +111,7 @@ impl ComponentInfo {
 
     /// Returns the component's storage strategy.
     #[inline(always)]
-    pub fn storage(&self) -> ComponentStorage {
+    pub fn storage(&self) -> StorageMode {
         self.descriptor.storage
     }
 
@@ -113,7 +123,7 @@ impl ComponentInfo {
 
     /// Returns the component's clone function.
     #[inline(always)]
-    pub fn cloner(&self) -> Option<Cloner> {
+    pub fn cloner(&self) -> Cloner {
         self.descriptor.cloner
     }
 
@@ -121,5 +131,35 @@ impl ComponentInfo {
     #[inline(always)]
     pub fn required(&self) -> Option<Required> {
         self.descriptor.required
+    }
+
+    #[inline(always)]
+    pub fn on_add(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_add
+    }
+
+    #[inline(always)]
+    pub fn on_clone(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_clone
+    }
+
+    #[inline(always)]
+    pub fn on_insert(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_insert
+    }
+
+    #[inline(always)]
+    pub fn on_remove(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_remove
+    }
+
+    #[inline(always)]
+    pub fn on_discard(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_discard
+    }
+
+    #[inline(always)]
+    pub fn on_despawn(&self) -> Option<ComponentHook> {
+        self.descriptor.hooks.on_despawn
     }
 }

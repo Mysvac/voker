@@ -1,14 +1,12 @@
 #![expect(unsafe_code, reason = "LazyLock requires unsafe code.")]
 
-use core::{
-    cell::UnsafeCell,
-    fmt,
-    mem::ManuallyDrop,
-    ops::{Deref, DerefMut},
-    panic::{RefUnwindSafe, UnwindSafe},
-};
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::mem::ManuallyDrop;
+use core::ops::{Deref, DerefMut};
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use crate::sync::__fallback::{Once, once::OnceExclusiveState};
+use super::{Once, once::OnceExclusiveState};
 
 // We use the state of a Once as discriminant value. Upon creation, the state is
 // "incomplete" and `f` contains the initialization closure. In the first call to

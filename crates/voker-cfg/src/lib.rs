@@ -61,7 +61,6 @@
 //! [`enabled`]: crate::enabled
 //! [`switch`]: crate::switch
 //! [`define_alias`]: crate::define_alias
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
 
 // -----------------------------------------------------------------------------

@@ -26,8 +26,9 @@ pub use local::Local;
 
 use super::AccessTable;
 use crate::error::EcsError;
+use crate::system::SystemMeta;
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 /// Describes how a type is initialized and fetched as a system parameter.
 ///
@@ -97,55 +98,38 @@ use crate::world::{UnsafeWorld, World};
 /// yielding mutable references (or equivalent write capability) in `build_param`.
 pub unsafe trait SystemParam: Sized {
     /// Persistent parameter state stored with the compiled system.
-    ///
-    /// This is created once by [`SystemParam::init_state`] and reused across runs.
     type State: Send + Sync + 'static;
 
     /// Concrete parameter type produced for one system run.
-    ///
-    /// The returned item may borrow from both the world (`'world`) and the
-    /// persistent state (`'state`).
     type Item<'world, 'state>: SystemParam<State = Self::State>;
 
+    // Whether this parameter need to call `defer` and `apply`.
+    const DEFERRED: bool = false;
+
     /// Whether this parameter is thread-affine (`NonSend`).
-    ///
-    /// If `true`, systems using this parameter must run on the main thread and
-    /// cannot be sent to worker threads during scheduling.
-    ///
-    /// Typical examples include parameters that may touch non-thread-safe data,
-    /// such as `NonSend<T>` or `&mut World`.
     const NON_SEND: bool;
 
     /// Whether this parameter requires exclusive world access.
-    ///
-    /// If `true`, systems using this parameter cannot run in parallel with any
-    /// other system for that schedule step. A typical example is `&mut World`.
     const EXCLUSIVE: bool;
 
-    /// Initializes persistent state for this parameter type.
-    ///
-    /// Called during system initialization, before scheduling and execution.
     fn init_state(world: &mut World) -> Self::State;
 
-    /// Registers this parameter's access pattern in the schedule access table.
-    ///
-    /// Returns `false` if access registration detects a conflict.
     fn mark_access(table: &mut AccessTable, state: &Self::State) -> bool;
 
-    /// # Safety
-    /// - `world` must point to the same world used to initialize `state`.
-    /// - The returned [`SystemParam::Item`] must obey the accesses previously
-    ///   declared in [`SystemParam::mark_access`].
-    /// - Any references or pointers embedded in the returned item must remain
-    ///   valid for the full `'world` / `'state` lifetimes.
-    /// - Implementations must not create aliasing violations (for example,
-    ///   overlapping mutable and shared references to the same data).
     unsafe fn build_param<'w, 's>(
         world: UnsafeWorld<'w>,
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
     ) -> Result<Self::Item<'w, 's>, EcsError>;
+
+    #[inline]
+    #[expect(unused_variables, reason = "default implementation")]
+    fn defer(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
+
+    #[inline]
+    #[expect(unused_variables, reason = "default implementation")]
+    fn apply_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {}
 }
 
 /// Marker trait for parameters that only perform shared reads.

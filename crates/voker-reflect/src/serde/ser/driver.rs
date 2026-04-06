@@ -350,11 +350,6 @@ impl<'a, P: SerializeProcessor> ReflectSerializeDriver<'a, P> {
 
 impl<P: SerializeProcessor> Serialize for ReflectSerializeDriver<'_, P> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        crate::cfg::debug! {
-            // Perhaps useless, it can be cleared by `pop` usually.
-            TYPE_INFO_STACK.with_borrow_mut(|stack|stack.clear());
-        }
-
         let Some(info) = self.value.represented_type_info() else {
             return Err(ser::Error::custom(format!(
                 "cannot get represented type from type: `{}`.",

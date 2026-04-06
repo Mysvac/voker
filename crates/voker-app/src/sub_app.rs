@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use voker_ecs::schedule::{InternedScheduleLabel, Schedules};
+use voker_ecs::schedule::InternedScheduleLabel;
 use voker_ecs::schedule::{Schedule, ScheduleLabel};
 use voker_ecs::world::World;
 use voker_utils::hash::HashSet;
@@ -30,11 +30,8 @@ impl Debug for SubApp {
 
 impl Default for SubApp {
     fn default() -> Self {
-        let mut world = World::alloc();
-        world.init_resource::<Schedules>();
-
         Self {
-            world,
+            world: World::alloc(),
             plugin_registry: Vec::default(),
             plugin_names: HashSet::default(),
             plugin_build_depth: 0,
@@ -58,22 +55,8 @@ impl SubApp {
         &mut self.world
     }
 
-    // fn run_as_app<F>(&mut self, f: F)
-    // where
-    //     F: FnOnce(&mut App),
-    // {
-    //     let mut app = App::empty();
-    //     core::mem::swap(self, &mut app.sub_apps.main);
-    //     f(&mut app);
-    //     core::mem::swap(self, &mut app.sub_apps.main);
-    // }
-
-    pub(crate) fn is_building_plugins(&self) -> bool {
-        self.plugin_build_depth != 0
-    }
-
     pub fn run_default_schedule(&mut self) {
-        if self.is_building_plugins() {
+        if self.plugin_build_depth != 0 {
             voker_utils::cold_path();
             panic!("SubApp::update() was called while a plugin was building.");
         }
@@ -109,21 +92,19 @@ impl SubApp {
 
     pub fn init_schedule(&mut self, label: impl ScheduleLabel) -> &mut Self {
         let label = label.intern();
-        let mut schedules = self.world.resource_mut_or_init::<Schedules>();
-        if !schedules.contains(label) {
-            schedules.insert(Schedule::new(label));
-        }
+        let schedules = &mut self.world.schedules;
+        schedules.entry(label);
         self
     }
 
-    pub fn schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
-        let schedules = self.world.resource::<Schedules>()?;
+    pub fn get_schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
+        let schedules = &self.world.schedules;
         schedules.get(label)
     }
 
     pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
-        let schedules = self.world.resource_mut::<Schedules>()?;
-        schedules.into_inner().get_mut(label)
+        let schedules = &mut self.world.schedules;
+        schedules.get_mut(label)
     }
 
     pub fn edit_schedule(
@@ -132,7 +113,7 @@ impl SubApp {
         mut f: impl FnMut(&mut Schedule),
     ) -> &mut Self {
         let label = label.intern();
-        let mut schedules = self.world.resource_mut_or_init::<Schedules>();
+        let schedules = &mut self.world.schedules;
 
         f(schedules.entry(label));
 

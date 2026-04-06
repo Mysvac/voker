@@ -19,6 +19,6 @@ cfg::switch! {
 
 pub use thread_executor::{ThreadExecutor, ThreadExecutorTicker};
 
+pub use impls::block_on;
 pub use impls::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
 pub use impls::{Scope, TaskPool, TaskPoolBuilder};
-pub use impls::{Task, block_on};

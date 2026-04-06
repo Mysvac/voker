@@ -1,23 +1,87 @@
+#![expect(clippy::module_inception, reason = "For better structure.")]
+
 use voker_utils::range_invoke;
 
 use crate::component::{Component, ComponentCollector, ComponentWriter};
 
 /// A trait for types that represent a bundle (combination) of component data.
 ///
+/// A `Bundle` describes how to register component types and how to write their
+/// data into storage. The [`ComponentCollector`] and [`ComponentWriter`] utilities
+/// are provided to simplify these operations.
+///
+/// Types implementing `Bundle` can be used for entity spawning and component
+/// insertion/removal. All [`Component`] types implement this trait, meaning a
+/// single component can be used as a bundle.
+///
+/// For custom types where all fields implement `Bundle`, the `Bundle` macro
+/// can generate a safe implementation automatically.
+///
+/// ```no_run
+/// # use voker_ecs::prelude::*;
+/// # let mut world = World::alloc();
+/// #[derive(Bundle)]
+/// struct Foo { /* .. */ }
+///
+/// world.spawn(Foo { /* .. */ });
+/// ```
+///
+/// # Explicit vs. Required Components
+///
+/// A bundle type may be associated with **two** distinct `BundleId`s:
+/// - The **explicit** component set (user-declared components)
+/// - The **required** component set (explicit + all dependencies)
+///
+/// This distinction is necessary because:
+/// - For entity spawning and component insertion, we need all components (explicit + required)
+/// - For component removal, we only want to remove the user-explicitly-specified parts
+///
+/// Consequently, `Bundle` declares four methods:
+/// - `collect_explicit`: collects explicitly declared component IDs
+/// - `collect_required`: collects all required component IDs (including dependencies)
+/// - `write_explicit`: writes user-provided data into storage
+/// - `write_required`: auto-initializes missing dependencies via default constructors
+///
+/// # Collector
+///
+/// `ComponentCollector` is responsible for collecting component IDs with built-in registration logic.
+/// - [`collect_explicit`] collects only explicitly declared components.
+/// - [`collect_required`] collects all components needed for initialization.
+///
+/// # Writer
+///
+/// `ComponentWriter` handles data writing during entity spawning and component insertion.
+///
+/// Internally, it tracks the write status per component type with three states:
+/// **unwritten**, **default**, and **explicitly written**. Higher-priority writes
+/// override lower-priority ones, following intuitive semantics.
+///
+/// If a bundle contains duplicate component data, later writes overwrite earlier ones
+/// **without** causing memory leaks.
+///
+/// - [`write_explicit`] performs explicit writes with user-provided data.
+/// - [`write_required`] initializes missing components via default constructors.
+///
+/// The implementation guarantees that [`write_explicit`] is called **before**
+/// [`write_required`]. Components already written explicitly will not be
+/// overwritten by default initialization.
+///
+/// **Important:** All fields of a bundle must be consumed by [`write_explicit`];
+/// otherwise, memory leaks may occur.
+///
 /// # Safety
 ///
 /// Implementations must satisfy the following invariants:
 /// - `collect_explicit` must register exactly the component types that can be
 ///   written by `write_explicit`.
-/// - `collect_required` must register every component type that may exist after
-///   bundle initialization, including explicit types and dependency-required
-///   types.
-/// - `write_explicit` and `write_required` must only write component values for
+/// - `collect_required` must register every component type that exists after
+///   bundle initialization, including both explicit and required types.
+/// - `write_explicit` and `write_required` must only write values for component
 ///   types previously registered by `collect_required`.
-/// - `write_required` must not overwrite explicitly provided values; it should
+/// - `write_required` must **not** overwrite explicitly provided values; it should
 ///   only initialize required components that are still missing.
-/// - Every write performed through `ComponentWriter` must respect storage
-///   bounds, alignment, and type correctness expected by the target storage.
+/// - Every write via `ComponentWriter` must respect storage bounds, alignment,
+///   and type correctness expected by the target storage.
 ///
 /// [`collect_explicit`]: Self::collect_explicit
 /// [`collect_required`]: Self::collect_required
@@ -48,12 +112,11 @@ pub unsafe trait Bundle: Sized + Sync + Send + 'static {
     /// fields override earlier ones.
     ///
     /// # Safety
-    /// - All component writes must be to types that were registered in
-    ///   `collect_explicit` or `collect_required` .
-    /// - All writes must be within allocated storage bounds
+    /// - All component writes must be to types that were registered.
     /// - Component data must be properly aligned
     /// - The type being written must match the registered component type
     /// - The `base` offset must be valid for the current storage context
+    /// - All fields of a bundle must be consumed by this function.
     unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize);
 
     /// Writes required component values that **haven't** been provided explicitly.
@@ -62,8 +125,7 @@ pub unsafe trait Bundle: Sized + Sync + Send + 'static {
     /// construction, while preserving explicitly provided values.
     ///
     /// # Safety
-    /// - All component writes must be to types that were registered in
-    ///   [`collect_required`](Self::collect_required).
+    /// - All component writes must be to types that were registered.
     /// - All writes must be within allocated storage bounds
     /// - Component data must be properly aligned
     /// - The type being written must match the registered component type
@@ -103,7 +165,7 @@ macro_rules! impl_bundle_for_tuple {
         unsafe impl Bundle for () {
             fn collect_explicit(_collector: &mut ComponentCollector) {}
             fn collect_required(_collector: &mut ComponentCollector) {}
-            unsafe fn write_explicit( _writer: &mut ComponentWriter, _base: usize,) {}
+            unsafe fn write_explicit( _writer: &mut ComponentWriter, _base: usize) {}
             unsafe fn write_required(_writer: &mut ComponentWriter) {}
         }
     };
@@ -120,8 +182,8 @@ macro_rules! impl_bundle_for_tuple {
             }
 
             unsafe fn write_explicit(writer: &mut ComponentWriter, base: usize) {
-                const { assert!(::core::mem::offset_of!(Self, 0) == 0); }
-                unsafe { <$name>::write_explicit(writer, base); }
+                let offset = ::core::mem::offset_of!(Self, 0) + base;
+                unsafe { <$name>::write_explicit(writer, offset); }
             }
 
             unsafe fn write_required(writer: &mut ComponentWriter) {

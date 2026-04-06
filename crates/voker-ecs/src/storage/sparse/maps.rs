@@ -64,7 +64,11 @@ impl Maps {
     /// # Safety
     /// - All `ComponentId`s in `idents` must be valid and registered in `components`
     /// - The caller must ensure proper synchronization
-    pub(crate) unsafe fn register(&mut self, components: &Components, idents: &[ComponentId]) {
+    pub(crate) unsafe fn register(
+        &mut self,
+        components: &Components,
+        idents: &'static [ComponentId],
+    ) {
         idents.iter().for_each(|&id| {
             let info = unsafe { components.get_unchecked(id) };
             self.prepare(info);

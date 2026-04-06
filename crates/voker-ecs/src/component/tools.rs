@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use voker_ptr::OwningPtr;
 use voker_utils::hash::{SparseHashMap, SparseHashSet};
 
-use crate::component::{Component, ComponentId, ComponentStorage, Components};
+use crate::component::{Component, ComponentId, Components, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Maps, Table, TableId, TableRow};
 use crate::tick::Tick;
@@ -92,10 +92,10 @@ impl<'a> ComponentCollector<'a> {
         let id = self.components.register::<T>();
         if self.collected.insert(id) {
             match T::STORAGE {
-                ComponentStorage::Dense => {
+                StorageMode::Dense => {
                     self.dense.push(id);
                 }
-                ComponentStorage::Sparse => {
+                StorageMode::Sparse => {
                     self.sparse.push(id);
                 }
             }
@@ -111,10 +111,10 @@ impl<'a> ComponentCollector<'a> {
         let id = self.components.register::<T>();
         if self.collected.insert(id) {
             match T::STORAGE {
-                ComponentStorage::Dense => {
+                StorageMode::Dense => {
                     self.dense.push(id);
                 }
-                ComponentStorage::Sparse => {
+                StorageMode::Sparse => {
                     self.sparse.push(id);
                 }
             }
@@ -277,10 +277,10 @@ impl ComponentWriter<'_> {
             let data = func(unsafe { self.world.read_only() });
             voker_ptr::into_owning!(data);
             match T::STORAGE {
-                ComponentStorage::Dense => unsafe {
+                StorageMode::Dense => unsafe {
                     self.init_dense(component, data);
                 },
-                ComponentStorage::Sparse => unsafe {
+                StorageMode::Sparse => unsafe {
                     self.init_sparse(component, data);
                 },
             }
@@ -301,10 +301,10 @@ impl ComponentWriter<'_> {
         let type_id = TypeId::of::<T>();
         let component = unsafe { self.components.get_id(type_id).debug_checked_unwrap() };
         match T::STORAGE {
-            ComponentStorage::Dense => unsafe {
+            StorageMode::Dense => unsafe {
                 self.write_dense(component, offset);
             },
-            ComponentStorage::Sparse => unsafe {
+            StorageMode::Sparse => unsafe {
                 self.write_sparse(component, offset);
             },
         }

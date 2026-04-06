@@ -17,6 +17,8 @@ std = [
 
 debug = []
 
+backtrace = ["std"]
+
 [dependencies]
 voker-ptr = { path = "../voker-ptr" }
 voker-cfg = { path = "../voker-cfg" }

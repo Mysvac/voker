@@ -9,19 +9,21 @@ bitflags! {
     /// Bitflags representing system states and requirements.
     #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     pub struct SystemFlags: u8 {
+        /// Set if system need to apply deferred commands.
+        const DEFERRED = 1 << 0;
         /// Set if system cannot be sent across threads
-        const NON_SEND = 1 << 0;
+        const NON_SEND = 1 << 1;
         /// Set if system requires exclusive World access
-        const EXCLUSIVE = 1 << 1;
+        const EXCLUSIVE = 1 << 2;
     }
 }
 
 /// Metadata container for system execution information.
 #[derive(Clone, Copy)]
 pub struct SystemMeta {
-    id: SystemId,
-    flags: SystemFlags,
-    last_run: Tick,
+    pub(crate) id: SystemId,
+    pub(crate) flags: SystemFlags,
+    pub(crate) last_run: Tick,
 }
 
 impl Debug for SystemMeta {
@@ -29,6 +31,7 @@ impl Debug for SystemMeta {
         f.debug_struct("SystemMeta")
             .field("id", &self.id)
             .field("last_run", &self.last_run)
+            .field("deferred", &self.is_deferred())
             .field("non_send", &self.is_non_send())
             .field("exclusive", &self.is_exclusive())
             .finish()
@@ -66,6 +69,11 @@ impl SystemMeta {
     }
 
     #[inline]
+    pub const fn is_deferred(&self) -> bool {
+        self.flags.intersects(SystemFlags::DEFERRED)
+    }
+
+    #[inline]
     pub const fn is_non_send(&self) -> bool {
         self.flags.intersects(SystemFlags::NON_SEND)
     }
@@ -73,6 +81,11 @@ impl SystemMeta {
     #[inline]
     pub const fn is_exclusive(&self) -> bool {
         self.flags.intersects(SystemFlags::EXCLUSIVE)
+    }
+
+    #[inline]
+    pub const fn set_deferred(&mut self) {
+        self.flags = self.flags.union(SystemFlags::DEFERRED);
     }
 
     #[inline]

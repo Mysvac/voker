@@ -1,11 +1,8 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
 
-pub use voker_app as app;
-pub use voker_cfg as cfg;
-pub use voker_ecs as ecs;
-pub use voker_os as os;
-pub use voker_ptr as ptr;
-pub use voker_reflect as reflect;
-pub use voker_task as task;
-pub use voker_utils as utils;
+pub use voker_internal::*;
+
+#[cfg(all(feature = "dynlib", not(target_family = "wasm")))]
+#[expect(unused_imports, reason = "Force dynamic linking main crate.")]
+#[expect(clippy::single_component_path_imports, reason = "Force linking.")]
+use voker_internal;

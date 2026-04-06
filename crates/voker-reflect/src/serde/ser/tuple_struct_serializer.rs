@@ -47,7 +47,6 @@ impl<P: SerializeProcessor> Serialize for TupleStructSerializer<'_, P> {
         let serde_len = tuple_struct_info.iter().filter(|f| !f.skip_serde()).count();
 
         if field_len == 1 && serde_len == 1 {
-            voker_utils::cold_path();
             let value = self.tuple_struct.field(0).unwrap();
             serializer.serialize_newtype_struct(
                 type_ident,

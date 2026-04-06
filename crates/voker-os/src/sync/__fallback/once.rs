@@ -1,17 +1,13 @@
 #![expect(unsafe_code, reason = "OnceLock requires unsafe code.")]
 
-use core::{
-    cell::{Cell, UnsafeCell},
-    fmt,
-    marker::PhantomData,
-    mem::MaybeUninit,
-    panic::{RefUnwindSafe, UnwindSafe},
-};
+use core::fmt;
+use core::marker::PhantomData;
+use core::mem::MaybeUninit;
+use core::cell::{Cell, UnsafeCell};
+use core::panic::{RefUnwindSafe, UnwindSafe};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
-use crate::sync::atomic::{
-    AtomicU8,
-    Ordering::{Acquire, Relaxed, Release},
-};
+use crate::atomic::AtomicU8;
 
 /// Fallback implementation of `OnceState` from the standard library.
 ///
