@@ -67,7 +67,7 @@ impl Resources {
         self.infos.as_slice()
     }
 
-    /// Returns an iterator over the ResourceInfos.
+    /// Returns an iterator over the `ResourceInfo` values.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, ResourceInfo> {
         self.infos.iter()

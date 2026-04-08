@@ -66,7 +66,7 @@ impl RefUnwindSafe for Commands<'_, '_> {}
 ///
 /// fn buff_player(mut commands: Commands, players: Query<Entity, Without<Hp>>) {
 ///     for entity in players {
-///         commands.with_entity(player).insert(Hp(150));
+///         commands.with_entity(entity).insert(Hp(150));
 ///     }
 /// }
 /// ```

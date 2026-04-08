@@ -149,7 +149,7 @@ impl World {
 
     /// Registers a bundle type and returns its [`BundleId`].
     ///
-    /// If the target BundleInfo already exists, return it directly.
+    /// If the target `BundleInfo` already exists, returns it directly.
     ///
     /// This is called automatically by entity spawning APIs.
     #[inline]
@@ -185,7 +185,7 @@ impl World {
 
     /// Registers a bundle type and returns its [`BundleId`].
     ///
-    /// If the target BundleInfo already exists, return it directly.
+    /// If the target `BundleInfo` already exists, returns it directly.
     ///
     /// This is called automatically by entity spawning APIs.
     #[inline]
@@ -219,9 +219,9 @@ impl World {
         register_cold(self, TypeId::of::<T>(), T::collect_required)
     }
 
-    /// Registers a bundle from given ComponentIdS and returns its [`BundleId`].
+    /// Registers a bundle from given `ComponentIds` and returns its [`BundleId`].
     ///
-    /// If the target BundleInfo already exists, return it directly.
+    /// If the target `BundleInfo` already exists, returns it directly.
     ///
     /// This function can be used for runtime dynamic operation.
     pub fn register_dynamic_bundle(&mut self, idents: &[ComponentId]) -> BundleId {

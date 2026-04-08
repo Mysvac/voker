@@ -573,7 +573,7 @@ struct FreshAllocator {
 
 impl FreshAllocator {
     /// Maximum number of entities that can be allocated.
-    /// The valid EntityId range is `1..u32::MAX`
+    /// The valid `EntityId` range is `1..u32::MAX`
     const MAX_ENTITIES: u32 = u32::MAX;
 
     /// Panic handler for overflow conditions.

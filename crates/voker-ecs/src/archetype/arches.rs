@@ -45,7 +45,7 @@ impl Archetypes {
         val
     }
 
-    /// Map a bundle_id to arche_id, then you can get it through `get_id_by_bundle`.
+    /// Maps a `bundle_id` to an `arche_id`, retrievable via `get_id_by_bundle`.
     pub(crate) fn map_bundle_id(&mut self, bundle_id: BundleId, arche_id: ArcheId) {
         #[cold]
         #[inline(never)]

@@ -18,7 +18,7 @@ impl ArcheId {
     pub const EMPTY: ArcheId = ArcheId(NonMaxU32::ZERO);
 
     /// # Panics
-    /// Panic if id == u32::MAX.
+    /// Panics if `id == u32::MAX`.
     #[inline(always)]
     pub(crate) const fn new(id: u32) -> Self {
         Self(NonMaxU32::new(id).expect("too many archetypes"))
@@ -34,7 +34,7 @@ impl ArcheId {
     /// Creates a new `ArcheId` from a usize.
     ///
     /// # Panics
-    /// Panic if `id` >= u32::MAX.
+    /// Panics if `id >= u32::MAX`.
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id >= u32::MAX as usize {

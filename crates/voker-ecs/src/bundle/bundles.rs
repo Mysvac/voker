@@ -27,7 +27,7 @@ impl Debug for Bundles {
 }
 
 impl Bundles {
-    /// Creates a new `Bundles`, initializes with the *Empty BundleInfo*.
+    /// Creates a new `Bundles`, initialized with the *Empty `BundleInfo`*.
     pub(crate) fn new() -> Self {
         let mut val = Bundles {
             infos: Vec::new(),
@@ -138,7 +138,7 @@ impl Bundles {
         self.infos.len()
     }
 
-    /// Returns the bundle ID associated with ComponentIds, if it exists.
+    /// Returns the bundle ID associated with `ComponentIds`, if it exists.
     #[inline]
     pub fn get_id(&self, components: &[ComponentId]) -> Option<BundleId> {
         self.mapper.get(components).copied()
@@ -178,7 +178,7 @@ impl Bundles {
         self.infos.as_slice()
     }
 
-    /// Returns an iterator over the BundleInfo.
+    /// Returns an iterator over the `BundleInfo` values.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, BundleInfo> {
         self.infos.iter()

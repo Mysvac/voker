@@ -153,7 +153,7 @@ impl Entities {
     pub fn locate(&self, entity: Entity) -> Result<EntityLocation, FetchError> {
         let Some(info) = self.infos.get(entity.index()) else {
             voker_utils::cold_path();
-            return Err(FetchError::NotFound(entity.id()).into());
+            return Err(FetchError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
             voker_utils::cold_path();
@@ -161,7 +161,7 @@ impl Entities {
             let actual = Entity::new(entity.id(), info.tag);
             return Err(FetchError::Mismatch { expect, actual });
         }
-        info.location.ok_or(FetchError::NotSpawned(entity).into())
+        info.location.ok_or(FetchError::NotSpawned(entity))
     }
 
     /// Resizes the internal storage to accommodate a new entity index.
@@ -218,7 +218,7 @@ impl Entities {
         let info = self.infos.get(entity.index()).unwrap_or(&DEFAULT_INFO);
 
         if info.location.is_some() {
-            return Err(SpawnError::AlreadySpawned(entity).into());
+            return Err(SpawnError::AlreadySpawned(entity));
         }
         if info.tag != entity.tag() {
             let expect = entity;
@@ -267,7 +267,7 @@ impl Entities {
 
         if info.location.is_some() {
             voker_utils::cold_path();
-            return Err(SpawnError::AlreadySpawned(entity).into());
+            return Err(SpawnError::AlreadySpawned(entity));
         }
 
         info.location = Some(location);
@@ -294,7 +294,7 @@ impl Entities {
             let actual = Entity::new(entity.id(), info.tag);
             return Err(DespawnError::Mismatch { expect, actual });
         }
-        info.location.take().ok_or(DespawnError::NotSpawned(entity).into())
+        info.location.take().ok_or(DespawnError::NotSpawned(entity))
     }
 
     /// Marks an entity as despawned and returns its former location.
@@ -308,7 +308,7 @@ impl Entities {
         location: EntityLocation,
     ) -> Result<(), MoveError> {
         let Some(info) = self.infos.get_mut(entity.index()) else {
-            return Err(MoveError::NotFound(entity.id()).into());
+            return Err(MoveError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
             voker_utils::cold_path();
@@ -318,7 +318,7 @@ impl Entities {
         }
         let Some(loc) = &mut info.location else {
             voker_utils::cold_path();
-            return Err(MoveError::NotSpawned(entity).into());
+            return Err(MoveError::NotSpawned(entity));
         };
 
         *loc = location;
@@ -340,7 +340,7 @@ impl Entities {
 
         let Some(info) = self.infos.get_mut(entity.index()) else {
             voker_utils::cold_path();
-            return Err(MoveError::NotFound(entity.id()).into());
+            return Err(MoveError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
             voker_utils::cold_path();
@@ -350,7 +350,7 @@ impl Entities {
         }
         let Some(location) = &mut info.location else {
             voker_utils::cold_path();
-            return Err(MoveError::NotSpawned(entity).into());
+            return Err(MoveError::NotSpawned(entity));
         };
         match moved.new_row {
             Row::Arche(arche_row) => location.arche_row = arche_row,

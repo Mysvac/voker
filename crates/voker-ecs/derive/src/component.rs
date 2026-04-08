@@ -1,3 +1,5 @@
+#![expect(clippy::if_same_then_else)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Type, parse_quote};

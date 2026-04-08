@@ -25,7 +25,7 @@ type HookItem = (ComponentId, ComponentHook);
 ///
 /// # Storage Strategy
 ///
-/// ComponentIds are split into two categories for performance optimization:
+/// `ComponentIds` are split into two categories for performance optimization:
 /// `[dense_components][sparse_components]`, both component lists are kept sorted
 /// to enable O(log n) lookups via binary search.
 ///
@@ -173,7 +173,7 @@ impl Archetype {
     /// `[dense_components][sparse_components]`, where each region is sorted.
     #[inline(always)]
     pub fn components(&self) -> &'static [ComponentId] {
-        &self.components
+        self.components
     }
 
     /// Returns a slice of all entities in this archetype.
@@ -196,7 +196,7 @@ impl Archetype {
     /// contiguous storage layout. The slice is guaranteed to be sorted.
     #[inline(always)]
     pub fn dense_components(&self) -> &'static [ComponentId] {
-        &self.components[..self.dense_len as usize]
+        &self.components[..self.dense_len]
     }
 
     /// Returns the list of sparse component types stored in maps.
@@ -206,7 +206,7 @@ impl Archetype {
     /// to be sorted and non-overlapping with dense components.
     #[inline(always)]
     pub fn sparse_components(&self) -> &'static [ComponentId] {
-        &self.components[self.dense_len as usize..]
+        &self.components[self.dense_len..]
     }
 
     /// Checks if this archetype contains a specific component type.

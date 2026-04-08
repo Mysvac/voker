@@ -295,7 +295,8 @@ pub struct Mut<'w, T: ?Sized> {
 ///
 /// Provides read-only access to multiple components of the same type.
 ///
-/// TODO: SliceQuery
+/// This is currently a low-level wrapper used by storage/query internals.
+/// It exposes contiguous read access plus change ticks for each element.
 pub struct SliceRef<'w, T> {
     pub(crate) value: ThinSlice<'w, T>,
     pub(crate) ticks: TicksSliceRef<'w>,
@@ -308,7 +309,8 @@ pub struct SliceRef<'w, T> {
 ///
 /// Provides mutable access to multiple components of the same type.
 ///
-/// TODO: SliceQuery
+/// This is currently a low-level wrapper used by storage/query internals.
+/// It exposes contiguous mutable access plus change ticks for each element.
 pub struct SliceMut<'w, T> {
     pub(crate) value: ThinSliceMut<'w, T>,
     pub(crate) ticks: TicksSliceMut<'w>,
@@ -357,7 +359,8 @@ pub struct UntypedMut<'w> {
 ///
 /// Provides read-only access to multiple components without knowing their type.
 ///
-/// TODO: SliceQuery
+/// This is currently used by type-erased access paths that still need slice
+/// semantics and per-element change tracking.
 pub struct UntypedSliceRef<'w> {
     pub value: Ptr<'w>,
     pub ticks: TicksSliceRef<'w>,
@@ -370,7 +373,8 @@ pub struct UntypedSliceRef<'w> {
 ///
 /// Provides mutable access to multiple components without knowing their type.
 ///
-/// TODO: SliceQuery
+/// This is currently used by type-erased mutable access paths that still need
+/// slice semantics and per-element change tracking.
 pub struct UntypedSliceMut<'w> {
     pub value: PtrMut<'w>,
     pub ticks: TicksSliceMut<'w>,
@@ -980,7 +984,7 @@ impl<'w, T> SliceRef<'w, T> {
     pub fn reborrow(&self) -> SliceRef<'w, T> {
         Self {
             value: self.value,
-            ticks: self.ticks.clone(),
+            ticks: self.ticks,
         }
     }
 }
@@ -1221,7 +1225,7 @@ impl<'w> UntypedRef<'w> {
     pub fn reborrow(&self) -> UntypedRef<'w> {
         Self {
             value: self.value,
-            ticks: self.ticks.clone(),
+            ticks: self.ticks,
         }
     }
 

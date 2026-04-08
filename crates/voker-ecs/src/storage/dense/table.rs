@@ -122,7 +122,7 @@ impl Table {
 
     #[inline(always)]
     pub fn components(&self) -> &[ComponentId] {
-        &self.compnents
+        self.compnents
     }
 
     #[inline(always)]

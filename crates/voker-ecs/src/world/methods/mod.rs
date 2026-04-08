@@ -1,7 +1,6 @@
 //! High-level [`World`] operations.
 
 mod arche;
-mod clone;
 mod command;
 mod despawn;
 mod hook;

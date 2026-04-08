@@ -89,7 +89,7 @@ mod tarjan_scc {
 
     struct NodeData<N: GraphNode, Neighbors: Iterator<Item = N>> {
         /// - None: unvisited
-        /// - Some: dfs_index(searching) or scc_index(complete)
+        /// - Some: `dfs_index` (searching) or `scc_index` (complete)
         root: Option<NonZeroUsize>,
         pending: Option<N>,
         neighbors: Neighbors,

@@ -6,9 +6,9 @@ use voker_utils::num::NonMaxU32;
 // -----------------------------------------------------------------------------
 // BundleId
 
-/// Unique identifier for an [`BundleInfo`].
+/// Unique identifier for a [`BundleInfo`].
 ///
-/// Note: It's unique ID for an `BundleInfo`, instead of `Bundle`.
+/// Note: this is the unique id for a `BundleInfo`, not for a `Bundle`.
 ///
 /// [`BundleInfo`]: super::BundleInfo
 #[derive(Copy, Clone, PartialOrd, Ord)]
@@ -19,7 +19,7 @@ impl BundleId {
     pub const EMPTY: BundleId = BundleId(NonMaxU32::ZERO);
 
     /// # Panics
-    /// Panic if id == u32::MAX.
+    /// Panics if `id == u32::MAX`.
     #[inline(always)]
     pub(crate) const fn new(id: u32) -> Self {
         Self(NonMaxU32::new(id).expect("too many bundles"))
@@ -28,7 +28,7 @@ impl BundleId {
     /// Creates a new `BundleId` from a usize.
     ///
     /// # Panics
-    /// Panic if `id` >= u32::MAX.
+    /// Panics if `id >= u32::MAX`.
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id >= u32::MAX as usize {

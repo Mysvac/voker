@@ -75,7 +75,7 @@ impl ResData {
     /// # Safety
     /// - `value` must point to valid data matching the resource's layout
     /// - `tick` must be a valid system tick
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub(crate) unsafe fn insert_untyped(&mut self, value: OwningPtr<'_>, tick: Tick) {
         if let Some(data) = NonNull::new(self.data) {
             if let Some(dropper) = self.dropper {
@@ -221,7 +221,7 @@ impl ResData {
     /// Drops the resource data if initialized.
     ///
     /// # Safety
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn clear(&mut self) {
         if let Some(data) = NonNull::new(self.data) {
             let guard = AbortOnDropFail;
@@ -241,7 +241,7 @@ impl ResData {
     /// Return the underlying pointer and set resource to inactive.
     ///
     /// # Safety
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     #[must_use]
     pub unsafe fn leak(&mut self) -> Option<(NonNull<u8>, Tick, Tick)> {
         let ptr = self.data;
@@ -253,7 +253,7 @@ impl ResData {
     ///
     /// # Safety
     /// - `ptr` must matche the resource's layout
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn from_raw(&mut self, ptr: NonNull<u8>, added: Tick, changed: Tick) {
         unsafe {
             self.clear();
@@ -267,7 +267,7 @@ impl ResData {
     ///
     /// # Safety
     /// - `T` must matche the resource's layout
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn remove<T: Resource>(&mut self) -> Option<T> {
         if self.data.is_null() {
             return None;
@@ -288,7 +288,7 @@ impl ResData {
     /// # Safety
     /// - `value` must matche the resource's layout
     /// - `tick` must be a valid system tick
-    /// - If the data is NonSend, the function must be call in correct thread.
+    /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn insert<T: Resource>(&mut self, value: T, tick: Tick) {
         debug_assert_eq!(Layout::new::<T>(), self.layout);
         voker_ptr::into_owning!(value);

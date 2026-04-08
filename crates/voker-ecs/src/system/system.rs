@@ -181,7 +181,7 @@ where
 ///
 /// # Combinators
 ///
-/// IntoSystem provides several combinator methods for system composition:
+/// `IntoSystem` provides several combinator methods for system composition:
 ///
 /// - [`pipe`](IntoSystem::pipe): Chain two systems, feeding output of first as input to second
 /// - [`map`](IntoSystem::map): Transform system output using a function

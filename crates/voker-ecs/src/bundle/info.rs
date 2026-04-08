@@ -68,7 +68,7 @@ impl BundleInfo {
     /// Returns the complete list of component types in this bundle.
     #[inline(always)]
     pub fn components(&self) -> &'static [ComponentId] {
-        &self.components
+        self.components
     }
 
     /// Returns the list of dense component types in this bundle.

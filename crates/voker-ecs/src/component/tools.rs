@@ -140,7 +140,7 @@ impl<'a> ComponentCollector<'a> {
 
     /// Returns the collected components without sorting.
     ///
-    /// The ComponentIds may be duplicated in the result.
+    /// The `ComponentIds` may be duplicated in the result.
     ///
     /// This preserves the original collection order, which may be
     /// more efficient when order is not important.

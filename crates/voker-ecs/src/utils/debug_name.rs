@@ -158,7 +158,7 @@ fn debug_fmt(full_name: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     /// Collapses a fully-qualified type name segment to its most readable form.
     ///
     /// # Arguments
-    /// * `name` - A segment of a type name (e.g., "core::option::Option")
+    /// * `name` - A segment of a type name (e.g., `core::option::Option`)
     ///
     /// # Returns
     /// The collapsed version of the type name segment

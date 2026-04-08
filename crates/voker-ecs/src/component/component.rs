@@ -104,7 +104,7 @@ use crate::utils::{Cloner, Dropper};
 /// - Entity clear: `on_discard -> on_remove`
 /// - Entity clone: `on_clone -> on_add -> on_insert`
 ///
-/// See [`ComponentHooks`] for more infomation.
+/// See [`ComponentHooks`] for more information.
 ///
 /// [`ComponentHooks`]: crate::component::ComponentHooks
 ///

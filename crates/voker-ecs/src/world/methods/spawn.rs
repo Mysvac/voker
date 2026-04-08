@@ -341,7 +341,7 @@ impl World {
     /// # Important
     ///
     /// If the iterator is not fully consumed, remaining data will
-    /// be spawned during `Drop::drop`.`
+    /// be spawned during `Drop::drop`.
     ///
     /// # Examples
     ///

@@ -37,7 +37,7 @@ impl TableId {
     /// Creates a new `TableId` from a usize.
     ///
     /// # Panics
-    /// Panics if `id` >= u32::MAX.
+    /// Panics if `id >= u32::MAX`.
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id >= u32::MAX as usize {

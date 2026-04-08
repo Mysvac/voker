@@ -43,9 +43,10 @@ pub enum ExecutorKind {
 
 impl Default for ExecutorKind {
     fn default() -> Self {
-        voker_task::cfg::multi_threaded! {
-            if { Self::MultiThreaded }
-            else { Self::SingleThreaded }
+        if voker_task::cfg::multi_threaded!() {
+            Self::MultiThreaded
+        } else {
+            Self::SingleThreaded
         }
     }
 }

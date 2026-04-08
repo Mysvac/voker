@@ -87,7 +87,7 @@ impl Components {
         self.infos.as_slice()
     }
 
-    /// Returns an iterator over the ComponentInfos.
+    /// Returns an iterator over the `ComponentInfo` values.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, ComponentInfo> {
         self.infos.iter()

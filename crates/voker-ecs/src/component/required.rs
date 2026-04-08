@@ -9,7 +9,7 @@ use crate::world::FromWorld;
 // -----------------------------------------------------------------------------
 // Required
 
-/// A v-table that stores the function pointers for RequiredComponents.
+/// A v-table that stores function pointers for `RequiredComponents`.
 #[derive(Debug, Clone, Copy)]
 pub struct Required {
     register: fn(&mut ComponentRegistrar),
