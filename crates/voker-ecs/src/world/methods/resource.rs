@@ -110,7 +110,9 @@ impl World {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get_mut(id)
         {
-            unsafe { data.drop_in_place::<T>() }
+            unsafe {
+                data.clear();
+            }
         }
     }
 
@@ -255,12 +257,12 @@ impl World {
     /// # use voker_ecs::resource::Resource;
     /// # use voker_ecs::world::World;
     /// # let mut world = World::alloc();
-    /// #[derive(Resource, Default)]
-    /// struct Bar(u64);
+    /// #[derive(Resource, Default, Debug)]
+    /// struct Bar(bool);
     ///
     /// world.init_resource::<Bar>();
     ///
-    /// assert_eq!(*world.resource::<Bar>(), 0);
+    /// assert_eq!(world.resource::<Bar>().0,  false);
     /// ```
     pub fn init_resource<T: Resource + Send + FromWorld>(&mut self) {
         let id = self.register_resource::<T>();
@@ -425,7 +427,7 @@ impl World {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get_mut(id)
         {
-            unsafe { data.drop_in_place::<T>() }
+            unsafe { data.clear() }
         }
     }
 
@@ -845,7 +847,7 @@ mod tests {
         assert!(res_ref.is_changed());
         assert!(res_ref.is_added());
 
-        world.update_tick();
+        world.reset_last_run();
 
         let res_ref = world.resource_ref::<Bar>();
         assert_eq!(*res_ref, Bar(20));
@@ -867,7 +869,7 @@ mod tests {
         assert!(res_mut.is_changed());
         assert!(res_mut.is_added());
 
-        world.update_tick();
+        world.reset_last_run();
         let mut res_mut = world.resource_mut::<Bar>();
         assert_eq!(*res_mut, Bar(20));
         assert!(!res_mut.is_changed());
@@ -877,7 +879,7 @@ mod tests {
         assert!(res_mut.is_changed());
         assert!(!res_mut.is_added());
 
-        world.update_tick();
+        world.reset_last_run();
         let mut res_mut = world.non_send_mut::<Bar>();
         assert_eq!(*res_mut, Bar(100));
         assert!(!res_mut.is_changed());

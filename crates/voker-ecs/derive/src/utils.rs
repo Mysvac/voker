@@ -1,9 +1,6 @@
 use proc_macro2::TokenStream;
-use syn::{Generics, Ident, Type};
-use syn::{
-    parse_quote,
-    visit::{self, Visit},
-};
+use syn::visit::{self, Visit};
+use syn::{Generics, Ident, Type, parse_quote};
 
 struct IdentFinder<'a> {
     idents: &'a [Ident],

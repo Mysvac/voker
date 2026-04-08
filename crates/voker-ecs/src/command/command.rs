@@ -25,25 +25,25 @@ use crate::world::{EntityOwned, FromWorld, World};
     note = "the output type should be `()`, or a `Option/Result` that can be converted into `EcsError`"
 )]
 pub trait CommandOutput: Sized {
-    fn to_err(this: Self) -> Option<EcsError>;
+    fn to_err(self) -> Option<EcsError>;
 }
 
 impl CommandOutput for () {
     #[inline(always)]
-    fn to_err(_: Self) -> Option<EcsError> {
+    fn to_err(self) -> Option<EcsError> {
         None
     }
 }
 
 impl<T: CommandOutput> CommandOutput for Option<T> {
-    fn to_err(this: Self) -> Option<EcsError> {
-        this.and_then(CommandOutput::to_err)
+    fn to_err(self) -> Option<EcsError> {
+        self.and_then(CommandOutput::to_err)
     }
 }
 
 impl<T: CommandOutput, E: Into<EcsError>> CommandOutput for Result<T, E> {
-    fn to_err(this: Self) -> Option<EcsError> {
-        match this {
+    fn to_err(self) -> Option<EcsError> {
+        match self {
             Ok(v) => CommandOutput::to_err(v),
             Err(e) => Some(e.into()),
         }
@@ -63,6 +63,7 @@ impl<T: CommandOutput, E: Into<EcsError>> CommandOutput for Result<T, E> {
 ///
 /// ```no_run
 /// # use voker_ecs::prelude::*;
+/// #
 /// // Our world resource
 /// #[derive(Resource, Default)]
 /// struct Counter(u64);
@@ -74,7 +75,7 @@ impl<T: CommandOutput, E: Into<EcsError>> CommandOutput for Result<T, E> {
 ///     type Output = ();
 ///
 ///     fn apply(self, world: &mut World) {
-///         let mut counter = world.resource_mut_or_init();
+///         let mut counter = world.resource_mut_or_init::<Counter>();
 ///         counter.0 += self.0;
 ///     }
 /// }
@@ -150,7 +151,7 @@ pub trait Command: Send + Sized + 'static {
 ///
 /// fn setup(mut commands: Commands) {
 ///     let mut entity_cmd = commands.spawn(());
-///     entity_cmd..push(insert_name);
+///     entity_cmd.push(insert_name);
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {
@@ -159,8 +160,8 @@ pub trait EntityCommand: Send + Sized + 'static {
     /// Executes this command for the given [`Entity`].
     fn apply(self, entity: EntityOwned) -> Self::Output;
 
-    /// Passes in a specific entity to an [`EntityCommand`], resulting in a [`Command`] that
-    /// internally runs the [`EntityCommand`] on that entity.
+    /// Passes in a specific entity to an [`EntityCommand`], resulting in a
+    /// [`Command`] that internally runs the [`EntityCommand`] on that entity.
     #[inline]
     fn with_entity(self, entity: Entity) -> impl Command {
         move |world: &mut World| -> Result<Self::Output, FetchError> {
@@ -225,6 +226,31 @@ where
     }
 }
 
+/// A [`Command`] that despawn a entity.
+///
+/// No-op if the entity does not exist
+#[inline]
+pub fn despawn(entity: Entity) -> impl Command {
+    move |world: &mut World| {
+        world.despawn(entity);
+    }
+}
+
+/// A [`Command`] that despawn entities from iterator.
+///
+/// Simply ignore entities that won't spawn.
+#[inline]
+pub fn despawn_batch<I>(entity_iter: I) -> impl Command
+where
+    I: IntoIterator<Item = Entity> + Send + Sync + 'static,
+{
+    move |world: &mut World| {
+        for entity in entity_iter {
+            world.despawn(entity);
+        }
+    }
+}
+
 /// A [`Command`] that initialize [`Resource`] if it does not exist.
 #[inline]
 pub fn init_resource<R: Resource + Send + FromWorld>() -> impl Command {
@@ -262,13 +288,33 @@ pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
     }
 }
 
-/// A [`Command`] that remove a [`Bundle`] for a entity.
+/// A [`Command`] that remove a [`Bundle`]'s explict components for a entity.
 #[inline]
 #[track_caller]
 pub fn remove<T: Bundle>() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
-        entity.remove_with_caller::<T>(caller);
+        entity.remove_explicit_with_caller::<T>(caller);
+    }
+}
+
+/// A [`Command`] that remove a [`Bundle`]'s explict components for a entity.
+#[inline]
+#[track_caller]
+pub fn remove_explicit<T: Bundle>() -> impl EntityCommand {
+    let caller = DebugLocation::caller();
+    move |mut entity: EntityOwned| {
+        entity.remove_explicit_with_caller::<T>(caller);
+    }
+}
+
+/// A [`Command`] that remove a [`Bundle`]'s all components for a entity.
+#[inline]
+#[track_caller]
+pub fn remove_required<T: Bundle>() -> impl EntityCommand {
+    let caller = DebugLocation::caller();
+    move |mut entity: EntityOwned| {
+        entity.remove_required_with_caller::<T>(caller);
     }
 }
 
@@ -279,15 +325,5 @@ pub fn clear() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
         entity.clear_with_caller(caller);
-    }
-}
-
-/// A [`Command`] that despawn a entity.
-#[inline]
-#[track_caller]
-pub fn despawn() -> impl EntityCommand {
-    let caller = DebugLocation::caller();
-    move |entity: EntityOwned| {
-        entity.despawn_with_caller(caller);
     }
 }

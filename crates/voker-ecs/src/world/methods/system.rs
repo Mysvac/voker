@@ -9,9 +9,13 @@ use crate::world::World;
 // -----------------------------------------------------------------------------
 // SystemComponent
 
-/// Erased system object stored in world-level registry entities.
+/// Type-erased system object stored in world-level system resources.
 type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
 
+/// Per-signature cache for systems keyed by [`SystemId`].
+///
+/// The generic parameters (`I`, `O`) partition caches by system input/output
+/// signature so ids do not collide across incompatible system types.
 struct SystemResource<I: SystemInput, O> {
     mapper: NoOpHashMap<SystemId, Option<BoxedSystem<I, O>>>,
 }
@@ -30,6 +34,7 @@ impl<I: SystemInput + 'static, O: 'static> Resource for SystemResource<I, O> {}
 // SystemRegistry, SystemComponent
 
 impl World {
+    /// Runs a previously prepared system, then places it back into the cache.
     #[inline(never)]
     fn run_system_internal<I, O>(
         &mut self,
@@ -56,7 +61,8 @@ impl World {
         ret
     }
 
-    fn try_fetch_system<I, O>(&mut self, id: SystemId) -> Option<BoxedSystem<I, O>>
+    /// Temporarily removes a cached system from storage.
+    fn take_system<I, O>(&mut self, id: SystemId) -> Option<BoxedSystem<I, O>>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -65,7 +71,11 @@ impl World {
         res.into_inner().mapper.get_mut(&id)?.take()
     }
 
-    pub fn build_system<I, O, M>(
+    /// Converts an [`IntoSystem`] into a boxed runtime system and initializes it.
+    ///
+    /// This does not register the system by itself. Registration happens when
+    /// the system is inserted into the cache by run or register APIs.
+    fn build_system<I, O, M>(
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
     ) -> BoxedSystem<I, O>
@@ -78,6 +88,41 @@ impl World {
         system
     }
 
+    /// Registers a system into the world cache if absent.
+    pub fn register_system<I, O, M>(&mut self, system: impl IntoSystem<I, O, M> + 'static)
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        let res = self.resource_mut_or_init::<SystemResource<I, O>>();
+        let res = res.into_inner();
+        let id = system.system_id();
+        if matches!(res.mapper.get_mut(&id), Some(Some(_))) {
+            return;
+        }
+        res.mapper.insert(id, Some(Box::new(IntoSystem::into_system(system))));
+    }
+
+    /// Removes a registered system from cache and returns ownership of it.
+    ///
+    /// Returns `None` when the typed cache or entry does not exist.
+    pub fn unregister_system<I, O, M>(&mut self, system: impl IntoSystem<I, O, M> + 'static)
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        if let Some(res) = self.get_resource_mut::<SystemResource<I, O>>() {
+            res.into_inner().mapper.remove(&system.system_id());
+        }
+    }
+
+    /// Runs a system with explicit input data.
+    ///
+    /// This function automatically registers the system if it is not already
+    /// registered.
+    ///
+    /// The system is looked up by [`SystemId`]. If not already cached, it is
+    /// built and initialized first. After execution, it remains cached.
     #[inline]
     pub fn run_system_with<I, O, M>(
         &mut self,
@@ -88,20 +133,48 @@ impl World {
         I: SystemInput + 'static,
         O: 'static,
     {
-        let opt = self.try_fetch_system::<I, O>(system.system_id());
+        let opt = self.take_system::<I, O>(system.system_id());
         let system = opt.unwrap_or_else(|| self.build_system::<I, O, M>(system));
         self.run_system_internal::<I, O>(system, input)
     }
 
     /// Runs a named system with unit input.
+    ///
+    /// This function automatically registers the system if it is not already
+    /// registered.
+    ///
+    /// The system is looked up by [`SystemId`]. If not already cached, it is
+    /// built and initialized first. After execution, it remains cached.
     #[inline]
     pub fn run_system<O: 'static, M>(
         &mut self,
         system: impl IntoSystem<(), O, M> + 'static,
     ) -> Result<O, EcsError> {
-        let opt = self.try_fetch_system::<(), O>(system.system_id());
+        let opt = self.take_system::<(), O>(system.system_id());
         let system = opt.unwrap_or_else(|| self.build_system::<(), O, M>(system));
         self.run_system_internal::<(), O>(system, ())
+    }
+
+    /// Runs a registered system by id and returns the input back on cache miss.
+    ///
+    /// If the system is not registered, this function returns the input value
+    /// unchanged.
+    ///
+    /// This means you should call [`World::register_system`] before calling
+    /// this function.
+    pub fn run_system_cached<I, O>(
+        &mut self,
+        system_id: SystemId,
+        input: I,
+    ) -> Result<Result<O, EcsError>, I>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        match self.take_system::<(), O>(system_id) {
+            Some(system) => Ok(self.run_system_internal::<(), O>(system, ())),
+            None => Err(input),
+        }
     }
 }
 

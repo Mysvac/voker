@@ -74,6 +74,13 @@ pub(crate) fn component_writer_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
+pub(crate) fn component_hook_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::component::ComponentHook
+    }
+}
+
+#[inline(always)]
 pub(crate) fn bundle_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::bundle::Bundle

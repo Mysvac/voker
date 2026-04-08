@@ -33,6 +33,11 @@ struct EntityInfo {
     location: Option<EntityLocation>,
 }
 
+const DEFAULT_INFO: EntityInfo = EntityInfo {
+    tag: EntityTag::FIRST,
+    location: None,
+};
+
 // -----------------------------------------------------------------------------
 // Entities
 
@@ -61,6 +66,17 @@ pub struct Entities {
 
 impl Debug for Entities {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        struct FormatLocation(Option<EntityLocation>);
+
+        impl Debug for FormatLocation {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                match self.0 {
+                    Some(l) => Debug::fmt(&l, f),
+                    None => f.pad("None"),
+                }
+            }
+        }
+
         fn entity_from(id: usize, tag: EntityTag) -> Entity {
             Entity::new(EntityId::without_provenance(id), tag)
         }
@@ -69,8 +85,9 @@ impl Debug for Entities {
             .infos
             .iter()
             .enumerate()
-            .filter(|(_, info)| info.location.is_some())
-            .map(|(id, info)| entity_from(id, info.tag));
+            .skip(1) // Skip invalid EntityId
+            .map(|(id, info)| (entity_from(id, info.tag), info.location))
+            .map(|(e, l)| (e, FormatLocation(l)));
 
         f.debug_list().entries(iter).finish()
     }
@@ -82,20 +99,12 @@ impl Entities {
         Self { infos: Vec::new() }
     }
 
-    /// Return the number of spawned entities.
+    /// Return the number of **spawned** entities.
     ///
     /// # Complexity
     /// time: O(N)
-    pub fn len(&self) -> usize {
+    pub fn count_spawned(&self) -> usize {
         self.infos.iter().filter(|info| info.location.is_some()).count()
-    }
-
-    /// Return true if there are no spawned entities.
-    ///
-    /// # Complexity
-    /// time: O(N)
-    pub fn is_empty(&self) -> bool {
-        self.infos.iter().all(|info| info.location.is_none())
     }
 
     /// Resolves an entity ID to its current entity with correct tag.
@@ -103,19 +112,38 @@ impl Entities {
     /// # Complexity
     /// time: O(1)
     pub fn resolve(&self, id: EntityId) -> Entity {
-        let tag = self
-            .infos
-            .get(id.index())
-            .map(|info| info.tag)
-            .unwrap_or(EntityTag::FIRST);
-        Entity::new(id, tag)
+        let info = self.infos.get(id.index()).unwrap_or(&DEFAULT_INFO);
+
+        Entity::new(id, info.tag)
+    }
+
+    /// Try retrieves the location of a spawned entity.
+    ///
+    /// # Returns
+    /// - `Ok(Some(EntityLocation))` - The entity's current storage location
+    /// - `Ok(None)` - The entity is not spawned but the tag is matched.
+    /// - `Err(FetchError)` - Tag mismatches.
+    ///
+    /// # Errors
+    /// - `FetchError::Mismatch` - Generation counter mismatch (stale entity)
+    pub fn try_locate(&self, entity: Entity) -> Result<Option<EntityLocation>, FetchError> {
+        let info = self.infos.get(entity.index()).unwrap_or(&DEFAULT_INFO);
+
+        if info.tag != entity.tag() {
+            voker_utils::cold_path();
+            let expect = entity;
+            let actual = Entity::new(entity.id(), info.tag);
+            return Err(FetchError::Mismatch { expect, actual });
+        }
+
+        Ok(info.location)
     }
 
     /// Retrieves the location of a spawned entity.
     ///
     /// # Returns
     /// - `Ok(EntityLocation)` - The entity's current storage location
-    /// - `Err(EntityError)` - If the entity doesn't exist, tag mismatches,
+    /// - `Err(FetchError)` - If the entity doesn't exist, tag mismatches,
     ///   or the entity is not spawned
     ///
     /// # Errors
@@ -144,15 +172,7 @@ impl Entities {
     #[inline(never)]
     fn resize(&mut self, len: usize) {
         self.infos.reserve(len - self.infos.len());
-        self.infos.resize(
-            self.infos.capacity(),
-            const {
-                EntityInfo {
-                    tag: EntityTag::FIRST,
-                    location: None,
-                }
-            },
-        );
+        self.infos.resize(self.infos.capacity(), DEFAULT_INFO);
     }
 
     /// Frees an entity slot for reuse.
@@ -193,13 +213,9 @@ impl Entities {
     ///
     /// # Returns
     /// - `Ok(())` - Entity can be spawned
-    /// - `Err(EntityError::SpawnError)` - If spawning is not possible
+    /// - `Err(SpawnError::SpawnError)` - If spawning is not possible
     pub fn can_spawn(&self, entity: Entity) -> Result<(), SpawnError> {
-        let index = entity.index();
-
-        let Some(info) = self.infos.get(index) else {
-            return Ok(());
-        };
+        let info = self.infos.get(entity.index()).unwrap_or(&DEFAULT_INFO);
 
         if info.location.is_some() {
             return Err(SpawnError::AlreadySpawned(entity).into());
@@ -226,7 +242,7 @@ impl Entities {
     ///
     /// # Returns
     /// * `Ok(())` - Successfully recorded spawn
-    /// * `Err(EntityError::SpawnError)` - If entity state is invalid
+    /// * `Err(SpawnError::SpawnError)` - If entity state is invalid
     pub unsafe fn set_spawned(
         &mut self,
         entity: Entity,
@@ -266,7 +282,7 @@ impl Entities {
     ///
     /// # Returns
     /// - `Ok(EntityLocation)` - The entity's former location
-    /// - `Err(EntityError)` - If entity state is invalid
+    /// - `Err(DespawnError)` - If entity state is invalid
     pub unsafe fn set_despawned(&mut self, entity: Entity) -> Result<EntityLocation, DespawnError> {
         let Some(info) = self.infos.get_mut(entity.index()) else {
             voker_utils::cold_path();
@@ -316,7 +332,7 @@ impl Entities {
     ///
     /// # Returns
     /// - `Ok(())` - Location updated successfully
-    /// - `Err(EntityError)` - If entity state is invalid
+    /// - `Err(MoveError)` - If entity state is invalid
     pub unsafe fn update_row(&mut self, moved: MovedEntityRow) -> Result<(), MoveError> {
         let Some(entity) = moved.entity else {
             return Ok(());

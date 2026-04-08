@@ -14,6 +14,9 @@ use crate::world::UnsafeWorld;
 /// component pattern to three forms: raw shared access, change-aware shared
 /// access, and change-aware mutable access.
 ///
+/// Currently, the duplication of components is not checked,
+/// but aliases of mutable references may cause undefined behavior.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -37,7 +40,8 @@ use crate::world::UnsafeWorld;
 /// ```
 ///
 /// # Safety
-/// The implementer ensures the legality of access.
+///
+/// - No aliased mutability is caused by the returned references.
 pub unsafe trait GetComponents {
     /// Raw shared output (no change wrapper).
     type Raw<'a>;

@@ -26,6 +26,7 @@ use crate::world::World;
 /// The exposed methods are `unsafe` because the caller must uphold the borrow
 /// invariants required by Rust and by ECS world semantics.
 #[derive(Clone, Copy)]
+#[repr(transparent)]
 pub struct UnsafeWorld<'a> {
     world: NonNull<World>,
     _marker: PhantomData<&'a UnsafeCell<World>>,

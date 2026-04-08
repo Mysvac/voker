@@ -22,9 +22,6 @@ mod system;
 use crate::system::System;
 use alloc::boxed::Box;
 
-pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;
-pub type ActionSystem = Box<dyn System<Input = (), Output = ()>>;
-
 // -----------------------------------------------------------------------------
 // Exports
 
@@ -39,6 +36,9 @@ pub use schedule::{Schedule, SystemSchedule};
 pub use schedules::Schedules;
 
 pub use system::{SystemKey, SystemObject};
+
+pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;
+pub type ActionSystem = Box<dyn System<Input = (), Output = ()>>;
 
 // -----------------------------------------------------------------------------
 // Tests

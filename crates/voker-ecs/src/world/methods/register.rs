@@ -1,7 +1,9 @@
+use alloc::vec::Vec;
 use core::any::TypeId;
 
+use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
-use crate::component::{CollectResult, ComponentCollector};
+use crate::component::{CollectResult, ComponentCollector, StorageMode};
 use crate::component::{Component, ComponentId};
 use crate::resource::{Resource, ResourceId};
 use crate::world::World;
@@ -78,7 +80,7 @@ impl World {
     /// If the type has already been registered, the existing id is returned.
     ///
     /// When you already have `&mut World`, this is a convenient alternative to
-    /// [`Components::get_id`].
+    /// [`World::get_component_id`] and [`Components::get_id`].
     ///
     /// This only registers metadata and allocates an id. It does not allocate
     /// storage; storage is prepared lazily during entity insertion.
@@ -88,7 +90,7 @@ impl World {
     /// ```
     /// # use voker_ecs::component::Component;
     /// # use voker_ecs::world::World;
-    /// #[derive(Component)]
+    /// #[derive(Component, Clone)]
     /// struct Foo;
     ///
     /// let mut world = World::alloc();
@@ -117,7 +119,7 @@ impl World {
     /// ```
     /// # use voker_ecs::component::Component;
     /// # use voker_ecs::world::World;
-    /// #[derive(Component)]
+    /// #[derive(Component, Clone)]
     /// #[component(storage = "sparse")]
     /// struct Foo;
     ///
@@ -136,15 +138,18 @@ impl World {
         }
     }
 
-    /// Try get [`ResourceId`] from specific type.
+    /// Try get [`ComponentId`] from specific type.
     ///
-    /// If the resource is not registered, the function will return `None`.
-    /// When you already have `&mut World`, consider use [`World::register_resource`] instead.
+    /// If the component is not registered, the function will return `None`.
+    /// When you already have `&mut World`, consider use [`World::register_component`] instead.
+    #[inline]
     pub fn get_component_id<T: Component>(&self) -> Option<ComponentId> {
         self.components.get_id(TypeId::of::<T>())
     }
 
     /// Registers a bundle type and returns its [`BundleId`].
+    ///
+    /// If the target BundleInfo already exists, return it directly.
     ///
     /// This is called automatically by entity spawning APIs.
     #[inline]
@@ -172,13 +177,15 @@ impl World {
         }
 
         if let Some(id) = self.bundles.get_explicit_id(TypeId::of::<T>()) {
-            id
-        } else {
-            register_cold(self, TypeId::of::<T>(), T::collect_explicit)
+            return id;
         }
+
+        register_cold(self, TypeId::of::<T>(), T::collect_explicit)
     }
 
     /// Registers a bundle type and returns its [`BundleId`].
+    ///
+    /// If the target BundleInfo already exists, return it directly.
     ///
     /// This is called automatically by entity spawning APIs.
     #[inline]
@@ -206,9 +213,94 @@ impl World {
         }
 
         if let Some(id) = self.bundles.get_required_id(TypeId::of::<T>()) {
-            id
-        } else {
-            register_cold(self, TypeId::of::<T>(), T::collect_required)
+            return id;
         }
+
+        register_cold(self, TypeId::of::<T>(), T::collect_required)
+    }
+
+    /// Registers a bundle from given ComponentIdS and returns its [`BundleId`].
+    ///
+    /// If the target BundleInfo already exists, return it directly.
+    ///
+    /// This function can be used for runtime dynamic operation.
+    pub fn register_dynamic_bundle(&mut self, idents: &[ComponentId]) -> BundleId {
+        #[cold]
+        #[inline(never)]
+        fn register_cold(world: &mut World, idents: &[ComponentId]) -> BundleId {
+            let mut dense: Vec<ComponentId> = Vec::with_capacity(idents.len());
+            let mut sparse: Vec<ComponentId> = Vec::with_capacity(idents.len());
+
+            idents.iter().for_each(|&id| {
+                let info = world.components.get(id).expect("should be reigstered");
+                match info.storage() {
+                    StorageMode::Dense => dense.push(id),
+                    StorageMode::Sparse => sparse.push(id),
+                }
+            });
+
+            dense.sort();
+            dense.dedup();
+            sparse.sort();
+            sparse.dedup();
+            let dense_len = dense.len();
+            dense.append(&mut sparse);
+
+            let components = crate::utils::SlicePool::component(&dense);
+
+            unsafe { world.bundles.register_dynamic_unique(components, dense_len) }
+        }
+
+        if let Some(id) = self.bundles.get_id(idents) {
+            return id;
+        }
+
+        register_cold(self, idents)
+    }
+
+    /// Registers a archetype from given BundleInfo(ID) and returns its [`ArcheId`].
+    ///
+    /// If the target `Archetype` already exists, return it's id directly.
+    ///
+    /// This is called automatically by entity spawning/insertion/.. APIs.
+    ///
+    /// This function can be coordinated with [`World::register_dynamic_bundle`].
+    #[inline]
+    pub fn register_archetype(&mut self, bundle_id: BundleId) -> ArcheId {
+        #[cold]
+        #[inline(never)]
+        fn register_cold(world: &mut World, bundle_id: BundleId) -> ArcheId {
+            let info = unsafe { world.bundles.get_unchecked(bundle_id) };
+            if let Some(id) = world.archetypes.get_id(info.components()) {
+                world.archetypes.map_bundle_id(bundle_id, id);
+                return id;
+            }
+
+            let table_id = unsafe {
+                let sparses = info.sparse_components();
+                world.storages.maps.register(&world.components, sparses);
+                let denses = info.dense_components();
+                world.storages.tables.register(&world.components, denses)
+            };
+
+            let dense_len = info.dense_components().len();
+            let idents = info.components();
+
+            let arche_id = unsafe {
+                let components = &world.components;
+                world
+                    .archetypes
+                    .register_unique(table_id, dense_len, idents, components)
+            };
+            world.archetypes.map_bundle_id(bundle_id, arche_id);
+
+            arche_id
+        }
+
+        if let Some(id) = self.archetypes.get_id_by_bundle(bundle_id) {
+            return id;
+        }
+
+        register_cold(self, bundle_id)
     }
 }

@@ -279,6 +279,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                         let system = unsafe { &mut *systems[index as usize].get() };
                         system.defer(world.deferred());
                         system.apply_deferred(world);
+                        world.flush();
                     });
 
                     #[cfg(feature = "std")]
@@ -311,9 +312,9 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             (context.error_handler)(e, ctx);
-                            return false;
+                            return false; // Error -> false
                         }
-                        true
+                        true // Success -> true
                     });
 
                     #[cfg(feature = "std")]
@@ -347,7 +348,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             (context.error_handler)(e, ctx);
-                            false
+                            false // Error -> false
                         })
                     });
 
@@ -441,6 +442,8 @@ impl SystemExecutor for MultiThreadedExecutor {
             .unwrap_or_else(PoisonError::into_inner)
             .reset(schedule);
 
+        self.state.clear_poison(); // optional
+
         let main_thread_ex = world.get_resource::<MainThreadExecutor>().map(|e| e.0.clone());
         let remote_ex = main_thread_ex.as_deref();
 
@@ -449,8 +452,6 @@ impl SystemExecutor for MultiThreadedExecutor {
             let context = Context::new(world, self, schedule, scope, handler);
             context.tick();
         });
-
-        self.state.clear_poison();
 
         self.state
             .get_mut()

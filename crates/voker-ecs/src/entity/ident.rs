@@ -43,7 +43,7 @@ impl EntityId {
     /// Creates a new `ComponentId` from a usize.
     ///
     /// # Panics
-    /// Panics if `id` >= u32::MAX.
+    /// Panics if `id == 0 || id > u32::MAX`.
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id == 0 || id > u32::MAX as usize {
@@ -116,10 +116,6 @@ impl EntityTag {
     /// Represents the first generation of an [`EntityId`].
     pub const FIRST: Self = Self(0);
 
-    /// Non-wrapping difference between two generations after which a
-    /// signed interpretation becomes negative.
-    const DIFF_MAX: u32 = 1u32 << 31;
-
     /// Returns the [`EntityTag`] that would result from this many
     /// more `versions` of the corresponding [`EntityId`] from passing.
     #[inline(always)]
@@ -147,9 +143,13 @@ impl PartialOrd for EntityTag {
 
 impl Ord for EntityTag {
     fn cmp(&self, other: &Self) -> Ordering {
+        // Non-wrapping difference between two generations after which a
+        // signed interpretation becomes negative.
+        const DIFF_MAX: u32 = u32::MAX >> 1;
+
         match self.0.wrapping_sub(other.0) {
             0 => Ordering::Equal,
-            1..Self::DIFF_MAX => Ordering::Greater,
+            1..DIFF_MAX => Ordering::Greater,
             _ => Ordering::Less,
         }
     }

@@ -55,10 +55,10 @@ impl Debug for World {
             .field("this_run", &self.this_run())
             .field("last_run", &self.last_run())
             .field("thread_hash", &self.thread_hash())
-            .field("entity_count", &self.entities.len())
+            .field("entity_count", &self.entity_count())
+            .field("resources", &self.resources)
             .field("components", &self.components)
             .field("archetypes", &self.archetypes)
-            .field("resources", &self.resources)
             .field("storages", &self.storages)
             .field("schedules", &self.schedules)
             .finish()
@@ -126,10 +126,21 @@ impl World {
         Tick::new(self.this_run.fetch_add(1, Ordering::Relaxed))
     }
 
-    /// Advances world ticks for a normal schedule run and returns new `this_run`.
+    /// Resets the world's own change-detection baseline.
     ///
-    /// Also updates `last_run` and may trigger periodic tick validation.
-    pub fn update_tick(&mut self) -> Tick {
+    /// After calling this, changes that happened before the current moment are
+    /// no longer considered "new" from the world's perspective.
+    ///
+    /// This only affects the world's internal change tracking. It does not
+    /// modify `last_run` values stored inside systems.
+    ///
+    /// Both systems and the world track changes using a `last_run` marker:
+    /// a change is considered visible when it falls within `last_run..this_run`.
+    ///
+    /// Systems update their own `last_run` automatically after each run, while
+    /// the world baseline must be reset manually. This function synchronizes the
+    /// world baseline to the current tick.
+    pub fn reset_last_run(&mut self) -> Tick {
         self.check_ticks();
 
         let last_run = *self.this_run.get_mut();
@@ -169,7 +180,7 @@ impl World {
 impl World {
     /// Returns the number of currently alive entities.
     pub fn entity_count(&self) -> usize {
-        self.entities.len()
+        self.entities.count_spawned()
     }
 
     /// Returns the number of component types.

@@ -1,51 +1,195 @@
 use crate::archetype::ArcheId;
-use crate::bundle::Bundle;
-use crate::component::ComponentHookContext;
+use crate::bundle::{Bundle, BundleId};
+use crate::component::HookContext;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
 impl EntityOwned<'_> {
-    /// Remove component.
+    /// Remove the all components explicitly included in the Bundle.
     ///
-    /// # Rules
+    /// As same as [`EntityOwned::remove_explicit`].
     ///
-    /// ## If some components do not exist
+    /// If some components do not exist, only existing components
+    /// are removed; the program runs normally.
     ///
-    /// Only existing components are removed; the program runs normally.
+    /// # Panics
     ///
-    /// ## If required components are involved
-    ///
-    /// Only remove the removable parts.
+    /// Panics if this entity is despawned.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use voker_ecs::world::World;
-    /// # use voker_ecs::component::Component;
-    /// # #[derive(Component, Debug)]
-    /// # struct Foo;
-    /// # #[derive(Component, Debug)]
-    /// # struct Bar;
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Default, Component, Clone)]
+    /// struct Foo;
+    ///
+    /// #[derive(Component, Clone)]
+    /// #[component(required = Foo)]
+    /// struct Bar;
+    ///
     /// let mut world = World::alloc();
     ///
-    /// let mut entity = world.spawn((Foo, Bar));
+    /// let mut entity = world.spawn(Bar);
     /// assert!(entity.contains::<Foo>());
     /// assert!(entity.contains::<Bar>());
     ///
     /// entity.remove::<Bar>();
-    /// assert!(entity.contains::<Foo>());
+    /// assert!(entity.contains::<Foo>()); // still exist
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
     #[track_caller]
     pub fn remove<B: Bundle>(&mut self) {
-        self.remove_with_caller::<B>(DebugLocation::caller());
+        self.remove_explicit_with_caller::<B>(DebugLocation::caller());
     }
 
-    pub(crate) fn remove_with_caller<B: Bundle>(&mut self, caller: DebugLocation) {
+    /// Remove the all components explicitly included in the Bundle.
+    ///
+    /// If some components do not exist, only existing components
+    /// are removed; the program runs normally.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this entity is despawned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Default, Component, Clone)]
+    /// struct Foo;
+    ///
+    /// #[derive(Component, Clone)]
+    /// #[component(required = Foo)]
+    /// struct Bar;
+    ///
+    /// let mut world = World::alloc();
+    ///
+    /// let mut entity = world.spawn(Bar);
+    /// assert!(entity.contains::<Foo>());
+    /// assert!(entity.contains::<Bar>());
+    ///
+    /// entity.remove_explicit::<Bar>();
+    /// assert!(entity.contains::<Foo>()); // still exist
+    /// assert!(!entity.contains::<Bar>());
+    /// ```
+    #[inline]
+    #[track_caller]
+    pub fn remove_explicit<B: Bundle>(&mut self) {
+        self.remove_explicit_with_caller::<B>(DebugLocation::caller());
+    }
+
+    /// Remove the all components explicitly and implicitly
+    /// included in the Bundle.
+    ///
+    /// If some components do not exist, only existing components
+    /// are removed; the program runs normally.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this entity is despawned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Default, Component, Clone)]
+    /// struct Foo;
+    ///
+    /// #[derive(Component, Clone)]
+    /// #[component(required = Foo)]
+    /// struct Bar;
+    ///
+    /// let mut world = World::alloc();
+    ///
+    /// let mut entity = world.spawn(Bar);
+    /// assert!(entity.contains::<Foo>());
+    /// assert!(entity.contains::<Bar>());
+    ///
+    /// entity.remove_required::<Bar>();
+    /// assert!(!entity.contains::<Foo>()); // removed
+    /// assert!(!entity.contains::<Bar>());
+    /// ```
+    #[inline]
+    #[track_caller]
+    pub fn remove_required<B: Bundle>(&mut self) {
+        self.remove_required_with_caller::<B>(DebugLocation::caller());
+    }
+
+    /// Remove the all components included in the target [`BundleInfo`].
+    ///
+    /// If some components do not exist, only existing components
+    /// are removed; the program runs normally.
+    ///
+    /// [`BundleInfo`]: crate::bundle::BundleInfo
+    ///
+    /// # Panics
+    ///
+    /// Panics if this entity is despawned.
+    ///  
+    /// # Examples
+    ///
+    /// ```
+    /// use core::any::TypeId;
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Default, Component, Clone)]
+    /// struct Foo;
+    ///
+    /// #[derive(Component, Clone)]
+    /// #[component(required = Foo)]
+    /// struct Bar;
+    ///
+    /// let mut world = World::alloc();
+    ///
+    /// let bundle_id = world.register_required_bundle::<Bar>();
+    ///
+    /// let mut entity = world.spawn(Bar);
+    /// assert!(entity.contains::<Foo>());
+    /// assert!(entity.contains::<Bar>());
+    ///
+    /// entity.remove_dynamic(bundle_id);
+    /// assert!(!entity.contains::<Foo>());
+    /// assert!(!entity.contains::<Bar>());
+    /// ```
+    #[inline]
+    #[track_caller]
+    pub fn remove_dynamic(&mut self, bundle_id: BundleId) {
+        self.remove_dynamic_with_caller(bundle_id, DebugLocation::caller());
+    }
+
+    /// Internal implementation of [`Self::remove_explicit`].
+    #[inline]
+    pub(crate) fn remove_explicit_with_caller<B: Bundle>(&mut self, caller: DebugLocation) {
         let world = unsafe { self.world.full_mut() };
         let bundle_id = world.register_explicit_bundle::<B>();
-        let old_arche_id = self.location.arche_id;
+
+        self.remove_dynamic_with_caller(bundle_id, caller);
+    }
+
+    /// Internal implementation of [`Self::remove_required`].
+    #[inline]
+    pub(crate) fn remove_required_with_caller<B: Bundle>(&mut self, caller: DebugLocation) {
+        let world = unsafe { self.world.full_mut() };
+        let bundle_id = world.register_required_bundle::<B>();
+
+        self.remove_dynamic_with_caller(bundle_id, caller);
+    }
+
+    /// Internal implementation of [`Self::remove_dynamic`].
+    pub(crate) fn remove_dynamic_with_caller(
+        &mut self,
+        bundle_id: BundleId,
+        caller: DebugLocation,
+    ) {
+        self.assert_is_spawned_with_caller(caller);
+
+        let world = unsafe { self.world.full_mut() };
+
+        let old_arche_id = unsafe { self.location.unwrap_unchecked().arche_id };
         let new_arche_id = world.arche_after_remove(old_arche_id, bundle_id);
 
         let guard = ForgetEntityOnPanic {
@@ -55,97 +199,107 @@ impl EntityOwned<'_> {
         };
 
         if old_arche_id != new_arche_id {
-            self.remove_moved(new_arche_id, caller);
+            remove_moved(self, new_arche_id, caller);
         }
 
         ::core::mem::forget(guard);
     }
+}
 
-    #[inline(never)]
-    fn remove_moved(&mut self, new_arche_id: ArcheId, caller: DebugLocation) {
-        let unsafe_world = self.world;
-        let entity = self.entity;
+#[inline(never)]
+fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLocation) {
+    let unsafe_world = this.world;
+    let entity = this.entity;
 
-        let old_arche_id = self.location.arche_id;
-        let old_arche =
-            unsafe { unsafe_world.full_mut().archetypes.get_unchecked_mut(old_arche_id) };
-        let new_arche =
-            unsafe { unsafe_world.full_mut().archetypes.get_unchecked_mut(new_arche_id) };
-        debug_assert_eq!(old_arche.table_id(), self.location.table_id);
+    let mut location = unsafe { this.location.take().unwrap_unchecked() };
 
-        {
-            // trigger_on_discard
-            let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            old_arche.discard_hooks().iter().for_each(|&(id, hook)| {
-                if !new_arche.contains_component(id) {
-                    hook(
-                        world.reborrow(),
-                        ComponentHookContext { id, entity, caller },
-                    );
-                }
-            });
-        }
-        {
-            // trigger_on_remove
-            let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            old_arche.remove_hooks().iter().for_each(|&(id, hook)| {
-                if !new_arche.contains_component(id) {
-                    hook(
-                        world.reborrow(),
-                        ComponentHookContext { id, entity, caller },
-                    );
-                }
-            });
-        }
+    let old_arche_id = location.arche_id;
+    let [old_arche, new_arche] = unsafe {
+        let arches = &mut unsafe_world.full_mut().archetypes;
+        let indices = [old_arche_id.index(), new_arche_id.index()];
+        arches.as_mut_slice().get_disjoint_unchecked_mut(indices)
+    };
 
+    debug_assert_eq!(old_arche.table_id(), location.table_id);
+
+    {
+        // trigger_on_discard
+        let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
+        old_arche.discard_hooks().iter().for_each(|&(id, hook)| {
+            if !new_arche.contains_component(id) {
+                hook(world.reborrow(), HookContext { id, entity, caller });
+            }
+        });
+    }
+
+    {
+        // trigger_on_remove
+        let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
+        old_arche.remove_hooks().iter().for_each(|&(id, hook)| {
+            if !new_arche.contains_component(id) {
+                hook(world.reborrow(), HookContext { id, entity, caller });
+            }
+        });
+    }
+
+    {
         // Move Arche
         let new_arche_row = unsafe {
-            let moved = old_arche.remove_entity(self.location.arche_row);
-            self.world.full_mut().entities.update_row(moved).unwrap();
-            new_arche.insert_entity(self.entity)
+            let moved = old_arche.remove_entity(location.arche_row);
+            unsafe_world.full_mut().entities.update_row(moved).unwrap();
+            new_arche.insert_entity(entity)
         };
 
-        self.location.arche_id = new_arche_id;
-        self.location.arche_row = new_arche_row;
+        location.arche_id = new_arche_id;
+        location.arche_row = new_arche_row;
+    }
 
+    {
         // Move Table
         let old_table_id = old_arche.table_id();
         let new_table_id = new_arche.table_id();
 
-        // Move Table
         if old_table_id != new_table_id {
-            let table_row = self.location.table_row;
-            let old_table =
-                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(old_table_id) };
-            let new_table =
-                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(new_table_id) };
-            let (moved, new_row) =
-                unsafe { old_table.move_to_and_drop_missing(table_row, new_table) };
-            unsafe {
-                self.world.full_mut().entities.update_row(moved).unwrap();
-            }
-            self.location.table_id = new_table_id;
-            self.location.table_row = new_row;
+            let table_row = location.table_row;
+            let [old_table, new_table] = unsafe {
+                let tables = &mut unsafe_world.full_mut().storages.tables;
+                let indices = [old_table_id.index(), new_table_id.index()];
+                tables.as_mut_slice().get_disjoint_unchecked_mut(indices)
+            };
+            let new_row = unsafe {
+                let (moved, new) = old_table.move_to_and_drop_missing(table_row, new_table);
+                unsafe_world.full_mut().entities.update_row(moved).unwrap();
+                new
+            };
+            location.table_id = new_table_id;
+            location.table_row = new_row;
         }
+    }
 
+    {
         // Move Map
-        let world = unsafe { self.world.full_mut() };
+        let world = unsafe { unsafe_world.full_mut() };
         let maps = &mut world.storages.maps;
         old_arche.sparse_components().iter().for_each(|&id| {
             if !new_arche.contains_sparse_component(id) {
                 let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
                 let map = unsafe { maps.get_unchecked_mut(map_id) };
-                let row = unsafe { map.deallocate(self.entity).unwrap() };
+                let row = unsafe { map.deallocate(entity).unwrap() };
                 unsafe {
                     map.drop_item(row);
                 }
             }
         });
+    }
 
-        unsafe {
-            world.entities.update_location(self.entity, self.location).unwrap();
-        }
+    unsafe {
+        // update location
+        let world = unsafe_world.full_mut();
+
+        world.entities.update_location(entity, location).unwrap();
 
         world.flush();
+
+        this.relocate();
     }
 }

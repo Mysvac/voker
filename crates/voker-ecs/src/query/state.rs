@@ -88,6 +88,8 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         self.world_id
     }
 
+    #[cold]
+    #[inline(never)]
     fn invalid_query_data() -> ! {
         panic! {
             "invalid query data `{}` in query `{}`",

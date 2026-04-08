@@ -21,6 +21,72 @@ use crate::world::World;
 // -----------------------------------------------------------------------------
 // Schedule
 
+/// Execution graph for ECS systems.
+///
+/// # Two System Kinds
+///
+/// `Schedule` stores two kinds of systems: [`ConditionSystem`] and
+/// [`ActionSystem`].
+///
+/// The only semantic difference is their output:
+/// - `ConditionSystem` returns `bool`
+/// - `ActionSystem` returns `()`
+///
+/// In practice, `ConditionSystem` can still run complex logic just like
+/// `ActionSystem`.
+///
+/// # What Determines Execution Order
+///
+/// System execution is constrained by three factors:
+/// - access conflicts
+/// - explicit dependencies
+/// - run conditions
+///
+/// ## Access Conflicts
+///
+/// Every system carries an access table. The executor enforces compatibility at
+/// runtime.
+///
+/// In single-threaded mode, systems are not run concurrently, so cross-system
+/// conflict checks are effectively free.
+///
+/// In multi-threaded mode, the executor checks whether `Ready` systems conflict
+/// with currently `Running` systems. Only non-conflicting systems can start.
+///
+/// ## Explicit Dependencies And Run Conditions
+///
+/// Explicit dependencies are user-defined ordering constraints between systems
+/// to guarantee visibility and sequencing.
+///
+/// Internally, explicit dependencies are maintained as a DAG.
+///
+/// Run conditions are also represented as a DAG. They introduce implicit
+/// dependencies, so both DAGs are merged before topological scheduling.
+///
+/// ## Runtime States
+///
+/// A system can be observed in these states:
+///
+/// - `Waiting`: previous dependencies (explicit or implicit) are incomplete
+/// - `Ready`: dependencies are complete
+///   - `ReadyFalse`: run conditions evaluated to false
+///   - `ReadyTrue`: run conditions evaluated to true
+/// - `Running`: currently executing
+/// - `Completed`: execution finished
+///   - `CompletedFalse`: finished with false condition output
+///   - `CompletedTrue`: finished with true condition output
+///
+/// Because implicit condition edges are included in dependency resolution,
+/// systems entering `Ready` have already had their condition dependencies
+/// evaluated.
+///
+/// If all conditions pass (and no access conflict exists), the system runs.
+/// Otherwise, it is treated as completed with a false condition result.
+///
+/// This implies that systems that do not run (both condition and action kinds)
+/// produce a false condition outcome, while successfully run action systems
+/// produce true. In that sense, action systems can also be interpreted as
+/// condition producers based on whether they actually executed.
 pub struct Schedule {
     label: InternedScheduleLabel,
     allocator: Allocator,
@@ -865,6 +931,24 @@ impl Schedule {
     where
         S: IntoSystem<(), (), M2>,
         C: IntoSystem<(), bool, M1>,
+    {
+        self.remove_run_if(system.system_id(), condition.system_id());
+        self
+    }
+
+    pub fn add_run_if_run<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
+    where
+        S: IntoSystem<(), (), M2>,
+        C: IntoSystem<(), (), M1>,
+    {
+        self.insert_run_if(system.system_id(), condition.system_id());
+        self
+    }
+
+    pub fn del_run_if_run<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
+    where
+        S: IntoSystem<(), (), M2>,
+        C: IntoSystem<(), (), M1>,
     {
         self.remove_run_if(system.system_id(), condition.system_id());
         self

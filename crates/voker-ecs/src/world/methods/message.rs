@@ -1,7 +1,15 @@
-use crate::message::{Message, MessageRegistry, Messages};
+use crate::message::{Message, MessageId, MessageIdIterator, MessageRegistry, Messages};
+use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
+    /// Runs one global message-update pass for all message types in the registry.
+    ///
+    /// This function should be called once per frame.
+    pub fn update_messages(&mut self) {
+        MessageRegistry::run_updates(self);
+    }
+
     /// Registers a message type in the global message registry.
     pub fn register_message<T: Message>(&mut self) {
         self.message_registry.register_message::<T>();
@@ -14,8 +22,38 @@ impl World {
         self.drop_resource::<Messages<T>>();
     }
 
-    /// Runs one global message-update pass for all message types in the registry.
-    pub fn update_messages(&mut self) {
-        MessageRegistry::run_updates(self);
+    /// Writes a [`Message`].
+    ///
+    /// This method returns the [`MessageId`] of the written `message`,
+    /// or [`None`] if the `message` could not be written.
+    pub fn write_message<M: Message>(&mut self, message: M) -> Option<MessageId<M>> {
+        let Some(mut msgs) = self.get_resource_mut::<Messages<M>>() else {
+            unregistered_message(DebugName::type_name::<M>());
+            return None;
+        };
+        Some(msgs.write(message))
     }
+
+    /// Writes a batch of [`Message`]s from an iterator.
+    ///
+    /// This method returns the [IDs](`MessageId`) of the written `messages`,
+    /// or [`None`] if the `events` could not be written.
+    pub fn write_message_batch<M: Message>(
+        &mut self,
+        messages: impl IntoIterator<Item = M>,
+    ) -> Option<MessageIdIterator<M>> {
+        let Some(mut msgs) = self.get_resource_mut::<Messages<M>>() else {
+            unregistered_message(DebugName::type_name::<M>());
+            return None;
+        };
+        Some(msgs.write_batch(messages))
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn unregistered_message(name: DebugName) {
+    log::error!(
+        "Unable to write message `{name}`, call `World::register_message` before write it."
+    );
 }

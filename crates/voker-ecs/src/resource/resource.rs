@@ -1,3 +1,5 @@
+#![expect(clippy::module_inception, reason = "For better structure.")]
+
 use crate::utils::Dropper;
 
 /// Marker trait for values stored in a world's resource storage.

@@ -66,13 +66,15 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// This macro automatically implements the `Component` trait for your type,
 /// allowing it to be used as a component in the ECS system.
 ///
+///
+///
 /// # Supported Attributes
 ///
 /// The `#[component(...)]` attribute can be used to configure the component behavior:
 ///
 /// | Attribute | Description | Default |
 /// |-----------|-------------|---------|
-/// | `Copy` / `Clone` | Sets the cloning behavior. | Not cloneable |
+/// | `Copy` | Mark the type is copyable | Clone through `Clone` |
 /// | `mutable = true/false` | Controls whether the component can be mutated | `true` |
 /// | `storage = "dense"/"sparse"` | Controls how the component is stored in memory | `"dense"` |
 /// | `required = T` | Specifies dependency components. `T` can be a single type or a tuple of types | `()` |
@@ -82,22 +84,18 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```ignore
-/// // Basic usage - mutable component without clone capability
-/// #[derive(Component, Default)]
+/// // Basic usage - mutable and cloneable component
+/// #[derive(Component, Clone)]
 /// struct Foo;
 ///
-/// // Cloneable component
-/// #[derive(Component, Clone, Default)]
-/// #[component(Clone)]
-/// struct Bar(String);
 ///
 /// // Component with required dependencies
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// #[component(required = Bar)]
 /// struct Baz;
 ///
 /// // Immutable component with sparse storage
-/// #[derive(Component, Default)]
+/// #[derive(Component, Clone, Default)]
 /// #[component(mutable = false, storage = "sparse")]
 /// struct Logger { /* .. */ }
 ///
@@ -128,13 +126,13 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```ignore
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Foo;
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Bar(u8);
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Baz(String);
 ///
 /// // Empty bundle - spawns an entity with no components
@@ -194,7 +192,7 @@ pub fn derive_schedule_label(input: TokenStream) -> TokenStream {
     schedule::impl_derive_schedule_label(ast)
 }
 
-/// Derives the `ScheduleLabel` trait implementation.
+/// Derives the `Message` trait implementation.
 ///
 /// # Examples
 ///

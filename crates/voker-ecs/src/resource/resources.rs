@@ -61,6 +61,12 @@ impl Resources {
         unsafe { self.infos.get_unchecked(id.index()) }
     }
 
+    /// Extracts a slice containing the entire Components.
+    #[inline]
+    pub fn as_slice(&self) -> &[ResourceInfo] {
+        self.infos.as_slice()
+    }
+
     /// Returns an iterator over the ResourceInfos.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, ResourceInfo> {

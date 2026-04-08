@@ -41,13 +41,20 @@ pub trait Message: Send + Sync + 'static {}
 // -----------------------------------------------------------------------------
 // MessageId
 
+/// A type used to represent a message index.
+///
+/// The internal value is allowed to wrap around, and users
+/// should not store it for an excessively long time.
+///
+/// Although `usize` usually does not overflow wrap.
+#[repr(transparent)]
 pub struct MessageId<M: Message> {
     id: usize,
     _marker: PhantomData<M>,
 }
 
 impl<M: Message> MessageId<M> {
-    #[inline]
+    #[inline(always)]
     pub(super) const fn new(id: usize) -> Self {
         MessageId {
             id,
@@ -55,6 +62,17 @@ impl<M: Message> MessageId<M> {
         }
     }
 
+    /// Creates a new `MessageId` from a usize.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        Self {
+            id,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the archetype index as a usize.
+    #[inline(always)]
     pub const fn index(self) -> usize {
         self.id
     }
@@ -96,7 +114,15 @@ impl<M: Message> PartialOrd for MessageId<M> {
 
 impl<M: Message> Ord for MessageId<M> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
+        // Non-wrapping difference between two generations after
+        // which a signed interpretation becomes negative.
+        const DIFF_MAX: usize = usize::MAX >> 1;
+
+        match self.id.wrapping_sub(other.id) {
+            0 => Ordering::Equal,
+            1..DIFF_MAX => Ordering::Greater,
+            _ => Ordering::Less,
+        }
     }
 }
 

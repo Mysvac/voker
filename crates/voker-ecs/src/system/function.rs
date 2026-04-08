@@ -285,6 +285,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         if !<F::Param as SystemParam>::mark_access(&mut table, &state.param) {
             invalid_system_access(self.meta.id());
         }
+        self.meta.set_last_run(world.last_run());
         table
     }
 

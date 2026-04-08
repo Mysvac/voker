@@ -69,7 +69,7 @@ impl SubApp {
     /// Runs the default schedule and updates internal component trackers.
     pub fn update(&mut self) {
         self.run_default_schedule();
-        self.world.update_tick();
+        self.world.reset_last_run();
     }
 
     pub fn extract(&mut self, world: &mut World) {

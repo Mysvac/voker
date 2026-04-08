@@ -5,7 +5,7 @@ use voker_utils::hash::SparseHashMap;
 
 use crate::archetype::{ArcheId, ArcheRow};
 use crate::bundle::BundleId;
-use crate::component::{ComponentHook, ComponentHookContext};
+use crate::component::{ComponentHook, HookContext};
 use crate::component::{ComponentId, Components};
 use crate::entity::{Entity, MovedEntityRow};
 use crate::storage::TableId;
@@ -379,10 +379,7 @@ impl Archetype {
     pub fn trigger_on_add(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_add.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
@@ -392,10 +389,7 @@ impl Archetype {
     pub fn trigger_on_clone(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_clone.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
@@ -405,10 +399,7 @@ impl Archetype {
     pub fn trigger_on_insert(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_insert.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
@@ -418,10 +409,7 @@ impl Archetype {
     pub fn trigger_on_remove(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_remove.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
@@ -431,10 +419,7 @@ impl Archetype {
     pub fn trigger_on_discard(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_discard.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
@@ -444,10 +429,7 @@ impl Archetype {
     pub fn trigger_on_despawn(&self, entity: Entity, mut world: DeferredWorld) {
         self.on_despawn.iter().for_each(|&(id, hook)| {
             let caller = DebugLocation::caller();
-            hook(
-                world.reborrow(),
-                ComponentHookContext { id, entity, caller },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 }

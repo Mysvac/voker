@@ -68,15 +68,17 @@ pub mod __macro_exports;
 
 pub mod prelude {
     pub use crate::borrow::{Mut, NonSend, NonSendMut, NonSendRef, Ref, Res, ResMut, ResRef};
-    pub use crate::bundle::Bundle;
-    pub use crate::command::{Commands, EntityCommands};
-    pub use crate::component::Component;
-    pub use crate::entity::Entity;
+    pub use crate::bundle::{Bundle, BundleId};
+    pub use crate::command::{Command, Commands, EntityCommands};
+    pub use crate::component::{Component, ComponentHook, ComponentId, HookContext};
+    pub use crate::entity::{Entity, EntityId, EntityLocation, EntityTag};
+    pub use crate::error::{EcsError, ErrorContext, ErrorHandler, FallbackErrorHandler};
     pub use crate::message::{Message, MessageMutator, MessageReader, MessageWriter, Messages};
+    pub use crate::name::Name;
     pub use crate::query::{Added, And, Changed, Or, Query, With, Without};
-    pub use crate::resource::Resource;
+    pub use crate::resource::{Resource, ResourceId};
     pub use crate::schedule::{Schedule, ScheduleLabel};
-    pub use crate::system::{IntoSystem, Local, System};
+    pub use crate::system::{IntoSystem, Local, System, SystemId};
     pub use crate::tick::{DetectChanges, Tick};
-    pub use crate::world::{EntityMut, EntityOwned, EntityRef, World};
+    pub use crate::world::{DeferredWorld, EntityMut, EntityOwned, EntityRef, World};
 }

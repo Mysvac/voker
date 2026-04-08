@@ -8,7 +8,7 @@ macro_rules! once_warning_for_owned {
     () => {
         #[cfg(debug_assertions)]
         voker_os::once_expr!{
-            log::info!{
+            log::warn!{
                 "Calling `entity_owned` for multiple entities, consider replace to `entity_mut`: {}.",
                 core::panic::Location::caller()
             }
@@ -18,12 +18,14 @@ macro_rules! once_warning_for_owned {
 
 impl World {
     /// Allocates a new entity identifier.
+    #[inline]
     #[must_use]
     pub fn alloc_entity(&self) -> Entity {
         self.allocator.alloc()
     }
 
     /// Efficiently allocates multiple entities.
+    #[inline]
     #[must_use]
     pub fn alloc_entities(&self, count: usize) -> AllocEntitiesIter<'_> {
         assert!(count < u32::MAX as usize, "too many entities");
@@ -31,11 +33,17 @@ impl World {
     }
 
     /// Returns a shared entity view with cached tick context.
+    ///
+    /// Return `Err(FetchError)` if the entity is not spawned or not exists.
+    #[inline]
     pub fn get_entity_ref<E: FetchEntities>(&self, entities: E) -> Result<E::Ref<'_>, FetchError> {
         unsafe { E::fetch_ref(entities, self.unsafe_world()) }
     }
 
     /// Returns a mutable entity view with cached tick context.
+    ///
+    /// Return `Err(FetchError)` if the entity is not spawned or not exists.
+    #[inline]
     pub fn get_entity_mut<E: FetchEntities>(
         &mut self,
         entities: E,
@@ -45,7 +53,11 @@ impl World {
 
     /// Returns an owned entity handle for direct per-entity operations.
     ///
+    /// Return `Err(FetchError)` if the entity is not spawned or not exists.
+    ///
     /// For multiple entities, this function is equivalent to `get_entity_mut`.
+    /// In other world, do **not** call this function for multi-entities.
+    #[inline]
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn get_entity_owned<E: FetchEntities>(
         &mut self,
@@ -60,6 +72,7 @@ impl World {
     ///
     /// # Panics
     /// Panic if fetch failed.
+    #[inline]
     pub fn entity_ref<E: FetchEntities>(&self, entities: E) -> E::Ref<'_> {
         self.get_entity_ref::<E>(entities).unwrap()
     }
@@ -70,6 +83,7 @@ impl World {
     ///
     /// # Panics
     /// Panic if fetch failed.
+    #[inline]
     pub fn entity_mut<E: FetchEntities>(&mut self, entities: E) -> E::Mut<'_> {
         self.get_entity_mut::<E>(entities).unwrap()
     }
@@ -78,10 +92,11 @@ impl World {
     ///
     /// For multiple entities, this function is equivalent to `entity_mut`.
     ///
-    /// Similar to `get_entity_mut().unwrap()`.
+    /// Similar to `get_entity_owned().unwrap()`.
     ///
     /// # Panics
     /// Panic if fetch failed.
+    #[inline]
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn entity_owned<E: FetchEntities>(&mut self, entities: E) -> E::Owned<'_> {
         self.get_entity_owned::<E>(entities).unwrap()
@@ -122,19 +137,46 @@ fn get_entity_owned(world: &mut World, entity: Entity) -> Result<EntityOwned<'_>
     Ok(EntityOwned {
         world: world.into(),
         entity,
-        location,
+        location: Some(location),
     })
 }
 
+/// Types that can be used to fetch [`Entity`] references from a [`World`].
+///
+/// Provided implementations are:
+/// - [`Entity`]: Fetch a single entity.
+/// - `[Entity; N]`/`&[Entity; N]`: Fetch multiple entities, receiving a
+///   same-sized array of references.
+/// - `&[Entity]`: Fetch multiple entities, receiving a vector of references.
+///
+/// Currently, the duplication of entities is not checked, but aliases of
+/// mutable references may cause undefined behavior.
+///
+/// # Safety
+///
+/// - No aliased mutability is caused by the returned references.
+/// - [`FetchEntities::fetch_ref`] returns only read-only references.
+/// - [`FetchEntities::fetch_mut`] returns only non-structurally-mutable references.
+/// - [`FetchEntities::fetch_owned`] can not return structurally-mutable references
+///   for multi-entities.
 pub unsafe trait FetchEntities {
     type Ref<'a>;
     type Mut<'a>;
     type Owned<'a>;
 
+    /// # Safety
+    /// - The world can be read.
+    /// - Returns only read-only references.
     unsafe fn fetch_ref(this: Self, world: UnsafeWorld<'_>) -> Result<Self::Ref<'_>, FetchError>;
 
+    /// # Safety
+    /// - The world is non-structurally-mutable.
+    /// - Returns only non-structurally-mutable references.
     unsafe fn fetch_mut(this: Self, world: UnsafeWorld<'_>) -> Result<Self::Mut<'_>, FetchError>;
 
+    /// # Safety
+    /// - The world is structurally-mutable (exclusive).
+    /// - Can **not** return structurally-mutable references for multi-entities.
     unsafe fn fetch_owned(
         this: Self,
         world: UnsafeWorld<'_>,
@@ -146,14 +188,17 @@ unsafe impl FetchEntities for Entity {
     type Mut<'a> = EntityMut<'a>;
     type Owned<'a> = EntityOwned<'a>;
 
+    #[inline]
     unsafe fn fetch_ref(this: Self, world: UnsafeWorld<'_>) -> Result<Self::Ref<'_>, FetchError> {
         get_entity_ref(unsafe { world.read_only() }, this)
     }
 
+    #[inline]
     unsafe fn fetch_mut(this: Self, world: UnsafeWorld<'_>) -> Result<Self::Mut<'_>, FetchError> {
         get_entity_mut(unsafe { world.data_mut() }, this)
     }
 
+    #[inline]
     unsafe fn fetch_owned(
         this: Self,
         world: UnsafeWorld<'_>,

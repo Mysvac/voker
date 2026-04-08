@@ -27,8 +27,8 @@ impl World {
 
     /// Drains and executes queued deferred commands.
     ///
-    /// Each command failure is forwarded to the active default error handler,
-    /// and command application continues with remaining commands.
+    /// Currently, this function is equivalent to [`World::apply_commands`],
+    /// but additional behaviors may be added in the future.
     #[inline]
     pub fn flush(&mut self) {
         self.apply_commands();

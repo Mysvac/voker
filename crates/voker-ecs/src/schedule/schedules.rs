@@ -261,4 +261,32 @@ impl Schedules {
         self.entry(label).del_run_if(system, condition);
         self
     }
+
+    pub fn add_run_if_run<S, C, M1, M2>(
+        &mut self,
+        label: impl ScheduleLabel,
+        system: S,
+        condition: C,
+    ) -> &mut Self
+    where
+        S: IntoSystem<(), (), M1>,
+        C: IntoSystem<(), (), M2>,
+    {
+        self.entry(label).add_run_if_run(system, condition);
+        self
+    }
+
+    pub fn del_run_if_run<S, C, M1, M2>(
+        &mut self,
+        label: impl ScheduleLabel,
+        system: S,
+        condition: C,
+    ) -> &mut Self
+    where
+        S: IntoSystem<(), (), M1>,
+        C: IntoSystem<(), (), M2>,
+    {
+        self.entry(label).del_run_if_run(system, condition);
+        self
+    }
 }

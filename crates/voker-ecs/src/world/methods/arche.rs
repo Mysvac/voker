@@ -15,7 +15,13 @@ impl World {
     /// This is primarily used when inserting components into an entity to determine
     /// whether its archetype changes. If the target archetype does not exist yet,
     /// it will be created, so this function requires mutable access to [`World`].
+    ///
+    /// # Safety
+    /// It's undefined behavior if `ArcheId` or `BundleId` out of bound.
     pub fn arche_after_insert(&mut self, arche_id: ArcheId, bundle_id: BundleId) -> ArcheId {
+        debug_assert!(self.archetypes.len() > arche_id.index());
+        debug_assert!(self.bundles.len() > bundle_id.index());
+
         let arche = unsafe { self.archetypes.get_unchecked(arche_id) };
         if let Some(cached) = arche.after_insert(bundle_id) {
             return cached;
@@ -31,7 +37,13 @@ impl World {
     /// This is primarily used when removing components from an entity to determine
     /// whether its archetype changes. If the target archetype does not exist yet,
     /// it will be created, so this function requires mutable access to [`World`].
+    ///
+    /// # Safety
+    /// It's undefined behavior if `ArcheId` or `BundleId` out of bound.
     pub fn arche_after_remove(&mut self, arche_id: ArcheId, bundle_id: BundleId) -> ArcheId {
+        debug_assert!(self.archetypes.len() > arche_id.index());
+        debug_assert!(self.bundles.len() > bundle_id.index());
+
         let arche = unsafe { self.archetypes.get_unchecked(arche_id) };
         if let Some(cached) = arche.after_remove(bundle_id) {
             return cached;

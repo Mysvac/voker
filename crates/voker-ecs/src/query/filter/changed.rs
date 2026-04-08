@@ -29,7 +29,7 @@ use crate::world::{UnsafeWorld, World};
 /// ```no_run
 /// use voker_ecs::prelude::*;
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Velocity(f32);
 ///
 /// fn changed_velocity(query: Query<Entity, Changed<Velocity>>) {

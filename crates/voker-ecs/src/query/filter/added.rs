@@ -29,7 +29,7 @@ use crate::world::{UnsafeWorld, World};
 /// ```no_run
 /// use voker_ecs::prelude::*;
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Health(u32);
 ///
 /// fn only_new_health(query: Query<Entity, Added<Health>>) {

@@ -63,11 +63,6 @@ impl Archetypes {
         }
     }
 
-    /// Returns the archetype ID associated with a specific bundle.
-    pub(crate) fn get_id_by_bundle(&self, id: BundleId) -> Option<ArcheId> {
-        self.bundles.get(id.index()).and_then(|t| *t)
-    }
-
     /// Register a new Archetype from given information and return it's ID.
     ///
     /// # Safety
@@ -110,6 +105,12 @@ impl Archetypes {
         self.mapper.get(components).copied()
     }
 
+    /// Returns the archetype ID associated with a specific bundle.
+    #[inline]
+    pub fn get_id_by_bundle(&self, id: BundleId) -> Option<ArcheId> {
+        self.bundles.get(id.index()).and_then(|t| *t)
+    }
+
     /// Returns a reference to the archetype with the given ID, if it exists.
     #[inline]
     pub fn get(&self, id: ArcheId) -> Option<&Archetype> {
@@ -140,6 +141,18 @@ impl Archetypes {
     pub unsafe fn get_unchecked_mut(&mut self, id: ArcheId) -> &mut Archetype {
         debug_assert!(id.index() < self.arches.len());
         unsafe { self.arches.get_unchecked_mut(id.index()) }
+    }
+
+    /// Extracts a slice containing the entire Archetypes.
+    #[inline]
+    pub fn as_slice(&self) -> &[Archetype] {
+        self.arches.as_slice()
+    }
+
+    /// Extracts a mutable slice of the entire Archetypes.
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [Archetype] {
+        self.arches.as_mut_slice()
     }
 
     /// Returns an iterator over the Archetypes.

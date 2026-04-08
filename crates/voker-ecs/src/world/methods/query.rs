@@ -1,5 +1,3 @@
-use core::any::TypeId;
-
 use crate::query::{Query, QueryData, QueryFilter, QueryState};
 use crate::system::SystemParam;
 use crate::world::{UnsafeWorld, World};
@@ -7,8 +5,8 @@ use crate::world::{UnsafeWorld, World};
 impl World {
     /// Creates a fresh [`QueryState`] from query parameters.
     ///
-    /// This function does **not** cache the query state as a world resource.
-    /// Use this when you want one-off query setup without persistent caching.
+    /// This function does **not** cache(register) the query state as a world resource.
+    /// Use this for one-off query setup when you do not want persistent state.
     pub fn query_once<D: QueryData, F: QueryFilter>(&mut self) -> QueryState<D, F> {
         <QueryState<D, F>>::new(self)
     }
@@ -16,16 +14,18 @@ impl World {
     /// Returns a cached [`QueryState`] resource, creating it if missing.
     ///
     /// [`World::query`] and [`World::query_with`] call this automatically to
-    /// avoid repeated initialization and archetype-filter setup costs.
+    /// avoid repeated initialization and archetype/filter setup costs.
     ///
     /// If you do not want caching, use [`World::query_once`] for ad-hoc
     /// query construction.
     ///
     /// Note: when `Query` is used as a system parameter, its query state is
     /// stored on the system instance, not in [`World`].
-    pub fn cache_query_state<D: QueryData + 'static, F: QueryFilter + 'static>(
-        &mut self,
-    ) -> &mut QueryState<D, F> {
+    pub fn register_query<D, F>(&mut self) -> &mut QueryState<D, F>
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
         let unsafe_world = self.unsafe_world();
         let data_mut = unsafe { unsafe_world.data_mut() };
         if let Some(state) = data_mut.get_resource_mut::<QueryState<D, F>>() {
@@ -37,21 +37,20 @@ impl World {
         }
     }
 
-    /// Clears a cached query state created by [`World::cache_query_state`].
+    /// Removes a cached query state created by [`World::register_query`].
     ///
-    /// If no such cached state exists, this is a no-op.
-    pub fn clear_query_state<D: QueryData + 'static, F: QueryFilter + 'static>(&mut self) {
-        let type_id = TypeId::of::<QueryState<D, F>>();
-        if let Some(id) = self.resources.get_id(type_id)
-            && let Some(data) = self.storages.res_set.get_mut(id)
-        {
-            unsafe {
-                data.clear();
-            }
-        }
+    /// If no matching cached state exists, this is a no-op.
+    pub fn unregister_query<D, F>(&mut self)
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
+        self.drop_resource::<QueryState<D, F>>();
     }
 
-    /// Creates a cached query with no filter.
+    /// Creates a registered query view with no explicit filter.
+    ///
+    /// The query state is registered on first use if it does not exist.
     ///
     /// This is shorthand for `query_with::<D, ()>()`. Internally, it updates a
     /// cached [`QueryState`] before constructing the runtime query parameter.
@@ -59,9 +58,8 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # use voker_ecs::component::Component;
-    /// # use voker_ecs::world::World;
-    /// # #[derive(Component, Debug)]
+    /// # use voker_ecs::prelude::*;
+    /// # #[derive(Component, Clone, Debug)]
     /// # struct Foo;
     /// #
     /// # let mut world = World::alloc();
@@ -73,7 +71,7 @@ impl World {
     /// ```
     pub fn query<D: QueryData + 'static>(&mut self) -> Query<'_, '_, D> {
         let world: UnsafeWorld<'_> = self.unsafe_world();
-        let state = unsafe { world.full_mut().cache_query_state::<D, ()>() };
+        let state = unsafe { world.full_mut().register_query::<D, ()>() };
         let read_only_world = unsafe { world.read_only() };
         state.update(read_only_world);
         let last_run = read_only_world.last_run();
@@ -82,7 +80,9 @@ impl World {
         unsafe { <Query<D> as SystemParam>::build_param(world, state, last_run, this_run).unwrap() }
     }
 
-    /// Creates a cached query with an explicit filter.
+    /// Creates a registered query view with an explicit filter.
+    ///
+    /// The query state is registered on first use if it does not exist.
     ///
     /// Use this when you need conditional matching (`With`, `Without`, `And`,
     /// `Or`, etc.) in addition to the query data.
@@ -90,12 +90,10 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # use voker_ecs::component::Component;
-    /// # use voker_ecs::query::With;
-    /// # use voker_ecs::world::World;
-    /// # #[derive(Component, Debug)]
+    /// # use voker_ecs::prelude::*;
+    /// # #[derive(Component, Clone, Debug)]
     /// # struct Foo;
-    /// # #[derive(Component, Debug)]
+    /// # #[derive(Component, Clone, Debug)]
     /// # struct Bar(u64);
     /// #
     /// # let mut world = World::alloc();
@@ -108,11 +106,13 @@ impl World {
     ///     assert_eq!(bar.0, 1);
     /// }
     /// ```
-    pub fn query_with<D: QueryData + 'static, F: QueryFilter + 'static>(
-        &mut self,
-    ) -> Query<'_, '_, D, F> {
+    pub fn query_with<D, F>(&mut self) -> Query<'_, '_, D, F>
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
         let world: UnsafeWorld<'_> = self.unsafe_world();
-        let state = unsafe { world.full_mut().cache_query_state::<D, F>() };
+        let state = unsafe { world.full_mut().register_query::<D, F>() };
         let read_only_world = unsafe { world.read_only() };
         state.update(read_only_world);
         let last_run = read_only_world.last_run();
@@ -121,6 +121,31 @@ impl World {
         unsafe {
             <Query<D, F> as SystemParam>::build_param(world, state, last_run, this_run).unwrap()
         }
+    }
+
+    /// Creates a query view from an already cached [`QueryState`].
+    ///
+    /// Returns `None` when the query state has not been registered.
+    /// Register it first via [`World::register_query`] or call [`World::query`]
+    /// / [`World::query_with`] to auto-register.
+    ///
+    /// This is primarily useful in contexts where structural mutation is not
+    /// available during access and only pre-registered query states can be used.
+    pub fn query_cached<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
+        let world = self.unsafe_world();
+        let data_mut = unsafe { world.data_mut() };
+        let state = data_mut.get_resource_mut::<QueryState<D, F>>()?;
+        let state = state.into_inner();
+        let read_only_world = unsafe { world.read_only() };
+        state.update(read_only_world);
+        let last_run = read_only_world.last_run();
+        let this_run = read_only_world.this_run();
+
+        unsafe { <Query<D, F> as SystemParam>::build_param(world, state, last_run, this_run).ok() }
     }
 }
 
@@ -165,7 +190,7 @@ mod tests {
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
         world.spawn((Baz(String::from("no foo")),));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<&Foo>();
 
@@ -181,7 +206,7 @@ mod tests {
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<&mut Bar>();
         for bar in query {
@@ -200,7 +225,7 @@ mod tests {
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<Ref<Bar>>();
         for bar_ref in query {
@@ -213,7 +238,7 @@ mod tests {
         let mut world = World::alloc();
 
         world.spawn((Foo, Bar(100)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<Mut<Bar>>();
         for mut bar_mut in query.into_iter() {
@@ -232,7 +257,7 @@ mod tests {
 
         let e1 = world.spawn((Foo, Bar(100))).entity();
         let e2 = world.spawn((Foo, Bar(200))).entity();
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<Entity>();
         let entities: Vec<_> = query.into_iter().collect();
@@ -247,7 +272,7 @@ mod tests {
 
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<EntityRef>();
         for entity_ref in query {
@@ -265,7 +290,7 @@ mod tests {
 
         world.spawn((Foo, Bar(100)));
         world.spawn((Foo, Bar(200)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query::<EntityMut>();
         for mut entity_mut in query {
@@ -289,7 +314,7 @@ mod tests {
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
         world.spawn((Bar(300), Baz(String::from("b"))));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Bar, With<Foo>>();
         assert_eq!(query.into_iter().count(), 2);
@@ -306,7 +331,7 @@ mod tests {
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
         world.spawn((Foo, Bar(300), Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Foo, With<(Bar, Baz)>>();
         assert_eq!(query.into_iter().count(), 2);
@@ -322,7 +347,7 @@ mod tests {
         world.spawn((Foo, Bar(100), Baz(String::from("a"))));
         world.spawn((Foo, Bar(200)));
         world.spawn((Bar(300), Baz(String::from("b"))));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Bar, Without<Foo>>();
         assert_eq!(query.into_iter().count(), 1);
@@ -339,7 +364,7 @@ mod tests {
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
         world.spawn((Foo, Bar(300), Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Foo, Without<(Baz, Qux)>>();
         assert_eq!(query.into_iter().count(), 0);
@@ -356,7 +381,7 @@ mod tests {
         world.spawn((Foo, Bar(200)));
         world.spawn((Foo, Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Foo, Or<(With<Bar>, With<Qux>)>>();
         assert_eq!(query.into_iter().count(), 4);
@@ -373,7 +398,7 @@ mod tests {
         world.spawn((Foo, Bar(200), Baz(String::from("b"))));
         world.spawn((Foo, Bar(300), Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world.query_with::<&Foo, And<(With<Bar>, With<Baz>)>>();
         assert_eq!(query.into_iter().count(), 2);
@@ -394,7 +419,7 @@ mod tests {
         world.spawn((Foo, Bar(300), Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
         world.spawn((Foo, Zaz(42)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query = world
             .query_with::<&Foo, Or<(And<(With<Bar>, Or<(With<Baz>, With<Qux>)>)>, With<Zaz>)>>();
@@ -414,7 +439,7 @@ mod tests {
         world.spawn((Foo, Bar(300), Qux(3.0)));
         world.spawn((Foo, Baz(String::from("c")), Qux(4.0)));
         world.spawn((Foo, Zaz(42)));
-        world.update_tick();
+        world.reset_last_run();
 
         let query =
             world.query_with::<&Foo, And<(With<Bar>, Without<Baz>, Or<(With<Qux>, With<Zaz>)>)>>();

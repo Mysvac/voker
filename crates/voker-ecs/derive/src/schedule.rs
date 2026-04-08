@@ -15,7 +15,7 @@ pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote! { Self: #SendFP + #SyncFP + #DebugFP + #HashFP + #EqFP + 'static });
+            .push(parse_quote! { Self: #SendFP + #SyncFP + #CloneFP + #DebugFP + #HashFP + #EqFP + 'static });
     } else if generics.lifetimes().next().is_some() {
         generics
             .make_where_clause()

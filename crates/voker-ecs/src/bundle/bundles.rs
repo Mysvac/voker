@@ -103,6 +103,31 @@ impl Bundles {
             id
         }
     }
+
+    /// Registers a new bundle from given component ids.
+    ///
+    /// The target bundle must be unregistered. In other world,
+    /// `self.get_id()` must return `None` before this function call.
+    ///
+    /// # Safety
+    /// - Component IDs must be valid and properly registered, not duplicated.
+    /// - The components in `..dense_len` must be sorted and storage in dense.
+    /// - The components in `dense_len..` must be sorted and storage in sparse.
+    pub(crate) unsafe fn register_dynamic_unique(
+        &mut self,
+        components: &'static [ComponentId],
+        dense_len: usize,
+    ) -> BundleId {
+        debug_assert!(!self.mapper.contains_key(components));
+
+        let index = self.infos.len();
+        let id = BundleId::new(index as u32);
+
+        self.infos.push(BundleInfo::new(id, dense_len, components));
+        self.mapper.insert(components, id);
+
+        id
+    }
 }
 
 impl Bundles {
@@ -145,6 +170,12 @@ impl Bundles {
     pub unsafe fn get_unchecked(&self, id: BundleId) -> &BundleInfo {
         debug_assert!(id.index() < self.infos.len());
         unsafe { self.infos.get_unchecked(id.index()) }
+    }
+
+    /// Extracts a slice containing the entire Bundles.
+    #[inline]
+    pub fn as_slice(&self) -> &[BundleInfo] {
+        self.infos.as_slice()
     }
 
     /// Returns an iterator over the BundleInfo.

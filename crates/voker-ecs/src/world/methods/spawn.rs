@@ -3,10 +3,10 @@ use core::ptr::NonNull;
 
 use voker_ptr::OwningPtr;
 
-use crate::archetype::{ArcheId, Archetype};
+use crate::archetype::Archetype;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::ComponentWriter;
-use crate::entity::{AllocEntitiesIter, Entity, EntityLocation};
+use crate::entity::{AllocEntitiesIter, Entity, EntityLocation, SpawnError};
 use crate::storage::Table;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
@@ -17,7 +17,7 @@ struct BundleSpawner<'a> {
     table: NonNull<Table>,
     write_explicit: unsafe fn(&mut ComponentWriter, usize),
     write_required: unsafe fn(&mut ComponentWriter),
-    location: DebugLocation,
+    caller: DebugLocation,
 }
 
 impl<'a> BundleSpawner<'a> {
@@ -29,38 +29,7 @@ impl<'a> BundleSpawner<'a> {
         write_required: unsafe fn(&mut ComponentWriter),
         caller: DebugLocation,
     ) -> BundleSpawner<'a> {
-        #[cold]
-        #[inline(never)]
-        fn register_archetype(world: &mut World, bundle_id: BundleId) -> ArcheId {
-            let info = unsafe { world.bundles.get_unchecked(bundle_id) };
-            if let Some(id) = world.archetypes.get_id(info.components()) {
-                world.archetypes.map_bundle_id(bundle_id, id);
-                return id;
-            }
-
-            let table_id = unsafe {
-                let sparses = info.sparse_components();
-                world.storages.maps.register(&world.components, sparses);
-                let denses = info.dense_components();
-                world.storages.tables.register(&world.components, denses)
-            };
-
-            let dense_len = info.dense_components().len();
-            let idents = info.components();
-
-            let id = unsafe {
-                world
-                    .archetypes
-                    .register_unique(table_id, dense_len, idents, &world.components)
-            };
-            world.archetypes.map_bundle_id(bundle_id, id);
-            id
-        }
-
-        let arche_id = world
-            .archetypes
-            .get_id_by_bundle(bundle_id)
-            .unwrap_or_else(|| register_archetype(world, bundle_id));
+        let arche_id = world.register_archetype(bundle_id);
 
         let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
         let table_id = arche.table_id();
@@ -72,7 +41,7 @@ impl<'a> BundleSpawner<'a> {
             world: world.into(),
             write_explicit,
             write_required,
-            location: caller,
+            caller,
         }
     }
 
@@ -94,7 +63,7 @@ impl<'a> BundleSpawner<'a> {
         let guard = ForgetEntityOnPanic {
             entity,
             world: self.world,
-            location: self.location,
+            location: self.caller,
         };
 
         let arche_row = unsafe { arche.insert_entity(entity) };
@@ -131,7 +100,7 @@ impl<'a> BundleSpawner<'a> {
             arche.trigger_on_insert(entity, world.reborrow());
         }
 
-        world.flush();
+        // We do not flush World here, ensure the location is valid.
 
         location
     }
@@ -160,15 +129,30 @@ impl World {
     ///
     /// ```
     /// # use voker_ecs::prelude::*;
-    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// #[derive(Component, Clone, Debug)]
     /// struct Foo;
-    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// #[derive(Component, Clone, Debug)]
     /// struct Bar(u64);
     ///
     /// let mut world = World::alloc();
     /// let entity = world.spawn((Foo, Bar(123)));
     /// assert!(entity.contains::<(Foo, Bar)>());
     /// ```
+    ///
+    /// # Note
+    ///
+    /// Due to lifecycle hooks and their timing, an entity may be consumed
+    /// immediately after spawning. As a result, the returned [`EntityOwned`]
+    /// may refer to a despawned entity. Use [`EntityOwned::is_spawned`] to
+    /// verify whether it is still alive.
+    ///
+    /// Hooks that immediately despawn their own entity can be useful for
+    /// specialized components, but they should not be used as implicit
+    /// observers. Component types at spawn time are explicit, while observer
+    /// behavior is implicit and can make debugging harder.
+    ///
+    /// In well-structured codebases, the [`EntityOwned::is_spawned`] check is
+    /// often unnecessary.
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityOwned<'_> {
@@ -194,9 +178,16 @@ impl World {
         let entity = spawner.alloc();
         voker_ptr::into_owning!(bundle as data);
 
+        let mut location = Some(spawner.spawn_at(data, entity));
+
+        if !self.command_queue.is_empty() {
+            self.flush();
+            location = self.entities.locate(entity).ok();
+        }
+
         EntityOwned {
-            location: spawner.spawn_at(data, entity),
             world: self.into(),
+            location,
             entity,
         }
     }
@@ -219,19 +210,38 @@ impl World {
     ///
     /// ```
     /// # use voker_ecs::prelude::*;
-    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// #[derive(Component, Clone, Debug)]
     /// struct Foo;
-    /// #[derive(Component, Debug, PartialEq, Eq)]
+    /// #[derive(Component, Clone, Debug)]
     /// struct Bar(u64);
     ///
     /// let mut world = World::alloc();
     /// let entity = world.alloc_entity();
-    /// let entity = world.spawn_at((Foo, Bar(123)), entity);
+    /// let entity = world.spawn_at((Foo, Bar(123)), entity).unwrap();
     /// assert!(entity.contains::<(Foo, Bar)>());
     /// ```
+    ///
+    /// # Note
+    ///
+    /// Due to lifecycle hooks and their timing, an entity may be consumed
+    /// immediately after spawning. As a result, the returned [`EntityOwned`]
+    /// may refer to a despawned entity. Use [`EntityOwned::is_spawned`] to
+    /// verify whether it is still alive.
+    ///
+    /// Hooks that immediately despawn their own entity can be useful for
+    /// specialized components, but they should not be used as implicit
+    /// observers. Component types at spawn time are explicit, while observer
+    /// behavior is implicit and can make debugging harder.
+    ///
+    /// In well-structured codebases, the [`EntityOwned::is_spawned`] check is
+    /// often unnecessary.
     #[inline] // We enable inlining to avoid copying data
     #[track_caller]
-    pub fn spawn_at<B: Bundle>(&mut self, bundle: B, entity: Entity) -> EntityOwned<'_> {
+    pub fn spawn_at<B: Bundle>(
+        &mut self,
+        bundle: B,
+        entity: Entity,
+    ) -> Result<EntityOwned<'_>, SpawnError> {
         self.spawn_at_with_caller(bundle, entity, DebugLocation::caller())
     }
 
@@ -241,7 +251,9 @@ impl World {
         bundle: B,
         entity: Entity,
         caller: DebugLocation,
-    ) -> EntityOwned<'_> {
+    ) -> Result<EntityOwned<'_>, SpawnError> {
+        self.entities.can_spawn(entity)?;
+
         let bundle_id = self.register_required_bundle::<B>();
 
         let mut spawner = BundleSpawner::new(
@@ -254,11 +266,18 @@ impl World {
 
         voker_ptr::into_owning!(bundle as data);
 
-        EntityOwned {
-            location: spawner.spawn_at(data, entity),
+        let mut location = Some(spawner.spawn_at(data, entity));
+
+        if !self.command_queue.is_empty() {
+            self.flush();
+            location = self.entities.locate(entity).ok();
+        }
+
+        Ok(EntityOwned {
+            location,
             world: self.into(),
             entity,
-        }
+        })
     }
 }
 
@@ -279,6 +298,14 @@ where
 {
     fn drop(&mut self) {
         self.by_ref().for_each(|_| {});
+
+        let world = unsafe { self.spawner.world.full_mut() };
+
+        for e in self.allocator.by_ref() {
+            world.allocator.free(e);
+        }
+
+        world.flush();
     }
 }
 
@@ -320,7 +347,7 @@ impl World {
     ///
     /// ```
     /// # use voker_ecs::prelude::*;
-    /// #[derive(Component)]
+    /// #[derive(Component, Clone)]
     /// struct Bar(u64);
     ///
     /// let mut world = World::alloc();
@@ -339,7 +366,7 @@ impl World {
     }
 
     #[inline]
-    pub fn spawn_batch_with_caller<I, B>(
+    pub(crate) fn spawn_batch_with_caller<I, B>(
         &mut self,
         iter: I,
         caller: DebugLocation,

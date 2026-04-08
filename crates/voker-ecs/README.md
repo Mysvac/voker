@@ -18,22 +18,24 @@ This README covers core ECS building blocks first, then highlights practical fea
 ## Worlds
 
 Entities, Components, and Resources are stored in a `World`.
-Worlds, much like `std::collections`'s `HashSet` and `Vec`, expose operations to insert, read, write, and remove the data they store.
+Worlds, much like `std::collections`'s `HashSet` and `Vec`,
+expose operations to insert, read, write, and remove the data they store.
 
 ```rust
-use voker_ecs::world::World;
+use voker_ecs::prelude::World;
 
 let world = World::alloc();
 ```
 
 ## Components
 
-Components are normal Rust structs. They are data stored in a `World` and specific instances of Components correlate to Entities.
+Components are clonable normal Rust structs. They are data stored
+in a `World` and specific instances of Components correlate to Entities.
 
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
 ```
 
@@ -57,9 +59,9 @@ Entities are unique identifiers that correlate to zero or more Components.
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Velocity { x: f32, y: f32 }
 
 let mut world = World::alloc();
@@ -73,14 +75,15 @@ let velocity = entity.get::<Velocity>().unwrap();
 
 ## Systems
 
-Systems are normal Rust functions. Thanks to the Rust type system, voker ECS can use function parameter types
-to determine what data needs to be sent to the system. It also uses this "data access" information to determine what
-Systems can run in parallel with each other.
+Systems are normal Rust functions. Thanks to the Rust type system,
+voker ECS can use function parameter types to determine what data
+needs to be sent to the system. It also uses this "data access"
+information to determine what Systems can run in parallel with each other.
 
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
 
 #[derive(Resource)]
@@ -99,19 +102,21 @@ fn print_position(query: Query<(Entity, &Position)>, time: Res<Time>) {
 ## Schedules
 
 Schedules run a set of Systems according to some execution strategy.
-Systems can be added to any number of System Sets, which are used to control their scheduling metadata.
+Systems can be added to any number of System Sets, which are used to
+control their scheduling metadata.
 
-The built-in "parallel executor" considers dependencies between systems and (by default) run as many of
-them in parallel as possible. This maximizes performance, while keeping the system execution safe. To control
-the system ordering, define explicit dependencies between systems and their sets.
-
+The built-in "parallel executor" considers dependencies between systems
+and (by default) run as many of them in parallel as possible. This maximizes
+performance, while keeping the system execution safe. To control the system
+ordering, define explicit dependencies between systems and their sets.
 
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
-#[derive(Component)]
+
+#[derive(Component, Clone)]
 struct Velocity { x: f32, y: f32 }
 
 // This system moves each entity with a Position and Velocity component
@@ -152,23 +157,25 @@ deferred mutation, message passing, and storage strategy control.
 
 voker ECS supports multiple component storage types.
 
-* **Dense Table**: Fast and cache friendly iteration, but slower adding and removing of components. This is the default storage type.
-* **Sparse Map**: Fast adding and removing of components, but slower iteration.
+- **Dense Table**: Fast and cache friendly iteration, but slower adding and removing
+  of components. This is the default storage type.
+- **Sparse Map**: Fast adding and removing of components, but slower iteration.
 
-Component storage types are configurable, and they default to table storage if the storage is not manually defined.
+Component storage types are configurable, and they default to table storage if the storage
+is not manually defined.
 
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct TableStoredComponent;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 #[component(storage = "sparse")]
 struct SparseStoredComponent;
 ```
 
-See [`StorageMode`](crate::component::StorageMode) for more details.
+See `StorageMode` for more details.
 
 ### Component Bundles
 
@@ -177,11 +184,13 @@ Define sets of Components that should be added together.
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Default, Component)]
+#[derive(Default, Component, Clone)]
 struct Player;
-#[derive(Default, Component)]
+
+#[derive(Default, Component, Clone)]
 struct Position { x: f32, y: f32 }
-#[derive(Default, Component)]
+
+#[derive(Default, Component, Clone)]
 struct Velocity { x: f32, y: f32 }
 
 #[derive(Bundle, Default)]
@@ -205,20 +214,60 @@ world.spawn(PlayerBundle {
 
 ### Query Filters
 
+Query filters let you narrow down which entities are matched without changing
+the queried data type itself. Filters can be combined with `And` and `Or`, and
+can also be mixed with change-tracking filters like `Changed<T>` and `Added<T>`.
+
+
+
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Player;
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Alive;
 
 // Gets the Position component of all Entities with Player component
 // and without the Alive component.
-fn system(query: Query<&Position, And<(With<Player>, Without<Alive>)>>) {
+fn system(query: Query<&Position, With<Player>>) {
     for position in query {
+        // ...
+    }
+}
+```
+
+You can also express more complex selection logic:
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Component, Clone)]
+struct Position { x: f32, y: f32 }
+#[derive(Component, Clone)]
+struct Velocity { x: f32, y: f32 }
+#[derive(Component, Clone)]
+struct Player;
+#[derive(Component, Clone)]
+struct Enemy;
+#[derive(Component, Clone)]
+struct Disabled;
+
+// Select moving players or enemies, skip disabled entities,
+// and only include ones whose Velocity changed.
+fn selective_movement_targets(
+    query: Query<
+        (&Position, &Velocity),
+        And<(
+            Or<(With<Player>, With<Enemy>)>,
+            Without<Disabled>,
+            Changed<Velocity>,
+        )>,
+    >,
+) {
+    for (position, velocity) in query {
         // ...
     }
 }
@@ -233,9 +282,9 @@ Queries can filter for changed Components:
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Position { x: f32, y: f32 }
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Velocity { x: f32, y: f32 }
 
 // Gets the Position component of all Entities whose Velocity has changed since the last run of the System
@@ -277,7 +326,7 @@ without requiring immediate exclusive access to `World`.
 ```rust
 use voker_ecs::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct Disabled;
 
 fn despawn_disabled(mut commands: Commands, query: Query<Entity, With<Disabled>>) {
@@ -292,8 +341,8 @@ Commands are queued first, then applied later by `World::flush()`
 
 ### Messages
 
-Messages are one-shot payloads sent between systems.
-They are useful when you want to decouple producers and consumers without adding direct dependencies.
+Messages are one-shot payloads sent between systems. They are useful
+when you want to decouple producers and consumers without adding direct dependencies.
 
 ```rust
 use voker_ecs::prelude::*;
@@ -318,22 +367,3 @@ fn handle_collisions(mut reader: MessageReader<Collision>) {
     }
 }
 ```
-
-Message types should be registered in the world:
-
-```rust
-use voker_ecs::prelude::*;
-
-#[derive(Message)]
-struct Collision;
-
-let mut world = World::alloc();
-world.register_message::<Collision>();
-
-// Run after a schedule pass to rotate message buffers globally.
-world.update_messages();
-```
-
-Internally, each message resource uses a two-buffer lifecycle.
-New writes go to the current buffer, and `update_messages` rotates buffers so readers
-can still observe recent messages for one additional update.

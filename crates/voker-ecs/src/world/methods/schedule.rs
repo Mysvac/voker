@@ -5,21 +5,30 @@ use crate::schedule::{Schedule, ScheduleLabel};
 use crate::world::World;
 
 impl World {
-    /// Adds a schedule to the world.
+    /// Insert a schedule to the world, return the old one if exists.
     ///
     /// If a schedule with the same label already exists, it will be replaced.
-    pub fn add_schedule(&mut self, schedule: Schedule) {
-        self.schedules.insert(schedule);
+    pub fn insert_schedule(&mut self, schedule: Schedule) -> Option<Schedule> {
+        self.schedules.insert(schedule)
+    }
+
+    /// Remove a schedule from the world if exists.
+    ///
+    /// If a schedule with the same label already exists, it will be replaced.
+    pub fn remove_schedule(&mut self, label: impl ScheduleLabel) -> Option<Schedule> {
+        self.schedules.remove(label)
     }
 
     /// Returns a mutable reference to the schedule with the given label.
     ///
-    /// Initializes a new empty schedule if one doesn't exist.
-    pub fn schedule_mut(&mut self, label: impl ScheduleLabel) -> &mut Schedule {
+    /// Initializes a new empty schedule if it doesn't exist.
+    pub fn schedule_entry(&mut self, label: impl ScheduleLabel) -> &mut Schedule {
         self.schedules.entry(label)
     }
 
     /// Executes a closure with exclusive access to a schedule and the world.
+    ///
+    /// Initializes a new empty schedule if it doesn't exist.
     ///
     /// This method temporarily removes the schedule from the world to satisfy
     /// Rust's borrowing rules, allowing the closure to mutably borrow both the

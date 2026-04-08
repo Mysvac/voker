@@ -128,6 +128,18 @@ impl Tables {
         unsafe { self.tables.get_unchecked_mut(id.index()) }
     }
 
+    /// Extracts a slice containing the entire Tables.
+    #[inline]
+    pub fn as_slice(&self) -> &[Table] {
+        self.tables.as_slice()
+    }
+
+    /// Extracts a mutable slice of the entire Tables.
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [Table] {
+        self.tables.as_mut_slice()
+    }
+
     /// Returns an iterator over the tables.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, Table> {

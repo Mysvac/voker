@@ -97,10 +97,10 @@ pub struct ResRef<'w, T: Resource + Sync> {
 /// #[derive(Resource)]
 /// struct Logger { /* ... */ }
 ///
-/// fn system_a(logger: ResMut<Logger>) {
+/// fn system_a(mut logger: ResMut<Logger>) {
 ///     // After obtaining mutable reference,
 ///     // the resource will be marked as changed.
-///     let _: &mut Logger = logger;
+///     let _: &mut Logger = &mut logger;
 ///     assert!(logger.is_changed());
 /// }
 /// ```
@@ -189,10 +189,10 @@ pub struct NonSendRef<'w, T: Resource> {
 /// #[derive(Resource)]
 /// struct Inputs { /* ... */ }
 ///
-/// fn system_a(inputs: NonSendMut<Inputs>) {
+/// fn system_a(mut inputs: NonSendMut<Inputs>) {
 ///     // After obtaining mutable reference,
 ///     // the resource will be marked as changed.
-///     let _: &mut Inputs = inputs;
+///     let _: &mut Inputs = &mut inputs;
 ///     assert!(inputs.is_changed());
 /// }
 /// ```
@@ -221,10 +221,10 @@ pub struct NonSendMut<'w, T: Resource> {
 ///
 /// ```no_run
 /// # use voker_ecs::prelude::*;
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Foo { /* ... */ }
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Bar { /* ... */ }
 ///
 /// fn system_a(query: Query<(&Foo, Ref<Bar>)>) {
@@ -263,14 +263,14 @@ pub struct Ref<'w, T: ?Sized> {
 ///
 /// ```no_run
 /// # use voker_ecs::prelude::*;
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Foo { /* ... */ }
 ///
-/// #[derive(Component)]
+/// #[derive(Component, Clone)]
 /// struct Bar { /* ... */ }
 ///
 /// fn system_a(query: Query<(&mut Foo, Mut<Bar>)>) {
-///     query.into_iter().for_each(|(foo, bar)|{
+///     query.into_iter().for_each(|(foo, mut bar)|{
 ///         // foo is `&mut Foo`, a thin reference. It is marked as changed
 ///         // as soon as the mutable borrow is obtained.
 ///
@@ -278,7 +278,7 @@ pub struct Ref<'w, T: ?Sized> {
 ///         // The change flag is not set until you dereference mutably.
 ///         let _: bool = bar.is_changed(); // true or false
 ///         // Set the changed flag by taking `&mut Bar`.
-///         let _: &mut Bar = bar;
+///         let _: &mut Bar = &mut bar;
 ///         assert!(bar.is_changed());
 ///     })
 /// }

@@ -1,16 +1,9 @@
-//! Core component trait definition for the entity-component system.
-//!
-//! This module defines the fundamental `Component` trait that all components
-//! must implement, along with associated configuration constants that control
-//! component behavior within the system.
+#![expect(clippy::module_inception, reason = "For better structure.")]
 
 use super::{Required, StorageMode};
 use crate::component::hook::ComponentHook;
 use crate::entity::EntityMapper;
 use crate::utils::{Cloner, Dropper};
-
-// -----------------------------------------------------------------------------
-// ComponentHook
 
 // -----------------------------------------------------------------------------
 // Component
@@ -21,33 +14,32 @@ use crate::utils::{Cloner, Dropper};
 /// It provides essential metadata about the component's behavior, including
 /// mutability, storage strategy, cloning behavior, and required dependencies.
 ///
+/// We currently require components to support [`Clone`]. For components that cannot
+/// be cloned, you can consider using the `on_clone` hook to handle the necessary operations.
+///
 /// # Derive Macro
 ///
 /// For most component types, prefer using the [Component derive macro].
 ///
 /// ```no_run
 /// # use voker_ecs::derive::Component;
-/// // Basic usage - mutable component without clone capability
-/// #[derive(Component, Default)]
+/// // Basic usage - mutable component
+/// #[derive(Component, Clone, Default)]
 /// struct Foo;
 ///
-/// // A clonable component
-/// #[derive(Component, Clone, Default)]
-/// struct Bar(String);
-///
 /// // Component with required dependencies
-/// #[derive(Component)]
-/// #[component(required = Bar)]
+/// #[derive(Component, Clone)]
+/// #[component(required = Foo)]
 /// struct Baz;
 ///
 /// // Immutable component with sparse storage
-/// #[derive(Component, Default)]
+/// #[derive(Component, Clone, Default)]
 /// #[component(mutable = false, storage = "sparse")]
 /// struct Logger { /* .. */ }
 ///
 /// // Combined: copyable, immutable, with multiple required dependencies
 /// #[derive(Component, Clone, Copy)]
-/// #[component(cloner = "copy", mutable = false, required = (Foo, Bar))]
+/// #[component(Copy, mutable = false, required = (Foo, Logger))]
 /// struct GameVersion<T: Copy>(T);
 /// ```
 ///
@@ -99,6 +91,22 @@ use crate::utils::{Cloner, Dropper};
 ///
 /// [`Dropper`] extracts this pointer at compile time, so users usually do not
 /// need to specify it manually.
+///
+/// ## Hooks
+///
+/// The component supports lifecycle hooks, which are used to simulate constructs
+/// such as constructors and destructors in object-oriented languages.
+///
+/// - Entity spawn: `on_add -> on_insert`
+/// - Entity despawn: `on_despawn -> on_discard -> on_remove`
+/// - Component insert: `on_discard` (replaced) -> `on_add` (new) -> `on_insert`
+/// - Component remove: `on_discard -> on_remove`
+/// - Entity clear: `on_discard -> on_remove`
+/// - Entity clone: `on_clone -> on_add -> on_insert`
+///
+/// See [`ComponentHooks`] for more infomation.
+///
+/// [`ComponentHooks`]: crate::component::ComponentHooks
 ///
 /// # Safety
 ///

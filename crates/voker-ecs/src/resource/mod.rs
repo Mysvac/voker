@@ -8,8 +8,8 @@
 // Modules
 
 mod ident;
-mod impls;
 mod info;
+mod resource;
 mod resources;
 
 // -----------------------------------------------------------------------------
@@ -18,6 +18,6 @@ mod resources;
 pub use voker_ecs_derive::Resource;
 
 pub use ident::ResourceId;
-pub use impls::Resource;
 pub use info::{ResourceDescriptor, ResourceInfo};
+pub use resource::Resource;
 pub use resources::Resources;

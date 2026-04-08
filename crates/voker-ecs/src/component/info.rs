@@ -133,33 +133,48 @@ impl ComponentInfo {
         self.descriptor.required
     }
 
+    /// Returns the component's `on_add` hook if exists.
     #[inline(always)]
     pub fn on_add(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_add
     }
 
+    /// Returns the component's `on_clone` hook if exists.
     #[inline(always)]
     pub fn on_clone(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_clone
     }
 
+    /// Returns the component's `on_insert` hook if exists.
     #[inline(always)]
     pub fn on_insert(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_insert
     }
 
+    /// Returns the component's `on_remove` hook if exists.
     #[inline(always)]
     pub fn on_remove(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_remove
     }
 
+    /// Returns the component's `on_discard` hook if exists.
     #[inline(always)]
     pub fn on_discard(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_discard
     }
 
+    /// Returns the component's `on_despawn` hook if exists.
     #[inline(always)]
     pub fn on_despawn(&self) -> Option<ComponentHook> {
         self.descriptor.hooks.on_despawn
+    }
+
+    /// Returns a mutable reference to component's hook list.
+    ///
+    /// It is currently private to ensure that Hook cannot be
+    /// modified again after the component has been used.
+    #[inline(always)]
+    pub(crate) fn hooks_mut(&mut self) -> &mut ComponentHooks {
+        &mut self.descriptor.hooks
     }
 }

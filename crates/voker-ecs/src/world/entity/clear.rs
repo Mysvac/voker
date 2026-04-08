@@ -4,6 +4,34 @@ use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
 impl EntityOwned<'_> {
+    /// Removes all components associated with the entity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this entity is despawned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Default, Component, Clone)]
+    /// struct Foo;
+    ///
+    /// #[derive(Component, Clone)]
+    /// #[component(required = Foo)]
+    /// struct Bar;
+    ///
+    /// let mut world = World::alloc();
+    ///
+    /// let mut entity = world.spawn(Bar);
+    /// assert!(entity.contains::<Foo>());
+    /// assert!(entity.contains::<Bar>());
+    ///
+    /// entity.clear();
+    /// assert!(!entity.contains::<Foo>()); // removed
+    /// assert!(!entity.contains::<Bar>());
+    /// ```
     #[inline]
     #[track_caller]
     pub fn clear(&mut self) {
@@ -11,79 +39,95 @@ impl EntityOwned<'_> {
     }
 
     pub(crate) fn clear_with_caller(&mut self, caller: DebugLocation) {
-        let location = self.location;
+        self.assert_is_spawned_with_caller(caller);
+
+        let mut location = unsafe { self.location.take().unwrap_unchecked() };
         let unsafe_world = self.world;
         let entity = self.entity;
 
         if location.arche_id == ArcheId::EMPTY {
+            self.location = Some(location);
             return;
         }
 
+        // Create guard after Empty checking.
         let guard = ForgetEntityOnPanic {
             entity,
             world: unsafe_world,
             location: caller,
         };
 
-        let old_arche_id = self.location.arche_id;
+        let old_arche_id = location.arche_id;
         let new_arche_id = ArcheId::EMPTY;
-        let old_arche =
-            unsafe { unsafe_world.full_mut().archetypes.get_unchecked_mut(old_arche_id) };
-        let new_arche =
-            unsafe { unsafe_world.full_mut().archetypes.get_unchecked_mut(new_arche_id) };
-        debug_assert_eq!(old_arche.table_id(), self.location.table_id);
+        let [old_arche, new_arche] = unsafe {
+            let arches = &mut unsafe_world.full_mut().archetypes;
+            let indices = [old_arche_id.index(), new_arche_id.index()];
+            arches.as_mut_slice().get_disjoint_unchecked_mut(indices)
+        };
+        debug_assert_eq!(old_arche.table_id(), location.table_id);
 
         {
+            // trigger component hooks
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
             old_arche.trigger_on_discard(entity, world.reborrow());
             old_arche.trigger_on_remove(entity, world.reborrow());
         }
 
-        let new_arche_row = unsafe {
-            let moved = old_arche.remove_entity(self.location.arche_row);
-            self.world.full_mut().entities.update_row(moved).unwrap();
-            new_arche.insert_entity(self.entity)
-        };
-        self.location.arche_id = new_arche_id;
-        self.location.arche_row = new_arche_row;
-
-        // Move Table
-        let old_table_id = old_arche.table_id();
-        let new_table_id = TableId::EMPTY;
-        debug_assert_eq!(new_arche.table_id(), TableId::EMPTY);
-
-        if old_table_id != new_table_id {
-            let table_row = self.location.table_row;
-            let old_table =
-                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(old_table_id) };
-            let new_table =
-                unsafe { self.world.data_mut().storages.tables.get_unchecked_mut(new_table_id) };
-            let (moved, new_row) =
-                unsafe { old_table.move_to_and_drop_missing(table_row, new_table) };
-            unsafe {
+        {
+            // update row
+            let new_arche_row = unsafe {
+                let moved = old_arche.remove_entity(location.arche_row);
                 self.world.full_mut().entities.update_row(moved).unwrap();
-            }
-            self.location.table_id = new_table_id;
-            self.location.table_row = new_row;
+                new_arche.insert_entity(self.entity)
+            };
+            location.arche_id = new_arche_id;
+            location.arche_row = new_arche_row;
         }
 
-        let world = unsafe { self.world.full_mut() };
-        let maps = &mut world.storages.maps;
-        old_arche.sparse_components().iter().for_each(|&id| {
-            let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
-            let map = unsafe { maps.get_unchecked_mut(map_id) };
-            let row = unsafe { map.deallocate(entity).unwrap() };
-            unsafe {
-                map.drop_item(row);
+        {
+            // update table
+            let old_table_id = old_arche.table_id();
+            let new_table_id = TableId::EMPTY;
+
+            if old_table_id != new_table_id {
+                let table_row = location.table_row;
+                let [old_table, new_table] = unsafe {
+                    let tables = &mut unsafe_world.full_mut().storages.tables;
+                    let indices = [old_table_id.index(), new_table_id.index()];
+                    tables.as_mut_slice().get_disjoint_unchecked_mut(indices)
+                };
+                let new_row = unsafe {
+                    let (moved, new) = old_table.move_to_and_drop_missing(table_row, new_table);
+                    unsafe_world.full_mut().entities.update_row(moved).unwrap();
+                    new
+                };
+                location.table_id = new_table_id;
+                location.table_row = new_row;
             }
-        });
+        }
+
+        {
+            // clear map date
+            let world = unsafe { self.world.full_mut() };
+            let maps = &mut world.storages.maps;
+            old_arche.sparse_components().iter().for_each(|&id| {
+                let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
+                let map = unsafe { maps.get_unchecked_mut(map_id) };
+                let row = unsafe { map.deallocate(entity).unwrap() };
+                unsafe {
+                    map.drop_item(row);
+                }
+            });
+        }
 
         unsafe {
-            world.entities.update_location(entity, self.location).unwrap();
+            let world = self.world.full_mut();
+            world.entities.update_location(entity, location).unwrap();
+            world.flush();
         }
 
         ::core::mem::forget(guard);
 
-        world.flush();
+        self.relocate();
     }
 }

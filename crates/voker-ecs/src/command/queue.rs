@@ -17,7 +17,7 @@ use crate::world::World;
 pub struct CommandQueue {
     bytes: Vec<MaybeUninit<u8>>,
     cursor: usize,
-    panic_recovery: Vec<Vec<MaybeUninit<u8>>>,
+    panic_recovery: Vec<MaybeUninit<u8>>,
     caller: DebugLocation,
 }
 
@@ -26,7 +26,7 @@ pub struct CommandQueue {
 pub(crate) struct RawCommandQueue {
     bytes: NonNull<Vec<MaybeUninit<u8>>>,
     cursor: NonNull<usize>,
-    panic_recovery: NonNull<Vec<Vec<MaybeUninit<u8>>>>,
+    panic_recovery: NonNull<Vec<MaybeUninit<u8>>>,
 }
 
 /// The function pointer used for execution(or dropping) command and move cursor.
@@ -48,6 +48,7 @@ impl RawCommandQueue {
     #[inline]
     pub unsafe fn is_empty(&self) -> bool {
         // SAFETY: Pointers are guaranteed to be valid by requirements on `.clone_unsafe`
+        // It should be `>=`, because the `append` function does not modify the cursor.
         (unsafe { *self.cursor.as_ref() }) >= (unsafe { self.bytes.as_ref().len() })
     }
 
@@ -130,7 +131,7 @@ impl RawCommandQueue {
     /// If `world` is `None`, commands are dropped without execution.
     ///
     /// # Safety
-    /// - The internal pointers of `World` must be valid.
+    /// - The internal pointers must be valid.
     /// - The world access is exclusive.
     unsafe fn apply_or_drop_inner(&mut self, world: Option<NonNull<World>>) {
         let start = unsafe { *self.cursor.as_ref() };
@@ -166,7 +167,7 @@ impl RawCommandQueue {
                 let current_stop = bytes.len();
 
                 // We need to use a stack to maintain order.
-                panic_recovery.push(Vec::from(&bytes[local_cursor..current_stop]));
+                panic_recovery.extend_from_slice(&bytes[local_cursor..current_stop]);
 
                 unsafe {
                     bytes.set_len(start);
@@ -175,10 +176,7 @@ impl RawCommandQueue {
 
                 // Restore the remaining commands when reaching the bottom level loop.
                 if start == 0 {
-                    // The top of the stack is the most recent data.
-                    while let Some(mut top) = panic_recovery.pop() {
-                        bytes.append(&mut top); // append is faster then extend
-                    }
+                    bytes.append(panic_recovery);
                 }
 
                 ::std::panic::resume_unwind(payload);
@@ -191,6 +189,21 @@ impl RawCommandQueue {
         unsafe {
             self.bytes.as_mut().set_len(start);
             *self.cursor.as_mut() = start;
+        }
+    }
+
+    /// Moves all commands from `other` into `self`.
+    ///
+    /// After this operation, `other` becomes empty.
+    ///
+    /// The cursor will reset in `apply_or_drop`.
+    ///
+    /// # Safety
+    /// - The internal pointers must be valid.
+    #[inline]
+    pub unsafe fn append(&mut self, other: &mut Self) {
+        unsafe {
+            self.bytes.as_mut().append(other.bytes.as_mut());
         }
     }
 }
@@ -258,6 +271,8 @@ impl CommandQueue {
     /// Checks whether the queue contains any pending commands.
     #[inline]
     pub fn is_empty(&self) -> bool {
+        // It should be `>=`, because the `append`
+        // function does not modify the cursor.
         self.cursor >= self.bytes.len()
     }
 
@@ -266,8 +281,9 @@ impl CommandQueue {
     /// After this operation, `other` becomes empty.
     #[inline]
     pub fn append(&mut self, other: &mut CommandQueue) {
-        self.bytes.append(&mut other.bytes);
-        other.cursor = 0;
+        unsafe {
+            self.raw().append(&mut other.raw());
+        }
     }
 
     /// Applies all commands in the queue to the given `World`.

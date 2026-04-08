@@ -294,23 +294,4 @@ impl ResData {
         voker_ptr::into_owning!(value);
         unsafe { self.insert_untyped(value, tick) };
     }
-
-    /// Drop the resource in situ.
-    ///
-    /// This function is faster then [`ResData::remove`].
-    ///
-    /// # Safety
-    /// - `T` must matche the resource's layout
-    /// - If the data is NonSend, the function must be call in correct thread.
-    pub unsafe fn drop_in_place<T: Resource>(&mut self) {
-        if !self.data.is_null() {
-            unsafe {
-                self.data.cast::<T>().drop_in_place();
-            }
-            if self.layout.size() != 0 {
-                unsafe { malloc::dealloc(self.data, self.layout) };
-            }
-            self.data = ptr::null_mut();
-        }
-    }
 }

@@ -28,6 +28,18 @@ impl Components {
             mapper: TypeIdMap::new(),
         }
     }
+
+    /// Returns a mutable reference of component info for the given ID without bounds checking.
+    ///
+    /// It is currently private and only be used for component hook registration.
+    ///
+    /// # Safety
+    /// The caller must ensure `id` is a valid ID (i.e., `id.index() < self.len()`).
+    #[inline(always)]
+    pub(crate) unsafe fn get_unchecked_mut(&mut self, id: ComponentId) -> &mut ComponentInfo {
+        debug_assert!(id.index() < self.infos.len());
+        unsafe { self.infos.get_unchecked_mut(id.index()) }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -69,6 +81,12 @@ impl Components {
         unsafe { self.infos.get_unchecked(id.index()) }
     }
 
+    /// Extracts a slice containing the entire Components.
+    #[inline]
+    pub fn as_slice(&self) -> &[ComponentInfo] {
+        self.infos.as_slice()
+    }
+
     /// Returns an iterator over the ComponentInfos.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, ComponentInfo> {
@@ -85,7 +103,7 @@ impl Components {
         // thereby improving the execution speed of the hot path.
         #[cold]
         #[inline(never)]
-        fn register_internal<T: Component>(this: &mut Components) -> ComponentId {
+        fn register_cold<T: Component>(this: &mut Components) -> ComponentId {
             let type_id = TypeId::of::<T>();
             let descriptor = ComponentDescriptor::new::<T>();
             let component_id = ComponentId::new(this.infos.len() as u32);
@@ -101,9 +119,9 @@ impl Components {
         }
 
         if let Some(id) = self.get_id(TypeId::of::<T>()) {
-            id
-        } else {
-            register_internal::<T>(self)
+            return id;
         }
+
+        register_cold::<T>(self)
     }
 }

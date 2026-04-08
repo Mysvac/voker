@@ -196,13 +196,13 @@ impl Tick {
 
 /// Event emitted when periodic tick-age validation should run.
 ///
-/// Each time [`World::update_tick`] advances time past [`CHECK_CYCLE`], this
+/// Each time [`World::reset_last_run`] advances time past [`CHECK_CYCLE`], this
 /// event is triggered to clamp stale change records on resources/components.
 ///
 /// This prevents very old tick values from producing incorrect change results
 /// after wrap-around.
 ///
-/// [`World::update_tick`]: crate::world::World::update_tick
+/// [`World::reset_last_run`]: crate::world::World::reset_last_run
 #[derive(Debug, Clone, Copy)]
 pub struct CheckTicks(Tick);
 

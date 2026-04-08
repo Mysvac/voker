@@ -1,10 +1,8 @@
 use core::fmt::Debug;
 
 use super::{Direction, GraphNode};
-use crate::{
-    system::{AccessTable, SystemFlags, SystemId},
-    world::{DeferredWorld, World},
-};
+use crate::system::{AccessTable, SystemFlags, SystemId};
+use crate::world::{DeferredWorld, World};
 
 // -----------------------------------------------------------------------------
 // SystemKey
@@ -40,6 +38,7 @@ pub enum SystemObject {
 }
 
 impl SystemObject {
+    /// Creates a new `SystemObject` from an `ActionSystem`.
     #[inline]
     pub fn new_action(system: ActionSystem) -> Self {
         Self::Action {
@@ -48,6 +47,7 @@ impl SystemObject {
         }
     }
 
+    /// Creates a new `SystemObject` from a `ConditionSystem`.
     #[inline]
     pub fn new_condition(system: ConditionSystem) -> Self {
         Self::Condition {
@@ -56,6 +56,7 @@ impl SystemObject {
         }
     }
 
+    /// Returns the unique identifier of the underlying system.
     #[inline]
     pub fn id(&self) -> SystemId {
         match self {
@@ -64,6 +65,7 @@ impl SystemObject {
         }
     }
 
+    /// Returns the flags associated with the underlying system.
     #[inline]
     pub fn flags(&self) -> SystemFlags {
         match self {
@@ -72,6 +74,7 @@ impl SystemObject {
         }
     }
 
+    /// Returns `true` if the underlying system has deferred operations.
     #[inline]
     pub fn is_deferred(&self) -> bool {
         match self {
@@ -80,6 +83,7 @@ impl SystemObject {
         }
     }
 
+    /// Returns `true` if the underlying system requires exclusive world access.
     #[inline]
     pub fn is_exclusive(&self) -> bool {
         match self {
@@ -88,6 +92,7 @@ impl SystemObject {
         }
     }
 
+    /// Returns `true` if the underlying system is `!Send`.
     #[inline]
     pub fn is_non_send(&self) -> bool {
         match self {
@@ -96,6 +101,7 @@ impl SystemObject {
         }
     }
 
+    /// Defers the execution of the underlying system using the given `DeferredWorld`.
     #[inline]
     pub fn defer(&mut self, world: DeferredWorld) {
         match self {
@@ -104,6 +110,7 @@ impl SystemObject {
         }
     }
 
+    /// Applies any deferred operations from the underlying system to the `World`.
     #[inline]
     pub fn apply_deferred(&mut self, world: &mut World) {
         match self {

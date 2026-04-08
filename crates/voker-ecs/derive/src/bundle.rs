@@ -66,7 +66,8 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
                     const _: () = {
                         #[expect(unsafe_code, reason = "bundle implementation is unsafe.")]
                         unsafe impl #impl_generics #bundle_ for #type_ident #ty_generics #where_clause {
-                            fn collect_components(_collector: &mut #component_collector_) {}
+                            fn collect_explicit(_collector: &mut #component_collector_) {}
+                            fn collect_required(_collector: &mut #component_collector_) {}
                             unsafe fn write_explicit(_writer: &mut #component_writer_, _base: usize) {}
                             unsafe fn write_required(_writer: &mut #component_writer_) {}
                         }

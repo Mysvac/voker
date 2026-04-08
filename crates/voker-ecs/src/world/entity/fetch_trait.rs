@@ -12,6 +12,9 @@ use crate::world::UnsafeWorld;
 /// Implementations define how a fetch pattern is materialized for a single
 /// entity/table row under the current world/tick context.
 ///
+/// Currently, the duplication of components is not checked,
+/// but aliases of mutable references may cause undefined behavior.
+///
 /// # Note
 ///
 /// - If you fetch `&mut T`, the target is marked as changed immediately.
@@ -46,7 +49,8 @@ use crate::world::UnsafeWorld;
 /// ```
 ///
 /// # Safety
-/// The implementer ensures the legality of access.
+///
+/// - No aliased mutability is caused by the returned references.
 pub unsafe trait FetchComponents {
     /// The fetched output type.
     type Item<'a>;

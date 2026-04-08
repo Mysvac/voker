@@ -133,6 +133,18 @@ impl Maps {
         unsafe { self.maps.get_unchecked_mut(id.index()) }
     }
 
+    /// Extracts a slice containing the entire Maps.
+    #[inline]
+    pub fn as_slice(&self) -> &[Map] {
+        self.maps.as_slice()
+    }
+
+    /// Extracts a mutable slice of the entire Maps.
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [Map] {
+        self.maps.as_mut_slice()
+    }
+
     /// Returns an iterator over the tables.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, Map> {
