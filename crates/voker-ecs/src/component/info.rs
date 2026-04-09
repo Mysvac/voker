@@ -4,6 +4,7 @@ use core::fmt::Debug;
 
 use super::hook::{ComponentHook, ComponentHooks};
 use super::{Component, ComponentId, Required, StorageMode};
+use crate::link::LinkAccessor;
 use crate::utils::{Cloner, DebugName, Dropper};
 
 // -----------------------------------------------------------------------------
@@ -59,6 +60,7 @@ impl ComponentDescriptor {
 pub struct ComponentInfo {
     id: ComponentId,
     descriptor: ComponentDescriptor,
+    link_accessor: Option<LinkAccessor>,
 }
 
 impl Debug for ComponentInfo {
@@ -76,7 +78,11 @@ impl ComponentInfo {
     /// Creates a new component info with given ID and descriptor.
     #[inline(always)]
     pub(crate) fn new(id: ComponentId, descriptor: ComponentDescriptor) -> Self {
-        Self { id, descriptor }
+        Self {
+            id,
+            descriptor,
+            link_accessor: None,
+        }
     }
 
     /// Returns the component's unique ID.
@@ -169,6 +175,12 @@ impl ComponentInfo {
         self.descriptor.hooks.on_despawn
     }
 
+    /// Returns the component's `LinkAccessor` if exists.
+    #[inline(always)]
+    pub fn link_accessor(&self) -> Option<&LinkAccessor> {
+        self.link_accessor.as_ref()
+    }
+
     /// Returns a mutable reference to component's hook list.
     ///
     /// It is currently private to ensure that Hook cannot be
@@ -176,5 +188,13 @@ impl ComponentInfo {
     #[inline(always)]
     pub(crate) fn hooks_mut(&mut self) -> &mut ComponentHooks {
         &mut self.descriptor.hooks
+    }
+
+    /// Set component's link accessor.
+    ///
+    /// It is currently private that only be used by component registration.
+    #[inline(always)]
+    pub(crate) fn set_link_accessor(&mut self, accessor: LinkAccessor) {
+        self.link_accessor = Some(accessor);
     }
 }

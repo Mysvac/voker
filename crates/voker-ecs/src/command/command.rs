@@ -2,53 +2,14 @@
 
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
-use crate::error::{EcsError, ErrorContext, ErrorHandler};
+use crate::error::{ErrorContext, ErrorHandler, GameError, Severity, ToGameError};
+use crate::link::LinkHookMode;
+use crate::message::{Message, Messages};
+use crate::prelude::ScheduleLabel;
 use crate::resource::Resource;
+use crate::system::{IntoSystem, SystemId, SystemInput};
 use crate::utils::{DebugLocation, DebugName};
 use crate::world::{EntityOwned, FromWorld, World};
-
-// -----------------------------------------------------------------------------
-// CommandOutput
-
-/// A trait implemented for types that can be used as the output of a [`Command`].
-///
-/// By default, the following types can be used as `CommandOutput`:
-///
-/// - `()`: Represents success with no error.
-/// - `Option<T> where T: CommandOutput`: Returns `None` for success, `Some` recursively
-///   processes the inner error.
-/// - `Result<T, E> where T: CommandOutput, E: Into<EcsError>`: Returns `Err(e)` for failure,
-///   `Ok(v)` recursively processes the inner output.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not a valid `Command` output type",
-    label = "invalid `Command` output type",
-    note = "the output type should be `()`, or a `Option/Result` that can be converted into `EcsError`"
-)]
-pub trait CommandOutput: Sized {
-    fn to_err(self) -> Option<EcsError>;
-}
-
-impl CommandOutput for () {
-    #[inline(always)]
-    fn to_err(self) -> Option<EcsError> {
-        None
-    }
-}
-
-impl<T: CommandOutput> CommandOutput for Option<T> {
-    fn to_err(self) -> Option<EcsError> {
-        self.and_then(CommandOutput::to_err)
-    }
-}
-
-impl<T: CommandOutput, E: Into<EcsError>> CommandOutput for Result<T, E> {
-    fn to_err(self) -> Option<EcsError> {
-        match self {
-            Ok(v) => CommandOutput::to_err(v),
-            Err(e) => Some(e.into()),
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Command
@@ -86,13 +47,26 @@ impl<T: CommandOutput, E: Into<EcsError>> CommandOutput for Result<T, E> {
 /// ```
 pub trait Command: Send + Sized + 'static {
     /// The return type of [`apply`](Command::apply).
-    type Output: CommandOutput;
+    type Output: ToGameError;
 
     /// Applies this command to the provided `world`.
     ///
     /// This method is used to define what a command "does" when it
     /// is ultimately applied.
     fn apply(self, world: &mut World) -> Self::Output;
+
+    #[inline]
+    fn with_severity(self, severity: Severity) -> impl Command<Output = Option<GameError>> {
+        move |world: &mut World| self.apply(world).with_severity(severity)
+    }
+
+    #[inline]
+    fn map_severity(
+        self,
+        f: impl FnOnce(Severity) -> Severity + Send + 'static,
+    ) -> impl Command<Output = Option<GameError>> {
+        move |world: &mut World| self.apply(world).map_severity(f)
+    }
 
     /// Takes a [`Command`] that returns a Result and uses a given error handler
     /// function to convert it into a [`Command`].
@@ -101,7 +75,7 @@ pub trait Command: Send + Sized + 'static {
     #[inline]
     fn handle_error_with(self, handler: ErrorHandler) -> impl Command<Output = ()> {
         move |world: &mut World| {
-            if let Some(e) = CommandOutput::to_err(self.apply(world)) {
+            if let Some(e) = self.apply(world).to_err() {
                 let name = DebugName::type_name::<Self>();
                 handler(e, ErrorContext::Command { name });
             }
@@ -115,7 +89,7 @@ pub trait Command: Send + Sized + 'static {
     #[inline]
     fn handle_error(self) -> impl Command<Output = ()> {
         move |world: &mut World| {
-            if let Some(e) = CommandOutput::to_err(self.apply(world)) {
+            if let Some(e) = self.apply(world).to_err() {
                 let name = DebugName::type_name::<Self>();
                 world.fallback_error_handler()(e, ErrorContext::Command { name });
             }
@@ -155,7 +129,7 @@ pub trait Command: Send + Sized + 'static {
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {
-    type Output: CommandOutput;
+    type Output: ToGameError;
 
     /// Executes this command for the given [`Entity`].
     fn apply(self, entity: EntityOwned) -> Self::Output;
@@ -176,7 +150,7 @@ pub trait EntityCommand: Send + Sized + 'static {
 impl<F, O> Command for F
 where
     F: FnOnce(&mut World) -> O + Send + 'static,
-    O: CommandOutput,
+    O: ToGameError,
 {
     type Output = O;
 
@@ -188,7 +162,7 @@ where
 impl<O, F> EntityCommand for F
 where
     F: FnOnce(EntityOwned) -> O + Send + 'static,
-    O: CommandOutput,
+    O: ToGameError,
 {
     type Output = O;
 
@@ -208,6 +182,14 @@ pub fn spawn<B: Bundle>(bundle: B) -> impl Command {
     move |world: &mut World| {
         world.spawn_with_caller(bundle, caller);
     }
+}
+
+/// A [`Command`] that spawns a new entity from a [`Bundle`].
+#[inline]
+#[track_caller]
+pub fn spawn_at<B: Bundle>(bundle: B, entity: Entity) -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| world.spawn_at_with_caller(bundle, entity, caller).map(|_| ())
 }
 
 /// A [`Command`] that consumes an iterator of [`Bundle`]s to spawn a series of entities.
@@ -259,6 +241,14 @@ pub fn init_resource<R: Resource + Send + FromWorld>() -> impl Command {
     }
 }
 
+/// A [`Command`] that initialize [`Resource`] if it does not exist.
+#[inline]
+pub fn init_non_send<R: Resource + FromWorld>() -> impl Command {
+    move |world: &mut World| {
+        world.init_non_send::<R>();
+    }
+}
+
 /// A [`Command`] that inserts a [`Resource`] into the world.
 #[inline]
 pub fn insert_resource<R: Resource + Send>(resource: R) -> impl Command {
@@ -275,6 +265,79 @@ pub fn remove_resource<R: Resource + Send>() -> impl Command {
     }
 }
 
+/// Registers a system so it can later be called by [`Commands::run_system_cached`] or [`World::run_system_cached`].
+///
+/// [`Commands::run_system_cached`]: super::Commands::run_system_cached
+#[inline]
+pub fn register_system<I, O, M>(system: impl IntoSystem<I, O, M> + Send + 'static) -> impl Command
+where
+    I: SystemInput + Send + 'static,
+    O: Send + 'static,
+    M: 'static,
+{
+    move |world: &mut World| {
+        world.register_system(system);
+    }
+}
+
+/// A [`Command`] that runs the system corresponding to the given [`IntoSystem`].
+#[inline]
+pub fn run_system<M, S>(system: S) -> impl Command
+where
+    M: 'static,
+    S: IntoSystem<(), (), M> + Send + 'static,
+{
+    move |world: &mut World| -> Result<(), GameError> { world.run_system(system) }
+}
+
+/// A [`Command`] that runs the given system with the given input value,
+/// caching its [`S`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
+#[inline]
+pub fn run_system_with<I, M, S>(system: S, input: I::Data<'static>) -> impl Command
+where
+    I: SystemInput<Data<'static>: Send> + Send + 'static,
+    M: 'static,
+    S: IntoSystem<I, (), M> + Send + 'static,
+{
+    move |world: &mut World| -> Result<(), GameError> { world.run_system_with(system, input) }
+}
+
+/// A [`Command`] that runs the given system,
+/// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
+#[inline]
+#[track_caller]
+pub fn run_system_cached<I>(id: SystemId, input: I::Data<'static>) -> impl Command
+where
+    I: SystemInput<Data<'static>: Send> + Send + 'static,
+{
+    let caller = DebugLocation::caller();
+    move |world: &mut World| {
+        world.run_system_cached::<I, ()>(id, input).map_err(|_| {
+            GameError::warning(alloc::format!(
+                "{caller}Run cached system failed, the given system\
+                {id} is unregistered or input `{}` type mismatched",
+                DebugName::type_name::<I>()
+            ))
+        })
+    }
+}
+
+/// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
+#[inline]
+pub fn run_schedule(label: impl ScheduleLabel) -> impl Command {
+    move |world: &mut World| {
+        world.run_schedule(label);
+    }
+}
+
+/// A [`Command`] that writes an arbitrary [`Message`].
+#[inline]
+pub fn write_message<M: Message>(message: M) -> impl Command {
+    move |world: &mut World| {
+        world.resource_mut::<Messages<M>>().write(message);
+    }
+}
+
 // -----------------------------------------------------------------------------
 // pre-defined EntityCommand
 
@@ -284,7 +347,17 @@ pub fn remove_resource<R: Resource + Send>() -> impl Command {
 pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
-        entity.insert_with_caller(bundle, caller);
+        entity.insert_with_caller(bundle, LinkHookMode::Run, caller);
+    }
+}
+
+/// A [`Command`] that insert a [`Bundle`] for a entity if it does not exist.
+#[inline]
+#[track_caller]
+pub fn insert_if_new<T: Bundle>(bundle: impl FnOnce() -> T + Send + 'static) -> impl EntityCommand {
+    let caller = DebugLocation::caller();
+    move |mut entity: EntityOwned| {
+        entity.insert_if_new_with_caller(bundle, LinkHookMode::Run, caller);
     }
 }
 

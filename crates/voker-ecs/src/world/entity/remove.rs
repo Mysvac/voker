@@ -1,6 +1,7 @@
 use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::HookContext;
+use crate::link::LinkHookMode;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
@@ -225,9 +226,18 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     {
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        old_arche.discard_hooks().iter().for_each(|&(id, hook)| {
+        let link_hook_mode = LinkHookMode::Run;
+        old_arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
             if !new_arche.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -235,9 +245,18 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     {
         // trigger_on_remove
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        old_arche.remove_hooks().iter().for_each(|&(id, hook)| {
+        let link_hook_mode = LinkHookMode::Run;
+        old_arche.on_remove_hooks().iter().for_each(|&(id, hook)| {
             if !new_arche.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -267,7 +286,7 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
                 tables.as_mut_slice().get_disjoint_unchecked_mut(indices)
             };
             let new_row = unsafe {
-                let (moved, new) = old_table.move_to_and_drop_missing(table_row, new_table);
+                let (moved, new) = old_table.move_row::<true>(table_row, new_table);
                 unsafe_world.full_mut().entities.update_row(moved).unwrap();
                 new
             };

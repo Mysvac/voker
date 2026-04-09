@@ -11,7 +11,7 @@ use voker_utils::hash::SparseHashSet;
 
 use super::{MainThreadExecutor, SystemExecutor};
 
-use crate::error::{EcsError, ErrorContext};
+use crate::error::{ErrorContext, GameError};
 use crate::schedule::schedule::{ConflictTable, SystemScheduleView};
 use crate::schedule::{ExecutorKind, SystemObject, SystemSchedule};
 use crate::system::{SystemFlags, SystemId};
@@ -56,7 +56,7 @@ struct Context<'scope, 'env, 'sys> {
     outgoing: &'sys [&'sys [u32]],
     condition_outgoing: &'sys [&'sys [u32]],
     conflict_table: &'sys ConflictTable,
-    error_handler: fn(EcsError, ErrorContext),
+    error_handler: fn(GameError, ErrorContext),
 }
 
 // -----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         executor: &'env MultiThreadedExecutor,
         schedule: &'sys mut SystemSchedule,
         scope: &'scope Scope<'scope, 'env, ()>,
-        error_handler: fn(EcsError, ErrorContext),
+        error_handler: fn(GameError, ErrorContext),
     ) -> Self {
         let SystemScheduleView {
             systems,
@@ -431,7 +431,7 @@ impl SystemExecutor for MultiThreadedExecutor {
         &mut self,
         schedule: &mut SystemSchedule,
         world: &mut World,
-        handler: fn(EcsError, ErrorContext),
+        handler: fn(GameError, ErrorContext),
     ) {
         if schedule.keys().is_empty() {
             return;

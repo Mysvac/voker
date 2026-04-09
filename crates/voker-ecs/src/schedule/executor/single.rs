@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::panic::AssertUnwindSafe;
 
-use crate::error::{EcsError, ErrorContext};
+use crate::error::{ErrorContext, GameError};
 use crate::schedule::schedule::SystemScheduleView;
 use crate::schedule::{ExecutorKind, SystemExecutor, SystemObject, SystemSchedule};
 use crate::world::World;
@@ -46,7 +46,7 @@ impl SystemExecutor for SingleThreadedExecutor {
         &mut self,
         schedule: &mut SystemSchedule,
         world: &mut World,
-        handler: fn(EcsError, ErrorContext),
+        handler: fn(GameError, ErrorContext),
     ) {
         let SystemScheduleView {
             keys,

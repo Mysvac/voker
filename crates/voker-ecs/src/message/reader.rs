@@ -84,7 +84,7 @@ unsafe impl<M: Message> SystemParam for MessageReader<'_, '_, M> {
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,
-    ) -> Result<Self::Item<'w, 's>, crate::error::EcsError> {
+    ) -> Result<Self::Item<'w, 's>, crate::error::GameError> {
         // SAFETY: same world/state/tick contract as delegated tuple parameter.
         let (cursor, messages) = unsafe {
             <InternalParam<M> as SystemParam>::build_param(world, state, last_run, this_run)?

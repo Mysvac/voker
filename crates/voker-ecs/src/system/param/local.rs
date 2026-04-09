@@ -1,7 +1,7 @@
 use core::ops::{Deref, DerefMut};
 
 use super::{ReadOnlySystemParam, SystemParam};
-use crate::error::EcsError;
+use crate::error::GameError;
 use crate::system::AccessTable;
 use crate::tick::Tick;
 use crate::world::{FromWorld, UnsafeWorld, World};
@@ -61,7 +61,7 @@ unsafe impl<T: FromWorld + Send + Sync + 'static> SystemParam for Local<'_, T> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, EcsError> {
+    ) -> Result<Self::Item<'w, 's>, GameError> {
         Ok(Local(state))
     }
 }

@@ -1,12 +1,12 @@
 use core::ops::{Deref, DerefMut};
 use voker_ecs_derive::Resource;
 
-use super::{EcsError, ErrorContext, Severity};
+use super::{ErrorContext, GameError, Severity};
 
 /// Function signature for ECS error handlers.
 ///
 /// Receives the captured error and its execution context.
-pub type ErrorHandler = fn(EcsError, ErrorContext);
+pub type ErrorHandler = fn(GameError, ErrorContext);
 
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct FallbackErrorHandler(pub ErrorHandler);
@@ -44,7 +44,7 @@ macro_rules! inner {
 
 /// Error handler that defers to an error's [`Severity`].
 #[track_caller]
-pub fn match_severity(err: EcsError, ctx: ErrorContext) {
+pub fn match_severity(err: GameError, ctx: ErrorContext) {
     match err.severity() {
         Severity::Ignore => ignore(err, ctx),
         Severity::Trace => trace(err, ctx),
@@ -59,46 +59,46 @@ pub fn match_severity(err: EcsError, ctx: ErrorContext) {
 /// Error handler that panics with the system error.
 #[inline]
 #[track_caller]
-pub fn panic(error: EcsError, ctx: ErrorContext) {
+pub fn panic(error: GameError, ctx: ErrorContext) {
     inner!(panic, error, ctx);
 }
 
 /// Error handler that logs the system error at the `error` level.
 #[inline]
 #[track_caller]
-pub fn error(error: EcsError, ctx: ErrorContext) {
+pub fn error(error: GameError, ctx: ErrorContext) {
     inner!(log::error, error, ctx);
 }
 
 /// Error handler that logs the system error at the `warn` level.
 #[inline]
 #[track_caller]
-pub fn warn(error: EcsError, ctx: ErrorContext) {
+pub fn warn(error: GameError, ctx: ErrorContext) {
     inner!(log::warn, error, ctx);
 }
 
 /// Error handler that logs the system error at the `info` level.
 #[inline]
 #[track_caller]
-pub fn info(error: EcsError, ctx: ErrorContext) {
+pub fn info(error: GameError, ctx: ErrorContext) {
     inner!(log::info, error, ctx);
 }
 
 /// Error handler that logs the system error at the `debug` level.
 #[inline]
 #[track_caller]
-pub fn debug(error: EcsError, ctx: ErrorContext) {
+pub fn debug(error: GameError, ctx: ErrorContext) {
     inner!(log::debug, error, ctx);
 }
 
 /// Error handler that logs the system error at the `trace` level.
 #[inline]
 #[track_caller]
-pub fn trace(error: EcsError, ctx: ErrorContext) {
+pub fn trace(error: GameError, ctx: ErrorContext) {
     inner!(log::trace, error, ctx);
 }
 
 /// Error handler that ignores the system error.
 #[inline]
 #[track_caller]
-pub fn ignore(_: EcsError, _: ErrorContext) {}
+pub fn ignore(_: GameError, _: ErrorContext) {}

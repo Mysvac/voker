@@ -85,25 +85,25 @@ impl BundleInfo {
 
     /// Checks if this archetype contains a specific component type.
     ///
-    /// # Complexity
-    /// - Time: O(log n) where n is the total number of component types
+    /// The number of components in a Bundle is usually small, making it
+    /// very fast to determine under SIMD optimization.
     pub fn contains_component(&self, id: ComponentId) -> bool {
-        self.contains_dense_component(id) || self.contains_sparse_component(id)
+        crate::utils::contains_component(id, self.components)
     }
 
     /// Checks if this archetype contains a specific dense component type.
     ///
-    /// # Complexity
-    /// - Time: O(log n) where n is the number of dense components
+    /// The number of components in a Bundle is usually small, making it
+    /// very fast to determine under SIMD optimization.
     pub fn contains_dense_component(&self, id: ComponentId) -> bool {
-        self.dense_components().binary_search(&id).is_ok()
+        crate::utils::contains_component(id, self.dense_components())
     }
 
     /// Checks if this archetype contains a specific sparse component type.
     ///
-    /// # Complexity
-    /// - Time: O(log n) where n is the number of sparse components
+    /// The number of components in a Bundle is usually small, making it
+    /// very fast to determine under SIMD optimization.
     pub fn contains_sparse_component(&self, id: ComponentId) -> bool {
-        self.sparse_components().binary_search(&id).is_ok()
+        crate::utils::contains_component(id, self.sparse_components())
     }
 }

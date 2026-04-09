@@ -143,6 +143,18 @@ impl Tick {
 
         since_system > since_insert
     }
+
+    /// Clamps a single tick value if it is older than `MAX_TICK_AGE`.
+    ///
+    /// Return `true` if is clamped.
+    #[inline(always)]
+    pub const fn check_tick(&mut self, now: Tick) {
+        let age = now.relative_to(*self);
+        let fallback = now.relative_to(Tick::MAX_AGE);
+        if age.0 > MAX_TICK_AGE {
+            *self = fallback;
+        }
+    }
 }
 
 impl core::hash::Hash for Tick {
@@ -155,39 +167,6 @@ impl core::hash::Hash for Tick {
 impl core::fmt::Debug for Tick {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("Tick").field(&self.0).finish()
-    }
-}
-
-impl Tick {
-    /// Clamps a single tick value if it is older than `MAX_TICK_AGE`.
-    ///
-    /// `fall_back` should be computed as `now.relative_to(Tick::MAX_AGE)`.
-    #[inline(always)]
-    pub(crate) fn quick_check(this: &mut Tick, now: Tick, fall_back: Tick) {
-        let age = now.relative_to(*this);
-        if age.0 > MAX_TICK_AGE {
-            *this = fall_back;
-        }
-    }
-
-    /// Clamps a tick slice, optimized for bulk processing.
-    pub(crate) fn slice_check(this: &mut [Tick], now: Tick) {
-        use core::mem::transmute;
-
-        // `u32` is more easily optimized by compiler.
-        let arr = unsafe { transmute::<&mut [Tick], &mut [u32]>(this) };
-        let now: u32 = unsafe { transmute::<Tick, u32>(now) };
-
-        let fall_back = now.wrapping_sub(MAX_TICK_AGE);
-
-        // `for_each` can generate better code than explicit `for` loops.
-        // At present, it's guaranteed that `wrapping_sub` and `>` are SIMD.
-        arr.iter_mut().for_each(|x| {
-            let age = now.wrapping_sub(*x);
-            if age > MAX_TICK_AGE {
-                *x = fall_back;
-            }
-        });
     }
 }
 

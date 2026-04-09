@@ -1,4 +1,5 @@
 use crate::entity::{DespawnError, Entity, EntityLocation};
+use crate::link::LinkHookMode;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, World};
 
@@ -116,9 +117,10 @@ fn despawn_internal(
 
     {
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        arche.trigger_on_despawn(entity, world.reborrow());
-        arche.trigger_on_discard(entity, world.reborrow());
-        arche.trigger_on_remove(entity, world.reborrow());
+        let link_hook_mode = LinkHookMode::Run;
+        arche.trigger_on_despawn(entity, world.reborrow(), link_hook_mode, caller);
+        arche.trigger_on_discard(entity, world.reborrow(), link_hook_mode, caller);
+        arche.trigger_on_remove(entity, world.reborrow(), link_hook_mode, caller);
     }
 
     let arche_moved = unsafe { arche.remove_entity(arche_row) };
@@ -127,7 +129,7 @@ fn despawn_internal(
     let table_id = location.table_id;
     let table_row = location.table_row;
     let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
-    let table_moved = unsafe { table.swap_remove_and_drop(table_row) };
+    let table_moved = unsafe { table.swap_remove::<true>(table_row) };
     let move_res2 = unsafe { world.entities.update_row(table_moved) };
 
     let maps = &mut world.storages.maps;

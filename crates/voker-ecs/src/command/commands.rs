@@ -6,9 +6,12 @@ use super::queue::RawCommandQueue;
 use super::{Command, CommandQueue, EntityCommand};
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
-use crate::error::{EcsError, ErrorHandler};
-use crate::prelude::Resource;
-use crate::system::{AccessTable, ReadOnlySystemParam, SystemMeta, SystemParam};
+use crate::error::{ErrorHandler, GameError};
+use crate::message::Message;
+use crate::prelude::{Resource, ScheduleLabel};
+use crate::system::{
+    AccessTable, IntoSystem, ReadOnlySystemParam, SystemId, SystemInput, SystemMeta, SystemParam,
+};
 use crate::tick::Tick;
 use crate::utils::DebugLocation;
 use crate::world::{FromWorld, UnsafeWorld, World, WorldId};
@@ -107,7 +110,7 @@ unsafe impl SystemParam for Commands<'_, '_> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, EcsError> {
+    ) -> Result<Self::Item<'w, 's>, GameError> {
         Ok(Commands::new(unsafe { world.read_only() }, state))
     }
 
@@ -271,22 +274,45 @@ impl<'w, 's> Commands<'w, 's> {
         I: IntoIterator + Send + Sync + 'static,
         I::Item: Bundle,
     {
-        let caller = DebugLocation::caller();
-        unsafe {
-            self.queue.push(move |world: &mut World| {
-                world.spawn_batch_with_caller(batch, caller);
-            });
-        }
+        self.push(super::spawn_batch(batch));
     }
 
     /// Despawns an entity and removes all of its components.
     ///
-    /// No-op is the entity is not spawned.
+    /// log info if the entity is already despawned.
     #[inline]
     #[track_caller]
     pub fn despawn(&mut self, entity: Entity) {
+        let caller = DebugLocation::caller();
+        self.push(move |world: &mut World| {
+            if let Err(e) = world.try_despawn(entity) {
+                log::info!("{e}: {caller}");
+            }
+        });
+    }
+
+    /// Despawns an entity and removes all of its components.
+    ///
+    /// No-op if the entity is already despawned.
+    #[inline]
+    pub fn try_despawn(&mut self, entity: Entity) {
         self.push(move |world: &mut World| {
             world.despawn(entity);
+        });
+    }
+
+    /// Despawns many entities from iterator.
+    ///
+    /// No-op for entities that are already despawned.
+    #[inline]
+    pub fn despawn_batch<I>(&mut self, batch: I)
+    where
+        I: IntoIterator<Item = Entity> + Send + Sync + 'static,
+    {
+        self.push(move |world: &mut World| {
+            for entity in batch {
+                world.despawn(entity);
+            }
         });
     }
 
@@ -302,6 +328,14 @@ impl<'w, 's> Commands<'w, 's> {
         self.push(super::init_resource::<R>());
     }
 
+    /// Initializes a NonSend [`Resource`] in the [`World`] using [`FromWorld`].
+    ///
+    /// If the resource already exists, this is a no-op.
+    #[inline]
+    pub fn init_non_send<R: Resource + FromWorld>(&mut self) {
+        self.push(super::init_non_send::<R>());
+    }
+
     /// Inserts a [`Resource`] into the [`World`] with a specific value.
     ///
     /// This will overwrite any previous value of the same resource type.
@@ -314,6 +348,71 @@ impl<'w, 's> Commands<'w, 's> {
     #[inline]
     pub fn remove_resource<R: Resource + Send>(&mut self) {
         self.push(super::remove_resource::<R>());
+    }
+
+    /// Registers a system and returns its [`SystemId`] so it can later be called by
+    /// [`Commands::run_system`] or [`World::run_system`].
+    #[inline]
+    pub fn register_system<I, O, M>(
+        &mut self,
+        system: impl IntoSystem<I, O, M> + Send + 'static,
+    ) -> SystemId
+    where
+        I: SystemInput + Send + 'static,
+        O: Send + 'static,
+        M: 'static,
+    {
+        let system_id = system.system_id();
+        self.push(super::register_system(system));
+        system_id
+    }
+
+    /// A [`Command`] that runs the system corresponding to the given [`IntoSystem`].
+    #[inline]
+    pub fn run_system<M, S>(&mut self, system: S)
+    where
+        M: 'static,
+        S: IntoSystem<(), (), M> + Send + 'static,
+    {
+        self.push(super::run_system::<M, S>(system));
+    }
+
+    /// A [`Command`] that runs the given system with the given input value,
+    /// caching its [`SystemId`] in a resource.
+    #[inline]
+    pub fn run_system_with<I, M, S>(&mut self, system: S, input: I::Data<'static>)
+    where
+        I: SystemInput<Data<'static>: Send> + Send + 'static,
+        M: 'static,
+        S: IntoSystem<I, (), M> + Send + 'static,
+    {
+        self.push(super::run_system_with::<I, M, S>(system, input));
+    }
+
+    /// Runs the system corresponding to the given [`SystemId`] with input.
+    ///
+    /// Before running a cached system, it must first be registered via
+    /// [`Commands::register_system`] or [`World::register_system`].
+    #[inline]
+    #[track_caller]
+    pub fn run_system_cached<I>(&mut self, id: SystemId, input: I::Data<'static>)
+    where
+        I: SystemInput<Data<'static>: Send> + Send + 'static,
+    {
+        self.push(super::run_system_cached::<I>(id, input));
+    }
+
+    /// Runs the schedule corresponding to the given [`ScheduleLabel`].
+    #[inline]
+    pub fn run_schedule(&mut self, label: impl ScheduleLabel) {
+        self.push(super::run_schedule(label));
+    }
+
+    /// Writes an arbitrary [`Message`].
+    #[inline]
+    pub fn write_message<M: Message>(&mut self, message: M) -> &mut Self {
+        self.push(super::write_message(message));
+        self
     }
 }
 
@@ -432,7 +531,23 @@ impl<'w, 's> EntityCommands<'w, 's> {
     /// Errors are ignored if the entity is despawned before command execution.
     #[inline]
     #[track_caller]
-    pub fn try_clear<B: Bundle>(&mut self) -> &mut Self {
+    pub fn try_clear(&mut self) -> &mut Self {
         self.push_silenced(super::clear())
+    }
+
+    /// Despawns an entity and removes all of its components.
+    ///
+    /// log info if the entity is already despawned.
+    #[inline]
+    pub fn despawn(mut self) {
+        self.commands.despawn(self.entity);
+    }
+
+    /// Despawns an entity and removes all of its components.
+    ///
+    /// No-op if the entity is already despawned.
+    #[inline]
+    pub fn try_despawn(mut self) {
+        self.commands.try_despawn(self.entity);
     }
 }

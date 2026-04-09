@@ -208,12 +208,10 @@ pub struct NonSendMut<'w, T: Resource> {
 ///
 /// Provides read-only access with change detection.
 ///
-/// Returned by [`EntityRef::get`]/[`EntityRef::fetch`] or the iterator
-/// of [`Query`].
+/// Returned by [`EntityRef::get`] or the iterator of [`Query`].
 ///
 /// [`Query`]: crate::query::Query
 /// [`EntityRef::get`]: crate::world::EntityRef::get
-/// [`EntityRef::fetch`]: crate::world::EntityRef::fetch
 ///
 /// # Examples
 ///
@@ -1317,6 +1315,7 @@ impl<'w> UntypedMut<'w> {
             ticks: self.ticks,
         }
     }
+
     /// Specifies the reference type and converts `self` to a [`ResMut`].
     ///
     /// # Safety

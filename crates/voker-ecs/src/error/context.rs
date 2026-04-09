@@ -8,7 +8,9 @@ use crate::utils::DebugName;
 // -----------------------------------------------------------------------------
 // ErrorContext
 
-/// Context for a [`EcsError`] to aid in debugging.
+/// Context for a [`GameError`] to aid in debugging.
+///
+/// [`GameError`]: super::GameError
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ErrorContext {

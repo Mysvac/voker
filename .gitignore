@@ -1,6 +1,15 @@
+# Cargo & Rust
 /target
 /cargo.lock
 
+# Editor
 /.vscode
 /.vs
 /.idea
+
+# AI
+/.github/agents
+/.github/skills
+
+# Custom
+/temp

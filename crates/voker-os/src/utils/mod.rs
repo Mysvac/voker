@@ -15,7 +15,6 @@
 //! - [`ArrayQueue`]: A bounded lock-free queue backed by a fixed-size ring buffer.
 //! - [`SegQueue`]: An unbounded lock-free queue backed by a linked list.
 //! - [`ListQueue`]: An unbounded queue backed by linked blocks with separate locks.
-//! - [`Parallel`]: A per-thread local aggregator for collecting and draining thread-local values.
 //!
 //! # Execution Helpers
 //!

@@ -77,8 +77,7 @@ impl Archetypes {
         idents: &'static [ComponentId],
         components: &Components,
     ) -> ArcheId {
-        debug_assert!(idents[..dense_len].is_sorted());
-        debug_assert!(idents[dense_len..].is_sorted());
+        debug_assert!(!self.mapper.contains_key(idents));
 
         // Panic if len == u32::MAX, so the id will not wrap.
         let arche_id = ArcheId::new(self.arches.len() as u32);

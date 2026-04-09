@@ -1,12 +1,15 @@
 use core::ops::Deref;
 
-use crate::borrow::{NonSendMut, ResMut};
+use crate::borrow::{NonSendMut, ResMut, UntypedMut};
 use crate::command::Commands;
-use crate::entity::FetchError;
+use crate::component::HookContext;
+use crate::entity::{Entity, FetchError};
+use crate::link::LinkHookMode;
 use crate::message::{Message, MessageId, MessageIdIterator};
-use crate::prelude::Resource;
+use crate::prelude::{Component, ComponentId, Resource};
 use crate::query::{Query, QueryData, QueryFilter};
-use crate::world::{FetchEntities, UnsafeWorld, World};
+use crate::utils::DebugLocation;
+use crate::world::{EntityFetcher, FetchEntities, UnsafeWorld, World};
 
 /// A restricted mutable world handle for deferred mutation workflows.
 ///
@@ -107,6 +110,18 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().get_entity_mut::<E>(entities)
     }
 
+    /// Simultaneously provides access to entity data and a command queue, which
+    /// will be applied when the [`World`] is next flushed.
+    ///
+    /// This allows using borrowed entity data to construct commands where the
+    /// borrow checker would otherwise prevent it.
+    ///
+    /// See [`World::entities_and_commands`] for the non-deferred version.
+    #[inline]
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher<'_>, Commands<'_, '_>) {
+        unsafe { self.0.data_mut().entities_and_commands() }
+    }
+
     /// Returns mutable access to a `Send` resource if it exists.
     #[inline]
     pub fn get_resource_mut<R: Resource + Send>(&mut self) -> Option<ResMut<'_, R>> {
@@ -161,6 +176,8 @@ impl<'w> DeferredWorld<'w> {
     /// Returns `None` when the query state has not been registered.
     /// Register it first via [`World::register_query`] or call [`World::query`]
     /// / [`World::query_with`] to auto-register.
+    ///
+    /// [`QueryState`]: crate::query::QueryState
     #[inline]
     pub fn query_cached<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
     where
@@ -169,4 +186,127 @@ impl<'w> DeferredWorld<'w> {
     {
         self.world_mut().query_cached()
     }
+
+    #[inline]
+    pub(crate) fn modify_component_with_caller<T: Component, R>(
+        &mut self,
+        entity: Entity,
+        link_hook_mode: LinkHookMode,
+        caller: DebugLocation,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Result<Option<R>, FetchError> {
+        // If the component is not registered, then it doesn't exist on this entity, so no action required.
+        let Some(component_id) = self.get_component_id::<T>() else {
+            return Ok(None);
+        };
+
+        self.modify_component_by_id_with_caller(
+            entity,
+            component_id,
+            link_hook_mode,
+            caller,
+            move |component| {
+                // SAFETY: component matches the component_id collected in the above line
+                let mut component = unsafe { component.with_type::<T>() };
+
+                f(&mut component)
+            },
+        )
+    }
+
+    pub(crate) fn modify_component_by_id_with_caller<R>(
+        &mut self,
+        entity: Entity,
+        component_id: ComponentId,
+        link_hook_mode: LinkHookMode,
+        caller: DebugLocation,
+        f: impl for<'a> FnOnce(UntypedMut<'a>) -> R,
+    ) -> Result<Option<R>, FetchError> {
+        let entity_cell = self.get_entity_mut(entity)?;
+
+        if !entity_cell.contains_by_id(component_id) {
+            return Ok(None);
+        }
+
+        let archetype = &raw const *entity_cell.archetype();
+
+        unsafe {
+            let archetype = &*archetype;
+            if !archetype.on_discard_hooks().is_empty() {
+                self.trigger_on_discard(
+                    entity,
+                    Some(component_id).into_iter(),
+                    link_hook_mode,
+                    caller,
+                );
+            }
+        }
+
+        let mut entity_cell = self.get_entity_mut(entity).expect("entity access confirmed above");
+
+        // SAFETY: we will run the required hooks to simulate removal/replacement.
+        let mut component = entity_cell
+            .get_mut_by_id(component_id)
+            .expect("component access confirmed above");
+
+        let result = f(component.reborrow());
+
+        // Simulate adding this component by updating the relevant ticks
+        *component.ticks.added = *component.ticks.changed;
+
+        unsafe {
+            let archetype = &*archetype;
+            if !archetype.on_insert_hooks().is_empty() {
+                self.trigger_on_insert(
+                    entity,
+                    Some(component_id).into_iter(),
+                    link_hook_mode,
+                    caller,
+                );
+            }
+        }
+
+        Ok(Some(result))
+    }
+}
+
+macro_rules! define_trigger {
+    ($func:ident, $hook:ident) => {
+        /// # Safety
+        /// Caller ensures that these components exist
+        #[inline]
+        pub(crate) unsafe fn $func(
+            &mut self,
+            entity: Entity,
+            targets: impl Iterator<Item = ComponentId>,
+            link_hook_mode: LinkHookMode,
+            caller: DebugLocation,
+        ) {
+            for id in targets {
+                // SAFETY: Caller ensures that these components exist
+                let info = unsafe { self.components.get_unchecked(id) };
+                if let Some(hook) = info.$hook() {
+                    hook(
+                        DeferredWorld(self.0),
+                        HookContext {
+                            entity,
+                            id,
+                            caller,
+                            link_hook_mode,
+                        },
+                    );
+                }
+            }
+        }
+    };
+}
+
+#[expect(unused, reason = "todo")]
+impl<'w> DeferredWorld<'w> {
+    define_trigger!(trigger_on_add, on_add);
+    define_trigger!(trigger_on_clone, on_clone);
+    define_trigger!(trigger_on_insert, on_insert);
+    define_trigger!(trigger_on_remove, on_remove);
+    define_trigger!(trigger_on_discard, on_discard);
+    define_trigger!(trigger_on_despawn, on_despawn);
 }

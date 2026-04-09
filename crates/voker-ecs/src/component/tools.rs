@@ -344,7 +344,7 @@ impl ComponentWriter<'_> {
     /// Guaranteed by the caller.
     #[inline(never)]
     unsafe fn write_dense(&mut self, component: ComponentId, offset: usize) {
-        use voker_utils::hash::hash_map::Entry;
+        use voker_utils::hash::map::Entry;
         unsafe {
             let data = self.data.borrow_mut().byte_add(offset).promote();
             let col = self.table.get_table_col(component).debug_checked_unwrap();
@@ -368,7 +368,7 @@ impl ComponentWriter<'_> {
     /// Guaranteed by the caller.
     #[inline(never)]
     unsafe fn write_sparse(&mut self, component: ComponentId, offset: usize) {
-        use voker_utils::hash::hash_map::Entry;
+        use voker_utils::hash::map::Entry;
         unsafe {
             let data = self.data.borrow_mut().byte_add(offset).promote();
             let map_id = self.maps.get_id(component).debug_checked_unwrap();

@@ -1,4 +1,5 @@
 use crate::archetype::ArcheId;
+use crate::link::LinkHookMode;
 use crate::storage::TableId;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
@@ -69,8 +70,9 @@ impl EntityOwned<'_> {
         {
             // trigger component hooks
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            old_arche.trigger_on_discard(entity, world.reborrow());
-            old_arche.trigger_on_remove(entity, world.reborrow());
+            let link_hook_mode = LinkHookMode::Run;
+            old_arche.trigger_on_discard(entity, world.reborrow(), link_hook_mode, caller);
+            old_arche.trigger_on_remove(entity, world.reborrow(), link_hook_mode, caller);
         }
 
         {
@@ -97,7 +99,7 @@ impl EntityOwned<'_> {
                     tables.as_mut_slice().get_disjoint_unchecked_mut(indices)
                 };
                 let new_row = unsafe {
-                    let (moved, new) = old_table.move_to_and_drop_missing(table_row, new_table);
+                    let (moved, new) = old_table.move_row::<true>(table_row, new_table);
                     unsafe_world.full_mut().entities.update_row(moved).unwrap();
                     new
                 };

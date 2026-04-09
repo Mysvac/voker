@@ -1,10 +1,10 @@
+//! Static-constructor-based auto registration for metadata collection in
+//! reflection and ECS scenarios.
+//!
 //! > Modified from <https://docs.rs/inventory/latest/inventory/>.
 //! >
 //! > - Date: 2024/04/02
 //! > - Version: 0.3.24
-//!
-//! Static-constructor-based auto registration for metadata collection in
-//! reflection and ECS scenarios.
 //!
 //! # Usage
 //!

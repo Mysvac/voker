@@ -3,11 +3,12 @@ use voker_ptr::OwningPtr;
 use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::{ComponentWriter, HookContext};
+use crate::link::LinkHookMode;
 use crate::utils::{DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
 impl EntityOwned<'_> {
-    /// Insert component from given bundle.
+    /// Insert components from given bundle.
     ///
     /// Required bundles will be automatically inserted.
     ///
@@ -47,11 +48,58 @@ impl EntityOwned<'_> {
     #[inline]
     #[track_caller]
     pub fn insert<B: Bundle>(&mut self, bundle: B) {
-        self.insert_with_caller(bundle, DebugLocation::caller());
+        self.insert_with_caller(bundle, LinkHookMode::Run, DebugLocation::caller());
+    }
+
+    /// Inserts a new `Bundle` if the entity is missing **any** of its components.
+    ///
+    /// This method checks whether the entity already contains all component types defined in `B`.
+    /// - If **all components already exist**, nothing happens.
+    /// - If **at least one component is missing**, the provided closure `f` is called to generate
+    ///   a new `B` instance, and **all components** from that `Bundle` are inserted into the entity,
+    ///   **overwriting** any existing components of the same type.
+    ///
+    /// # Note
+    /// To avoid accidental overwrites, **it is strongly recommended that `Bundle` contains only
+    /// a single component type**, which eliminates the risk of false-positive overwrites.
+    #[inline]
+    #[track_caller]
+    pub fn insert_if_new<B: Bundle>(&mut self, f: impl FnOnce() -> B) {
+        self.insert_if_new_with_caller(f, LinkHookMode::Run, DebugLocation::caller());
     }
 
     #[inline]
-    pub(crate) fn insert_with_caller<B: Bundle>(&mut self, bundle: B, caller: DebugLocation) {
+    pub(crate) fn insert_if_new_with_caller<B: Bundle>(
+        &mut self,
+        f: impl FnOnce() -> B,
+        link_hook_mode: LinkHookMode,
+        caller: DebugLocation,
+    ) {
+        self.assert_is_spawned_with_caller(caller);
+
+        let world = unsafe { self.world.full_mut() };
+        let explicit_bundle_id = world.register_explicit_bundle::<B>();
+        let old_arche_id = unsafe { self.location.unwrap_unchecked().arche_id };
+        let arche_info = unsafe { world.archetypes.get_unchecked(old_arche_id) };
+        let bundle_info = unsafe { world.bundles.get_unchecked(explicit_bundle_id) };
+        let explicit_components = bundle_info.components();
+        if explicit_components
+            .iter()
+            .all(|&id| arche_info.contains_component(id))
+        {
+            return;
+        }
+
+        self.insert_with_caller(f(), link_hook_mode, caller);
+    }
+
+    #[inline]
+    pub(crate) fn insert_with_caller<B: Bundle>(
+        &mut self,
+        bundle: B,
+        link_hook_mode: LinkHookMode,
+        caller: DebugLocation,
+    ) {
         self.assert_is_spawned_with_caller(caller);
 
         let world = unsafe { self.world.full_mut() };
@@ -70,7 +118,14 @@ impl EntityOwned<'_> {
         voker_ptr::into_owning!(bundle);
 
         if old_arche_id == new_arche_id {
-            insert_local(self, bundle, explicit_bundle_id, B::write_explicit, caller);
+            insert_local(
+                self,
+                bundle,
+                explicit_bundle_id,
+                B::write_explicit,
+                link_hook_mode,
+                caller,
+            );
         } else {
             insert_moved(
                 self,
@@ -79,6 +134,7 @@ impl EntityOwned<'_> {
                 explicit_bundle_id,
                 B::write_explicit,
                 B::write_required,
+                link_hook_mode,
                 caller,
             );
         }
@@ -93,6 +149,7 @@ fn insert_local(
     data: OwningPtr<'_>,
     explicit_bundle_id: BundleId,
     write_explicit: unsafe fn(&mut ComponentWriter, usize),
+    link_hook_mode: LinkHookMode,
     caller: DebugLocation,
 ) {
     let entity = this.entity;
@@ -111,9 +168,17 @@ fn insert_local(
     {
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        arche.discard_hooks().iter().for_each(|&(id, hook)| {
+        arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
             if bundle.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -132,9 +197,17 @@ fn insert_local(
     {
         // trigger_on_insert
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        arche.insert_hooks().iter().for_each(|&(id, hook)| {
+        arche.on_insert_hooks().iter().for_each(|&(id, hook)| {
             if bundle.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -153,6 +226,7 @@ fn insert_moved(
     explicit_bundle_id: BundleId,
     write_explicit: unsafe fn(&mut ComponentWriter, usize),
     write_required: unsafe fn(&mut ComponentWriter),
+    link_hook_mode: LinkHookMode,
     caller: DebugLocation,
 ) {
     let entity = this.entity;
@@ -177,9 +251,17 @@ fn insert_moved(
     {
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        old_arche.discard_hooks().iter().for_each(|&(id, hook)| {
+        old_arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
             if bundle.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -209,7 +291,7 @@ fn insert_moved(
                 tables.as_mut_slice().get_disjoint_unchecked_mut(indices)
             };
             let new_row = unsafe {
-                let (moved, new) = old_table.move_to_and_forget_missing(table_row, new_table);
+                let (moved, new) = old_table.move_row::<false>(table_row, new_table);
                 unsafe_world.full_mut().entities.update_row(moved).unwrap();
                 new
             };
@@ -238,9 +320,17 @@ fn insert_moved(
     {
         // trigger_on_add
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        new_arche.add_hooks().iter().for_each(|&(id, hook)| {
+        new_arche.on_add_hooks().iter().for_each(|&(id, hook)| {
             if !old_arche.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }
@@ -248,9 +338,17 @@ fn insert_moved(
     {
         // trigger_on_insert
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        new_arche.insert_hooks().iter().for_each(|&(id, hook)| {
+        new_arche.on_insert_hooks().iter().for_each(|&(id, hook)| {
             if !old_arche.contains_component(id) || bundle.contains_component(id) {
-                hook(world.reborrow(), HookContext { id, entity, caller });
+                hook(
+                    world.reborrow(),
+                    HookContext {
+                        id,
+                        entity,
+                        caller,
+                        link_hook_mode,
+                    },
+                );
             }
         });
     }

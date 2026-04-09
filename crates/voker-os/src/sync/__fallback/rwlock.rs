@@ -7,7 +7,7 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use super::{LockResult, TryLockError, TryLockResult};
-use crate::atomic::AtomicU32;
+use crate::sync::atomic::AtomicU32;
 
 /// Fallback implementation of `RwLock` from the standard library.
 ///

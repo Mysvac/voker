@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use voker_utils::hash::NoOpHashMap;
 
-use crate::error::EcsError;
+use crate::error::GameError;
 use crate::prelude::Resource;
 use crate::system::{IntoSystem, System, SystemId, SystemInput};
 use crate::world::World;
@@ -40,7 +40,7 @@ impl World {
         &mut self,
         mut system: BoxedSystem<I, O>,
         input: I::Data<'_>,
-    ) -> Result<O, EcsError>
+    ) -> Result<O, GameError>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -128,7 +128,7 @@ impl World {
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
         input: I::Data<'_>,
-    ) -> Result<O, EcsError>
+    ) -> Result<O, GameError>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -149,7 +149,7 @@ impl World {
     pub fn run_system<O: 'static, M>(
         &mut self,
         system: impl IntoSystem<(), O, M> + 'static,
-    ) -> Result<O, EcsError> {
+    ) -> Result<O, GameError> {
         let opt = self.take_system::<(), O>(system.system_id());
         let system = opt.unwrap_or_else(|| self.build_system::<(), O, M>(system));
         self.run_system_internal::<(), O>(system, ())
@@ -162,17 +162,17 @@ impl World {
     ///
     /// This means you should call [`World::register_system`] before calling
     /// this function.
-    pub fn run_system_cached<I, O>(
+    pub fn run_system_cached<'i, I, O>(
         &mut self,
         system_id: SystemId,
-        input: I,
-    ) -> Result<Result<O, EcsError>, I>
+        input: I::Data<'i>,
+    ) -> Result<Result<O, GameError>, I::Data<'i>>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        match self.take_system::<(), O>(system_id) {
-            Some(system) => Ok(self.run_system_internal::<(), O>(system, ())),
+        match self.take_system::<I, O>(system_id) {
+            Some(system) => Ok(self.run_system_internal::<I, O>(system, input)),
             None => Err(input),
         }
     }

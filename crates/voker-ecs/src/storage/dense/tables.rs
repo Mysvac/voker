@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use voker_utils::hash::HashMap;
-use voker_utils::hash::hash_map::RawEntryMut;
+use voker_utils::hash::map::RawEntryMut;
 
 use super::{Table, TableId};
 use crate::component::{ComponentId, ComponentInfo, Components};

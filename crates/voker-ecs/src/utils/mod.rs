@@ -6,6 +6,7 @@ mod debug_location;
 mod debug_name;
 mod debug_unwrap;
 mod dropper;
+mod helper;
 mod ident_pool;
 mod on_panic;
 
@@ -19,4 +20,5 @@ pub use debug_unwrap::DebugCheckedUnwrap;
 pub use dropper::Dropper;
 pub use on_panic::ForgetEntityOnPanic;
 
+pub(crate) use helper::*;
 pub(crate) use ident_pool::SlicePool;

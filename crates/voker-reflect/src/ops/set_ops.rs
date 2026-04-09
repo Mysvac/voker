@@ -2,7 +2,7 @@ use alloc::{boxed::Box, vec::Vec};
 use core::cmp::Ordering;
 use core::{fmt, ops::Deref};
 
-use voker_utils::hash::{HashTable, hash_table};
+use voker_utils::hash::{HashTable, table};
 
 use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
@@ -318,7 +318,7 @@ impl<T: Reflect> FromIterator<T> for DynamicSet {
 
 impl IntoIterator for DynamicSet {
     type Item = Box<dyn Reflect>;
-    type IntoIter = hash_table::IntoIter<Self::Item>;
+    type IntoIter = table::IntoIter<Self::Item>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -328,10 +328,8 @@ impl IntoIterator for DynamicSet {
 
 impl<'a> IntoIterator for &'a DynamicSet {
     type Item = &'a dyn Reflect;
-    type IntoIter = core::iter::Map<
-        hash_table::Iter<'a, Box<dyn Reflect>>,
-        fn(&'a Box<dyn Reflect>) -> Self::Item,
-    >;
+    type IntoIter =
+        core::iter::Map<table::Iter<'a, Box<dyn Reflect>>, fn(&'a Box<dyn Reflect>) -> Self::Item>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -623,7 +621,7 @@ impl Set for DynamicSet {
     fn remove(&mut self, value: &dyn Reflect) -> bool {
         self.hash_table
             .find_entry(Self::internal_hash(value), Self::internal_eq(value))
-            .map(hash_table::OccupiedEntry::remove)
+            .map(table::OccupiedEntry::remove)
             .is_ok()
     }
 

@@ -33,7 +33,7 @@ impl Drop for ForgetEntityOnPanic<'_> {
 
         for table in world.storages.tables.iter_mut() {
             if let Some(row) = table.get_table_row(entity) {
-                let moved = unsafe { table.swap_remove_and_forget(row) };
+                let moved = unsafe { table.swap_remove::<false>(row) };
                 unsafe {
                     world.entities.update_row(moved).unwrap();
                 }

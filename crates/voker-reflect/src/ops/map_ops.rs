@@ -2,7 +2,7 @@ use alloc::{boxed::Box, vec::Vec};
 use core::cmp::Ordering;
 use core::fmt;
 
-use voker_utils::hash::{HashTable, hash_table};
+use voker_utils::hash::{HashTable, table};
 
 use super::{impl_dynamic_type_info, impl_dynamic_type_path};
 use crate::Reflect;
@@ -326,7 +326,7 @@ impl<K: Reflect, V: Reflect> FromIterator<(K, V)> for DynamicMap {
 
 impl IntoIterator for DynamicMap {
     type Item = (Box<dyn Reflect>, Box<dyn Reflect>);
-    type IntoIter = hash_table::IntoIter<Self::Item>;
+    type IntoIter = table::IntoIter<Self::Item>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -337,7 +337,7 @@ impl IntoIterator for DynamicMap {
 impl<'a> IntoIterator for &'a DynamicMap {
     type Item = (&'a dyn Reflect, &'a dyn Reflect);
     type IntoIter = core::iter::Map<
-        hash_table::Iter<'a, (Box<dyn Reflect>, Box<dyn Reflect>)>,
+        table::Iter<'a, (Box<dyn Reflect>, Box<dyn Reflect>)>,
         fn(&'a (Box<dyn Reflect>, Box<dyn Reflect>)) -> Self::Item,
     >;
 

@@ -31,11 +31,9 @@ impl ResSet {
 
     /// Updates all resource ticks to prevent overflow.
     pub(crate) fn check_ticks(&mut self, now: Tick) {
-        let fall_back = now.relative_to(Tick::MAX_AGE);
-
         self.data.iter_mut().for_each(|data| {
             if let Some(data) = data {
-                data.quick_check(now, fall_back);
+                data.check_ticks(now);
             }
         });
     }

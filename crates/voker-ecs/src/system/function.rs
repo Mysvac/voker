@@ -1,5 +1,5 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
-use crate::error::EcsError;
+use crate::error::GameError;
 use crate::system::{IntoSystem, SystemId, UninitSystemError};
 use crate::tick::Tick;
 use crate::utils::DebugName;
@@ -293,7 +293,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: crate::world::UnsafeWorld<'_>,
-    ) -> Result<Self::Output, EcsError> {
+    ) -> Result<Self::Output, GameError> {
         let Some(state) = &mut self.state else {
             return Err(uninit_system_error(self.meta.id().name()));
         };
@@ -340,8 +340,8 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
 
 #[cold]
 #[inline(never)]
-fn uninit_system_error(name: DebugName) -> EcsError {
-    EcsError::from(UninitSystemError { name })
+fn uninit_system_error(name: DebugName) -> GameError {
+    GameError::from(UninitSystemError { name })
 }
 
 #[cold]

@@ -7,6 +7,7 @@ use crate::archetype::Archetype;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::ComponentWriter;
 use crate::entity::{AllocEntitiesIter, Entity, EntityLocation, SpawnError};
+use crate::link::LinkHookMode;
 use crate::storage::Table;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
@@ -96,8 +97,9 @@ impl<'a> BundleSpawner<'a> {
 
         {
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            arche.trigger_on_add(entity, world.reborrow());
-            arche.trigger_on_insert(entity, world.reborrow());
+            let link_hook_mode = LinkHookMode::Run;
+            arche.trigger_on_add(entity, world.reborrow(), link_hook_mode, self.caller);
+            arche.trigger_on_insert(entity, world.reborrow(), link_hook_mode, self.caller);
         }
 
         // We do not flush World here, ensure the location is valid.

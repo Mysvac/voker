@@ -53,6 +53,7 @@ pub mod archetype;
 pub mod entity;
 
 pub mod label;
+pub mod link;
 pub mod query;
 pub mod schedule;
 pub mod system;
@@ -72,7 +73,8 @@ pub mod prelude {
     pub use crate::command::{Command, Commands, EntityCommands};
     pub use crate::component::{Component, ComponentHook, ComponentId, HookContext};
     pub use crate::entity::{Entity, EntityId, EntityLocation, EntityTag};
-    pub use crate::error::{EcsError, ErrorContext, ErrorHandler, FallbackErrorHandler};
+    pub use crate::entity::{EntityHashMap, EntityHashSet, EntityIndexMap, EntityIndexSet};
+    pub use crate::error::{ErrorContext, ErrorHandler, FallbackErrorHandler, GameError};
     pub use crate::message::{Message, MessageMutator, MessageReader, MessageWriter, Messages};
     pub use crate::name::Name;
     pub use crate::query::{Added, And, Changed, Or, Query, With, Without};

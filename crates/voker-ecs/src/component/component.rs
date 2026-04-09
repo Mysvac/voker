@@ -3,6 +3,7 @@
 use super::{Required, StorageMode};
 use crate::component::hook::ComponentHook;
 use crate::entity::EntityMapper;
+use crate::link::LinkRegistrar;
 use crate::utils::{Cloner, Dropper};
 
 // -----------------------------------------------------------------------------
@@ -133,17 +134,31 @@ pub trait Component: Clone + Send + Sync + 'static {
     /// The function pointer of [`Drop`].
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
 
+    /// The function pointer of [`Clone`] or [`Copy`].
     const CLONER: Cloner = Cloner::clonable::<Self>();
 
     /// The required components, default is `None`.
     const REQUIRED: Option<Required> = None;
 
+    /// Component Hook - OnAdd
     const ON_ADD: Option<ComponentHook> = None;
+
+    /// Component Hook - OnClone
     const ON_CLONE: Option<ComponentHook> = None;
+
+    /// Component Hook - OnInsert
     const ON_INSERT: Option<ComponentHook> = None;
+
+    /// Component Hook - OnRemove
     const ON_REMOVE: Option<ComponentHook> = None;
+
+    /// Component Hook - OnDiscard
     const ON_DISCARD: Option<ComponentHook> = None;
+
+    /// Component Hook - OnDespawn
     const ON_DESPAWN: Option<ComponentHook> = None;
+
+    const LINK_REGISTRAR: Option<LinkRegistrar> = None;
 
     #[inline(always)]
     #[expect(unused_variables, reason = "default implementation")]

@@ -341,9 +341,10 @@ impl Column {
     /// - `len` must be the number of initialized items
     #[inline]
     pub unsafe fn check_ticks(&mut self, len: usize, now: Tick) {
+        use crate::utils::check_slice_tick;
         unsafe {
-            Tick::slice_check(self.added.get_slice_mut().as_mut(len), now);
-            Tick::slice_check(self.changed.get_slice_mut().as_mut(len), now);
+            check_slice_tick(self.added.get_slice_mut().as_mut(len), now);
+            check_slice_tick(self.changed.get_slice_mut().as_mut(len), now);
         }
     }
 

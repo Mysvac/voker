@@ -485,7 +485,7 @@ impl Table {
     /// # Safety
     /// - `table_row` must be a valid, initialized row
     /// - After this operation, the row is no longer valid
-    pub unsafe fn swap_remove_and_drop(&mut self, table_row: TableRow) -> MovedEntityRow {
+    pub unsafe fn swap_remove<const DROP: bool>(&mut self, table_row: TableRow) -> MovedEntityRow {
         let removal = table_row.0 as usize;
         let last = self.entity_count() - 1;
         debug_assert!(removal <= last);
@@ -494,55 +494,33 @@ impl Table {
             if removal != last {
                 let swapped = self.entities.move_last_to(last, removal);
                 self.columns.iter_mut().for_each(|c| {
-                    c.swap_drop_not_last(removal, last);
+                    if DROP {
+                        c.swap_drop_not_last(removal, last);
+                    } else {
+                        c.swap_forget_not_last(removal, last);
+                    }
                 });
                 MovedEntityRow::in_table(Some(swapped), table_row)
             } else {
                 voker_utils::cold_path();
                 self.entities.set_len(last);
-                self.columns.iter_mut().for_each(|c| {
-                    c.drop_item(last);
-                });
+                if DROP {
+                    self.columns.iter_mut().for_each(|c| {
+                        c.drop_item(last);
+                    });
+                }
                 MovedEntityRow::in_table(None, table_row)
             }
         }
     }
 
-    /// Removes an entity by swapping with the last row without dropping its components.
-    ///
-    /// # Safety
-    /// - `table_row` must be a valid, initialized row
-    /// - Caller must ensure components are properly handled elsewhere
-    /// - After this operation, the row is no longer valid
-    pub unsafe fn swap_remove_and_forget(&mut self, table_row: TableRow) -> MovedEntityRow {
-        let removal = table_row.0 as usize;
-        let last = self.entity_count() - 1;
-        debug_assert!(removal <= last);
-
-        unsafe {
-            if removal != last {
-                let swapped = self.entities.move_last_to(last, removal);
-                self.columns.iter_mut().for_each(|c| {
-                    c.swap_forget_not_last(removal, last);
-                });
-
-                MovedEntityRow::in_table(Some(swapped), table_row)
-            } else {
-                voker_utils::cold_path();
-                self.entities.set_len(last);
-                // `Column::forget_item` do nothing.
-                MovedEntityRow::in_table(None, table_row)
-            }
-        }
-    }
-
-    /// Moves an entity to another table, dropping components not present in the destination.
+    /// Moves an entity to another table.
     ///
     /// # Safety
     /// - `table_row` must be a valid, initialized row in this table
     /// - `other` must be a valid table
     /// - Components are properly moved or dropped based on presence in destination
-    pub unsafe fn move_to_and_drop_missing(
+    pub unsafe fn move_row<const DROP: bool>(
         &mut self,
         table_row: TableRow,
         other: &mut Table,
@@ -566,67 +544,11 @@ impl Table {
                             let other_col = other.get_column_mut(table_col);
                             col.move_item_to(other_col, src, dst);
                             col.swap_forget_not_last(src, last);
-                        } else {
+                        } else if DROP {
                             col.swap_drop_not_last(src, last);
-                        }
-                    });
-
-                (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
-            } else {
-                voker_utils::cold_path();
-                let moved = self.entities.remove_last(last);
-                let new_row = other.allocate(moved);
-                let dst = new_row.0 as usize;
-
-                self.compnents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
                         } else {
-                            col.drop_item(last);
+                            col.swap_forget_not_last(src, last);
                         }
-                    });
-
-                (MovedEntityRow::in_table(None, table_row), new_row)
-            }
-        }
-    }
-
-    /// Moves an entity to another table, forgetting components not present in the destination.
-    ///
-    /// # Safety
-    /// - `table_row` must be a valid, initialized row in this table
-    /// - `other` must be a valid table
-    /// - Components not present in destination are forgotten (not dropped)
-    /// - Caller must ensure forgotten components are handled elsewhere
-    pub unsafe fn move_to_and_forget_missing(
-        &mut self,
-        table_row: TableRow,
-        other: &mut Table,
-    ) -> (MovedEntityRow, TableRow) {
-        let src = table_row.0 as usize;
-        let last = self.entity_count() - 1;
-        debug_assert!(src <= last);
-
-        unsafe {
-            if src != last {
-                let moved = *self.entities.get_unchecked(src);
-                let swapped = self.entities.move_last_to(last, src);
-                let new_row = other.allocate(moved);
-                let dst = new_row.0 as usize;
-
-                self.compnents
-                    .iter()
-                    .zip(self.columns.iter_mut())
-                    .for_each(|(&id, col)| {
-                        if let Some(table_col) = other.get_table_col(id) {
-                            let other_col = other.get_column_mut(table_col);
-                            col.move_item_to(other_col, src, dst);
-                        }
-                        col.swap_forget_not_last(src, last);
                     });
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
@@ -643,6 +565,8 @@ impl Table {
                         if let Some(table_col) = other.get_table_col(id) {
                             let other_col = other.get_column_mut(table_col);
                             col.move_item_to(other_col, src, dst);
+                        } else if DROP {
+                            col.drop_item(last);
                         }
                     });
 

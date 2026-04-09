@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
+use crate::command::Commands;
 use crate::entity::{AllocEntitiesIter, Entity, FetchError};
 use crate::world::{EntityMut, EntityOwned, EntityRef, UnsafeWorld, World};
 
@@ -100,6 +101,54 @@ impl World {
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn entity_owned<E: FetchEntities>(&mut self, entities: E) -> E::Owned<'_> {
         self.get_entity_owned::<E>(entities).unwrap()
+    }
+
+    /// Simultaneously provides access to entity data and a command queue, which
+    /// will be applied when the world is next flushed.
+    ///
+    /// This allows using borrowed entity data to construct commands where the
+    /// borrow checker would otherwise prevent it.
+    ///
+    /// See [`DeferredWorld::entities_and_commands`] for the deferred version.
+    ///
+    /// [`DeferredWorld::entities_and_commands`]: crate::world::DeferredWorld::entities_and_commands
+    #[inline]
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher<'_>, Commands<'_, '_>) {
+        let unsafe_world = self.unsafe_world();
+        let queue = unsafe { &mut unsafe_world.data_mut().command_queue };
+        let fetcher = EntityFetcher(unsafe_world);
+        let commands = Commands::new(unsafe { unsafe_world.data_mut() }, queue);
+        (fetcher, commands)
+    }
+}
+
+/// Provides a safe interface for non-structural access to the entities in a [`World`].
+///
+/// This cannot add or remove components, or spawn or despawn entities,
+/// making it relatively safe to access in concert with other ECS data.
+/// This type can be constructed via [`World::entities_and_commands`],
+/// or [`DeferredWorld::entities_and_commands`].
+///
+/// [`World::entities_and_commands`]: crate::world::World::entities_and_commands
+/// [`DeferredWorld::entities_and_commands`]: crate::world::DeferredWorld::entities_and_commands
+#[repr(transparent)]
+pub struct EntityFetcher<'w>(UnsafeWorld<'w>);
+
+impl<'w> EntityFetcher<'w> {
+    /// Returns a shared entity view with cached tick context.
+    ///
+    /// Return `Err(FetchError)` if the entity is not spawned or not exists.
+    #[inline]
+    pub fn get_ref<E: FetchEntities>(&self, entities: E) -> Result<E::Ref<'_>, FetchError> {
+        unsafe { E::fetch_ref(entities, self.0) }
+    }
+
+    /// Returns a mutable entity view with cached tick context.
+    ///
+    /// Return `Err(FetchError)` if the entity is not spawned or not exists.
+    #[inline]
+    pub fn get_mut<E: FetchEntities>(&mut self, entities: E) -> Result<E::Mut<'_>, FetchError> {
+        unsafe { E::fetch_mut(entities, self.0) }
     }
 }
 

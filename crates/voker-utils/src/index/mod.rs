@@ -11,5 +11,5 @@ pub mod set;
 pub use map::IndexMap;
 pub use set::IndexSet;
 
-// pub use map::SparseIndexMap;
-// pub use set::SparseIndexSet;
+pub use map::SparseIndexMap;
+pub use set::SparseIndexSet;

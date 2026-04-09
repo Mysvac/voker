@@ -8,9 +8,9 @@
 
 mod hasher;
 
-pub mod hash_map;
-pub mod hash_set;
-pub mod hash_table;
+pub mod map;
+pub mod set;
+pub mod table;
 
 // -----------------------------------------------------------------------------
 // Exports
@@ -19,9 +19,9 @@ pub use hasher::{FixedHashState, FixedHasher};
 pub use hasher::{NoOpHashState, NoOpHasher};
 pub use hasher::{SparseHashState, SparseHasher};
 
-pub use hash_map::{HashMap, NoOpHashMap, SparseHashMap};
-pub use hash_set::{HashSet, NoOpHashSet, SparseHashSet};
-pub use hash_table::HashTable;
+pub use map::{HashMap, NoOpHashMap, SparseHashMap};
+pub use set::{HashSet, NoOpHashSet, SparseHashSet};
+pub use table::HashTable;
 
 pub use hashbrown::Equivalent;
 

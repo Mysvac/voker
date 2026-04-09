@@ -359,6 +359,7 @@ impl Entities {
         Ok(())
     }
 
+    /// Returns an iterator over spawned entitied.
     pub fn iter(&self) -> impl FusedIterator<Item = (Entity, EntityLocation)> {
         self.infos.iter().enumerate().filter_map(|(idx, info)| {
             if let Some(location) = info.location {

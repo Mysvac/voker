@@ -106,9 +106,9 @@ impl ResData {
 
     /// Updates ticks with quick-check logic.
     #[inline(always)]
-    pub(super) fn quick_check(&mut self, now: Tick, fall_back: Tick) {
-        Tick::quick_check(&mut self.added, now, fall_back);
-        Tick::quick_check(&mut self.changed, now, fall_back);
+    pub(super) fn check_ticks(&mut self, now: Tick) {
+        Tick::check_tick(&mut self.added, now);
+        Tick::check_tick(&mut self.changed, now);
     }
 }
 

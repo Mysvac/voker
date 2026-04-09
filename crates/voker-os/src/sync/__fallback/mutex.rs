@@ -2,7 +2,7 @@
 
 use core::cell::UnsafeCell;
 use core::fmt;
-use core::opt::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut};
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use super::{LockResult, TryLockError, TryLockResult};

@@ -2,7 +2,7 @@
 // Modules
 
 mod fixed;
-// mod sparse;
+mod sparse;
 
 // -----------------------------------------------------------------------------
 // Re-Exports
@@ -16,4 +16,4 @@ pub use indexmap::map::{MutableEntryKey, MutableKeys, Slice};
 // Exports
 
 pub use fixed::IndexMap;
-// pub use sparse::SparseIndexMap;
+pub use sparse::SparseIndexMap;
