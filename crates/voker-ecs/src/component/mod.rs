@@ -25,7 +25,7 @@ pub use voker_ecs_derive::Component;
 
 pub use component::Component;
 pub use components::Components;
-pub use hook::*;
+pub use hook::{ComponentHook, ComponentHooks, HookContext};
 pub use ident::ComponentId;
 pub use info::{ComponentDescriptor, ComponentInfo};
 pub use required::{Required, RequiredComponents};

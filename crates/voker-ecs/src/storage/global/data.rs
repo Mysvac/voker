@@ -22,6 +22,8 @@ impl Drop for AbortOnDropFail {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
+        log::error!("Aborting due to drop component panicked.");
+
         crate::cfg::std! {
             if {
                 ::std::eprintln!("Aborting due to drop resource panicked.");
@@ -147,7 +149,7 @@ impl ResData {
 
     /// Returns the debug name of the resource type.
     #[inline(always)]
-    pub fn debug_name(&self) -> DebugName {
+    pub fn name(&self) -> DebugName {
         self.name
     }
 

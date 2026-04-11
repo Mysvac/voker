@@ -6,11 +6,12 @@ use super::queue::RawCommandQueue;
 use super::{Command, CommandQueue, EntityCommand};
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
-use crate::error::{ErrorHandler, GameError};
+use crate::error::ErrorHandler;
 use crate::message::Message;
 use crate::prelude::{Resource, ScheduleLabel};
 use crate::system::{
     AccessTable, IntoSystem, ReadOnlySystemParam, SystemId, SystemInput, SystemMeta, SystemParam,
+    SystemParamError,
 };
 use crate::tick::Tick;
 use crate::utils::DebugLocation;
@@ -73,9 +74,9 @@ impl RefUnwindSafe for Commands<'_, '_> {}
 ///     }
 /// }
 /// ```
-pub struct EntityCommands<'w, 's> {
+pub struct EntityCommands<'a> {
     entity: Entity,
-    commands: Commands<'w, 's>,
+    commands: Commands<'a, 'a>,
 }
 
 // -----------------------------------------------------------------------------
@@ -110,7 +111,7 @@ unsafe impl SystemParam for Commands<'_, '_> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         Ok(Commands::new(unsafe { world.read_only() }, state))
     }
 
@@ -183,7 +184,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// Validity is checked when queued commands are executed, not when they are
     /// queued. The entity may be despawned before application time.
     #[inline]
-    pub fn with_entity(&mut self, entity: Entity) -> EntityCommands<'_, '_> {
+    pub fn with_entity(&mut self, entity: Entity) -> EntityCommands<'_> {
         EntityCommands {
             entity,
             commands: self.reborrow(),
@@ -200,10 +201,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// Returns [`FetchError`] if the requested entity does not currently exist.
     #[inline]
     #[track_caller]
-    pub fn try_with_entity(
-        &mut self,
-        entity: Entity,
-    ) -> Result<EntityCommands<'_, '_>, FetchError> {
+    pub fn try_with_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
         let _ = self.world.entities.locate(entity)?;
         Ok(self.with_entity(entity))
     }
@@ -248,7 +246,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// [`spawn_batch`](Self::spawn_batch) can be used for better performance.
     #[inline]
     #[track_caller]
-    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_, '_> {
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
         let caller = DebugLocation::caller();
         let entity = self.world.alloc_entity();
 
@@ -283,12 +281,7 @@ impl<'w, 's> Commands<'w, 's> {
     #[inline]
     #[track_caller]
     pub fn despawn(&mut self, entity: Entity) {
-        let caller = DebugLocation::caller();
-        self.push(move |world: &mut World| {
-            if let Err(e) = world.try_despawn(entity) {
-                log::info!("{e}: {caller}");
-            }
-        });
+        self.push(super::despawn(entity));
     }
 
     /// Despawns an entity and removes all of its components.
@@ -296,9 +289,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// No-op if the entity is already despawned.
     #[inline]
     pub fn try_despawn(&mut self, entity: Entity) {
-        self.push(move |world: &mut World| {
-            world.despawn(entity);
-        });
+        self.push(super::try_despawn(entity));
     }
 
     /// Despawns many entities from iterator.
@@ -309,11 +300,7 @@ impl<'w, 's> Commands<'w, 's> {
     where
         I: IntoIterator<Item = Entity> + Send + Sync + 'static,
     {
-        self.push(move |world: &mut World| {
-            for entity in batch {
-                world.despawn(entity);
-            }
-        });
+        self.push(super::despawn_batch(batch));
     }
 
     /// Initializes a [`Resource`] in the [`World`] using [`FromWorld`].
@@ -419,7 +406,7 @@ impl<'w, 's> Commands<'w, 's> {
 // -----------------------------------------------------------------------------
 // EntityCommands Implementation
 
-impl<'w, 's> EntityCommands<'w, 's> {
+impl<'a> EntityCommands<'a> {
     /// Returns the target [`Entity`] id.
     #[inline]
     pub fn entity(&self) -> Entity {
@@ -430,7 +417,7 @@ impl<'w, 's> EntityCommands<'w, 's> {
     ///
     /// This is useful if you have `&mut EntityCommands` but you need `EntityCommands`.
     #[inline]
-    pub fn reborrow(&mut self) -> EntityCommands<'_, '_> {
+    pub fn reborrow(&mut self) -> EntityCommands<'_> {
         EntityCommands {
             entity: self.entity,
             commands: self.commands.reborrow(),
@@ -443,7 +430,7 @@ impl<'w, 's> EntityCommands<'w, 's> {
     }
 
     /// Returns a mutable reference to the underlying [`Commands`].
-    pub fn commands_mut(&mut self) -> &mut Commands<'w, 's> {
+    pub fn commands_mut(&mut self) -> &mut Commands<'a, 'a> {
         &mut self.commands
     }
 

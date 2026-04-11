@@ -1,10 +1,7 @@
 use core::any::TypeId;
 use core::fmt::{Debug, Display};
 use core::hash::Hash;
-use core::marker::PhantomData;
 
-use crate::entity::Entity;
-use crate::system::SystemInput;
 use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
@@ -72,54 +69,5 @@ impl Debug for SystemId {
 impl Display for SystemId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.name)
-    }
-}
-
-// -----------------------------------------------------------------------------
-// SystemEntity
-
-/// A unique identifier for a system.
-#[derive(PartialEq, Eq, Hash)]
-pub struct SystemEntity<I: SystemInput, O> {
-    id: SystemId,
-    entity: Entity,
-    _maker: PhantomData<fn(I) -> O>,
-}
-
-impl<I: SystemInput, O> Clone for SystemEntity<I, O> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<I: SystemInput, O> Copy for SystemEntity<I, O> {}
-
-impl<I: SystemInput, O> Debug for SystemEntity<I, O> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("SystemEntity")
-            .field(&self.id)
-            .field(&self.entity)
-            .finish()
-    }
-}
-
-impl<I: SystemInput, O> SystemEntity<I, O> {
-    #[inline(always)]
-    pub const fn new(id: SystemId, entity: Entity) -> Self {
-        Self {
-            id,
-            entity,
-            _maker: PhantomData,
-        }
-    }
-
-    #[inline(always)]
-    pub const fn id(self) -> SystemId {
-        self.id
-    }
-
-    #[inline(always)]
-    pub const fn entity(self) -> Entity {
-        self.entity
     }
 }

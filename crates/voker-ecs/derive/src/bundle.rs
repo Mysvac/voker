@@ -83,8 +83,6 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
         }
     };
 
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
     let collect_explicit_calls = field_access.iter().map(|(_, ty)| {
         quote! {
             <#ty as #bundle_>::collect_explicit(__collector__);
@@ -113,6 +111,8 @@ pub(crate) fn impl_derive_bundle(ast: DeriveInput) -> proc_macro::TokenStream {
             }
         }
     });
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
         const _: () = {

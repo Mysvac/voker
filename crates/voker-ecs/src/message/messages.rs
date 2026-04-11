@@ -4,7 +4,7 @@ use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
-use crate::message::MessageIdIterator;
+use crate::message::MessageIdIter;
 use crate::message::{Message, MessageId};
 use crate::resource::Resource;
 use crate::utils::DebugName;
@@ -175,11 +175,11 @@ impl<M: Message> Messages<M> {
     }
 
     /// Appends a batch of messages and returns the generated id range.
-    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIterator<M> {
+    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIter<M> {
         let last = self.counter;
         self.extend(messages);
         let end = self.counter;
-        MessageIdIterator {
+        MessageIdIter {
             last,
             end,
             _marker: PhantomData,

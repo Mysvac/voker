@@ -6,9 +6,11 @@ use voker_utils::extra::TypeIdMap;
 
 use super::{Message, Messages};
 use crate::resource::Resource;
+use crate::utils::DebugName;
 use crate::world::World;
 
 struct MessageMeta {
+    name: DebugName,
     type_id: TypeId,
     update: fn(&mut World),
 }
@@ -25,8 +27,8 @@ pub struct MessageRegistry {
 
 impl Debug for MessageRegistry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("MessageRegistry")
-            .field("len", &self.messages.len())
+        f.debug_list()
+            .entries(self.messages.iter().map(|meta| meta.name))
             .finish()
     }
 }
@@ -62,6 +64,7 @@ impl MessageRegistry {
         let index = self.messages.len();
         self.messages.push(MessageMeta {
             type_id,
+            name: DebugName::type_name::<T>(),
             update: update_messages::<T>,
         });
 

@@ -264,26 +264,6 @@ impl Column {
         }
     }
 
-    /// Swaps the item at `index` with the last item and returns the moved item.
-    ///
-    /// # Safety
-    /// - `index` must be < `last_index`
-    /// - Both `index` and `last_index` must be within bounds
-    /// - Both items must be properly initialized
-    #[inline]
-    #[must_use = "The returned pointer should be used."]
-    pub unsafe fn swap_remove_not_last(
-        &mut self,
-        index: usize,
-        last_index: usize,
-    ) -> OwningPtr<'_> {
-        unsafe {
-            self.added.move_last_to(last_index, index);
-            self.changed.move_last_to(last_index, index);
-            self.data.swap_remove_not_last(index, last_index)
-        }
-    }
-
     /// Swaps the item at `index` with the last item and forget the moved item.
     ///
     /// Actually, this function does not swap data.

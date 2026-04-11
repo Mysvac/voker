@@ -1,6 +1,5 @@
 use super::ComponentId;
 use crate::entity::Entity;
-use crate::link::LinkHookMode;
 use crate::utils::DebugLocation;
 use crate::world::DeferredWorld;
 
@@ -16,7 +15,6 @@ pub struct HookContext {
     pub id: ComponentId,
     pub entity: Entity,
     pub caller: DebugLocation,
-    pub link_hook_mode: LinkHookMode,
 }
 
 /// [`World`]-mutating functions that run as part of lifecycle events of a [`Component`].

@@ -99,6 +99,7 @@ impl Drop for Table {
     fn drop(&mut self) {
         let len = self.entity_count();
         let current_capacity = self.capacity();
+
         self.columns.iter_mut().for_each(|c| unsafe {
             c.drop_slice(len);
             c.dealloc(current_capacity);
@@ -136,19 +137,21 @@ impl Table {
     /// - The entity must be unique within this table
     /// - The returned row is valid until the entity is removed
     #[must_use]
-    pub unsafe fn allocate(&mut self, entity: Entity) -> TableRow {
+    pub unsafe fn alloc_row(&mut self, entity: Entity) -> TableRow {
         #[cold]
         #[inline(never)]
-        fn reserve_one(this: &mut Table) {
+        fn reserve_many(this: &mut Table) {
             let abort_guard = AbortOnPanic;
 
-            let old_capacity = this.entities.capacity();
+            let old_cap = this.entities.capacity();
             this.entities.reserve(1);
-            let new_capacity = this.entities.capacity();
+            let new_cap = this.entities.capacity();
+
+            assert!(new_cap <= u32::MAX as usize, "too many entities in a Table");
 
             unsafe {
-                let new_capacity = NonZeroUsize::new_unchecked(new_capacity);
-                if let Some(current) = NonZeroUsize::new(old_capacity) {
+                let new_capacity = NonZeroUsize::new_unchecked(new_cap);
+                if let Some(current) = NonZeroUsize::new(old_cap) {
                     this.columns.iter_mut().for_each(|col| {
                         col.realloc(current, new_capacity);
                     });
@@ -162,12 +165,46 @@ impl Table {
 
         let len = self.entities.len();
         if len == self.entities.capacity() {
-            reserve_one(self);
+            reserve_many(self);
         }
 
         self.entities.push(entity);
         // `0 < EntityId < u32::MAX`, so `len < u32::MAX`
         TableRow(len as u32)
+    }
+
+    /// Removes an entity by swapping with the last row and dropping its components.
+    ///
+    /// # Safety
+    /// - `table_row` must be a valid, initialized row
+    /// - After this operation, the row is no longer valid
+    pub unsafe fn dealloc_row<const DROP: bool>(&mut self, table_row: TableRow) -> MovedEntityRow {
+        let removal = table_row.0 as usize;
+        let last = self.entity_count() - 1;
+        debug_assert!(removal <= last);
+
+        unsafe {
+            if removal != last {
+                let swapped = self.entities.move_last_to(last, removal);
+                self.columns.iter_mut().for_each(|c| {
+                    if DROP {
+                        c.swap_drop_not_last(removal, last);
+                    } else {
+                        c.swap_forget_not_last(removal, last);
+                    }
+                });
+                MovedEntityRow::in_table(Some(swapped), table_row)
+            } else {
+                voker_utils::cold_path();
+                self.entities.set_len(last);
+                if DROP {
+                    self.columns.iter_mut().for_each(|c| {
+                        c.drop_item(last);
+                    });
+                }
+                MovedEntityRow::in_table(None, table_row)
+            }
+        }
     }
 
     /// Finds the column index for a given component ID using binary search.
@@ -474,46 +511,28 @@ impl Table {
             column.remove_item(table_row.0 as usize)
         }
     }
+
+    /// Drops the component data at the specified location without returning it.
+    ///
+    /// # Safety
+    /// - `table_row` and `table_col` must be valid
+    /// - The component slot must be initialized
+    /// - Caller must ensure the returned `OwningPtr` is properly handled
+    #[inline]
+    pub unsafe fn drop_item(&mut self, table_col: TableCol, table_row: TableRow) {
+        debug_assert!((table_row.0 as usize) < self.entity_count());
+
+        unsafe {
+            let column = self.get_column_mut(table_col);
+            column.drop_item(table_row.0 as usize)
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
 // Move, Init data
 
 impl Table {
-    /// Removes an entity by swapping with the last row and dropping its components.
-    ///
-    /// # Safety
-    /// - `table_row` must be a valid, initialized row
-    /// - After this operation, the row is no longer valid
-    pub unsafe fn swap_remove<const DROP: bool>(&mut self, table_row: TableRow) -> MovedEntityRow {
-        let removal = table_row.0 as usize;
-        let last = self.entity_count() - 1;
-        debug_assert!(removal <= last);
-
-        unsafe {
-            if removal != last {
-                let swapped = self.entities.move_last_to(last, removal);
-                self.columns.iter_mut().for_each(|c| {
-                    if DROP {
-                        c.swap_drop_not_last(removal, last);
-                    } else {
-                        c.swap_forget_not_last(removal, last);
-                    }
-                });
-                MovedEntityRow::in_table(Some(swapped), table_row)
-            } else {
-                voker_utils::cold_path();
-                self.entities.set_len(last);
-                if DROP {
-                    self.columns.iter_mut().for_each(|c| {
-                        c.drop_item(last);
-                    });
-                }
-                MovedEntityRow::in_table(None, table_row)
-            }
-        }
-    }
-
     /// Moves an entity to another table.
     ///
     /// # Safety
@@ -533,7 +552,7 @@ impl Table {
             if src != last {
                 let moved = *self.entities.get_unchecked(src);
                 let swapped = self.entities.move_last_to(last, src);
-                let new_row = other.allocate(moved);
+                let new_row = other.alloc_row(moved);
                 let dst = new_row.0 as usize;
 
                 self.compnents
@@ -555,7 +574,7 @@ impl Table {
             } else {
                 voker_utils::cold_path();
                 let moved = self.entities.remove_last(last);
-                let new_row = other.allocate(moved);
+                let new_row = other.alloc_row(moved);
                 let dst = new_row.0 as usize;
 
                 self.compnents

@@ -18,6 +18,8 @@ impl Drop for AbortOnDropFail {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
+        log::error!("Aborting due to drop component panicked.");
+
         crate::cfg::std! {
             if {
                 ::std::eprintln!("Aborting due to drop component panicked.");
@@ -74,7 +76,8 @@ impl BlobArray {
         let align = unsafe { NonZeroUsize::new_unchecked(item_layout.align()) };
 
         Self {
-            item_layout,
+            // Pad is required to support special layout types.
+            item_layout: item_layout.pad_to_align(),
             dropper,
             data: NonNull::without_provenance(align),
         }
@@ -123,12 +126,10 @@ impl BlobArray {
     /// - `current_capacity` must be the current allocated capacity
     /// - All items in this array must be properly dropped
     pub unsafe fn dealloc(&mut self, current_capacity: usize) {
-        if current_capacity != 0 {
+        if current_capacity != 0 && !self.is_zst() {
             unsafe {
-                if !self.is_zst() {
-                    let layout = array_layout_unchecked(self.item_layout, current_capacity);
-                    malloc::dealloc(self.data.as_ptr(), layout);
-                }
+                let layout = array_layout_unchecked(self.item_layout, current_capacity);
+                malloc::dealloc(self.data.as_ptr(), layout);
             }
         }
     }

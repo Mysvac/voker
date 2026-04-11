@@ -1,15 +1,17 @@
 use core::ops::Deref;
 
+use crate::archetype::Archetype;
 use crate::borrow::{NonSendMut, ResMut, UntypedMut};
 use crate::command::Commands;
 use crate::component::HookContext;
 use crate::entity::{Entity, FetchError};
-use crate::link::LinkHookMode;
-use crate::message::{Message, MessageId, MessageIdIterator};
+use crate::error::GameError;
+use crate::message::{Message, MessageId, MessageIdIter};
 use crate::prelude::{Component, ComponentId, Resource};
 use crate::query::{Query, QueryData, QueryFilter};
+use crate::system::{SystemId, SystemInput};
 use crate::utils::DebugLocation;
-use crate::world::{EntityFetcher, FetchEntities, UnsafeWorld, World};
+use crate::world::{EntityFetcher, FetchEntities, GetComponents, UnsafeWorld, World};
 
 /// A restricted mutable world handle for deferred mutation workflows.
 ///
@@ -93,10 +95,9 @@ impl<'w> DeferredWorld<'w> {
         Commands::new(world, queue)
     }
 
-    /// Returns mutable handles for one or more entities.
     #[inline]
-    pub fn entity_mut<E: FetchEntities>(&mut self, entities: E) -> E::Mut<'_> {
-        self.world_mut().entity_mut::<E>(entities)
+    pub fn get_mut<C: GetComponents>(&mut self, entity: Entity) -> Option<C::Mut<'_>> {
+        self.world_mut().get_mut::<C>(entity)
     }
 
     /// Tries to return mutable handles for one or more entities.
@@ -108,6 +109,12 @@ impl<'w> DeferredWorld<'w> {
         entities: E,
     ) -> Result<E::Mut<'_>, FetchError> {
         self.world_mut().get_entity_mut::<E>(entities)
+    }
+
+    /// Returns mutable handles for one or more entities.
+    #[inline]
+    pub fn entity_mut<E: FetchEntities>(&mut self, entities: E) -> E::Mut<'_> {
+        self.world_mut().entity_mut::<E>(entities)
     }
 
     /// Simultaneously provides access to entity data and a command queue, which
@@ -167,7 +174,7 @@ impl<'w> DeferredWorld<'w> {
     pub fn write_message_batch<M: Message>(
         &mut self,
         messages: impl IntoIterator<Item = M>,
-    ) -> Option<MessageIdIterator<M>> {
+    ) -> Option<MessageIdIter<M>> {
         self.world_mut().write_message_batch(messages)
     }
 
@@ -187,11 +194,24 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().query_cached()
     }
 
+    /// Runs a registered system by id and returns the input back on cache miss.
+    #[inline]
+    pub fn run_system_cached<'a, I, O>(
+        &mut self,
+        id: SystemId,
+        input: I::Data<'a>,
+    ) -> Result<O, GameError>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        self.world_mut().run_system_cached::<I, O>(id, input)
+    }
+
     #[inline]
     pub(crate) fn modify_component_with_caller<T: Component, R>(
         &mut self,
         entity: Entity,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
         f: impl FnOnce(&mut T) -> R,
     ) -> Result<Option<R>, FetchError> {
@@ -200,69 +220,49 @@ impl<'w> DeferredWorld<'w> {
             return Ok(None);
         };
 
-        self.modify_component_by_id_with_caller(
-            entity,
-            component_id,
-            link_hook_mode,
-            caller,
-            move |component| {
-                // SAFETY: component matches the component_id collected in the above line
-                let mut component = unsafe { component.with_type::<T>() };
+        self.modify_component_by_id_with_caller(entity, component_id, caller, move |component| {
+            // SAFETY: component matches the component_id collected in the above line
+            let mut component = unsafe { component.with_type::<T>() };
 
-                f(&mut component)
-            },
-        )
+            f(&mut component)
+        })
     }
 
     pub(crate) fn modify_component_by_id_with_caller<R>(
         &mut self,
         entity: Entity,
         component_id: ComponentId,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
         f: impl for<'a> FnOnce(UntypedMut<'a>) -> R,
     ) -> Result<Option<R>, FetchError> {
-        let entity_cell = self.get_entity_mut(entity)?;
+        let entity_mut = self.get_entity_mut(entity)?;
+        let arche = entity_mut.archetype();
 
-        if !entity_cell.contains_by_id(component_id) {
+        if !arche.contains_component(component_id) {
             return Ok(None);
         }
 
-        let archetype = &raw const *entity_cell.archetype();
-
+        let arche: *const Archetype = &raw const *arche;
         unsafe {
-            let archetype = &*archetype;
-            if !archetype.on_discard_hooks().is_empty() {
-                self.trigger_on_discard(
-                    entity,
-                    Some(component_id).into_iter(),
-                    link_hook_mode,
-                    caller,
-                );
+            let arche = &*arche;
+            if !arche.on_discard_hooks().is_empty() {
+                self.trigger_on_discard(entity, Some(component_id).into_iter(), caller);
             }
         }
 
-        let mut entity_cell = self.get_entity_mut(entity).expect("entity access confirmed above");
+        let mut entity_mut = self.get_entity_mut(entity).expect("entity access confirmed above");
 
         // SAFETY: we will run the required hooks to simulate removal/replacement.
-        let mut component = entity_cell
+        let mut component = entity_mut
             .get_mut_by_id(component_id)
             .expect("component access confirmed above");
 
         let result = f(component.reborrow());
 
-        // Simulate adding this component by updating the relevant ticks
-        *component.ticks.added = *component.ticks.changed;
-
         unsafe {
-            let archetype = &*archetype;
-            if !archetype.on_insert_hooks().is_empty() {
-                self.trigger_on_insert(
-                    entity,
-                    Some(component_id).into_iter(),
-                    link_hook_mode,
-                    caller,
-                );
+            let arche = &*arche;
+            if !arche.on_insert_hooks().is_empty() {
+                self.trigger_on_insert(entity, Some(component_id).into_iter(), caller);
             }
         }
 
@@ -279,22 +279,13 @@ macro_rules! define_trigger {
             &mut self,
             entity: Entity,
             targets: impl Iterator<Item = ComponentId>,
-            link_hook_mode: LinkHookMode,
             caller: DebugLocation,
         ) {
             for id in targets {
                 // SAFETY: Caller ensures that these components exist
                 let info = unsafe { self.components.get_unchecked(id) };
                 if let Some(hook) = info.$hook() {
-                    hook(
-                        DeferredWorld(self.0),
-                        HookContext {
-                            entity,
-                            id,
-                            caller,
-                            link_hook_mode,
-                        },
-                    );
+                    hook(DeferredWorld(self.0), HookContext { entity, id, caller });
                 }
             }
         }

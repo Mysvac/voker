@@ -1,4 +1,12 @@
-//! Provides pre-defined `Name` component.
+//! Pre-defined [`Name`] component for human-readable entity identifiers.
+//!
+//! [`Name`] is optimized for common ECS workflows where values are compared
+//! and looked up frequently:
+//! - it stores string data as [`Cow<'static, str>`],
+//! - and eagerly caches a stable hash for fast hashing and equality pre-checks.
+//!
+//! This type is intended for user-facing labels (debug UI, editor tools, logs),
+//! not as a globally unique identifier.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -14,10 +22,22 @@ use voker_utils::hash::FixedHashState;
 
 use voker_ecs_derive::Component;
 
-/// A pre-built component for representing names,
-/// stores a hash for faster comparisons.
+/// A pre-built component for representing names.
+///
+/// `Name` keeps the original string and a cached hash value.
+/// Equality first compares hashes, then validates the string content.
 ///
 /// The hash is eagerly re-computed upon each update to the name.
+///
+/// # Examples
+/// ```
+/// # use voker_ecs::name::Name;
+/// let mut name = Name::new("Player");
+/// assert_eq!(name.as_str(), "Player");
+///
+/// name.set("Hero");
+/// assert_eq!(name.as_str(), "Hero");
+/// ```
 #[derive(Component, Reflect, Clone)]
 #[reflect(Opaque, full)]
 pub struct Name {
@@ -77,6 +97,16 @@ impl Name {
     /// Creates a new [`Name`] from any string-like type.
     ///
     /// The internal hash will be computed immediately.
+    ///
+    /// # Examples
+    /// ```
+    /// # use voker_ecs::name::Name;
+    /// let borrowed = Name::new("Camera");
+    /// let owned = Name::new(String::from("Light"));
+    ///
+    /// assert_eq!(borrowed.as_str(), "Camera");
+    /// assert_eq!(owned.as_str(), "Light");
+    /// ```
     pub fn new(name: impl Into<Cow<'static, str>>) -> Self {
         let name = name.into();
         let mut name = Name { name, hash: 0 };
@@ -87,6 +117,14 @@ impl Name {
     /// Sets the entity's name.
     ///
     /// The internal hash will be re-computed.
+    ///
+    /// # Examples
+    /// ```
+    /// # use voker_ecs::name::Name;
+    /// let mut name = Name::new("Enemy");
+    /// name.set("Boss");
+    /// assert_eq!(name.as_str(), "Boss");
+    /// ```
     #[inline]
     pub fn set(&mut self, name: impl Into<Cow<'static, str>>) {
         *self = Name::new(name);
@@ -95,6 +133,15 @@ impl Name {
     /// Updates the name of the entity in place.
     ///
     /// The internal hash will be re-computed.
+    ///
+    /// # Examples
+    /// ```
+    /// # use voker_ecs::name::Name;
+    /// let mut name = Name::new("NPC");
+    /// name.mutate(|text| text.push_str("_A"));
+    ///
+    /// assert_eq!(name.as_str(), "NPC_A");
+    /// ```
     #[inline]
     pub fn mutate<F: FnOnce(&mut String)>(&mut self, f: F) {
         f(self.name.to_mut());
@@ -102,6 +149,13 @@ impl Name {
     }
 
     /// Gets the name of the entity as a `&str`.
+    ///
+    /// # Examples
+    /// ```
+    /// # use voker_ecs::name::Name;
+    /// let name = Name::new("Player");
+    /// assert_eq!(name.as_str(), "Player");
+    /// ```
     #[inline]
     pub fn as_str(&self) -> &str {
         &self.name

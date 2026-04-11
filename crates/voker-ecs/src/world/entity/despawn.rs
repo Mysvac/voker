@@ -1,5 +1,4 @@
 use crate::entity::Entity;
-use crate::link::LinkHookMode;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
@@ -53,7 +52,7 @@ impl EntityOwned<'_> {
         let guard = ForgetEntityOnPanic {
             entity,
             world: unsafe_world,
-            location: caller,
+            caller,
         };
 
         let world = unsafe { unsafe_world.full_mut() };
@@ -65,15 +64,25 @@ impl EntityOwned<'_> {
         {
             // Trigger component hooks
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            let link_hook_mode = LinkHookMode::Run;
-            arche.trigger_on_despawn(entity, world.reborrow(), link_hook_mode, caller);
-            arche.trigger_on_discard(entity, world.reborrow(), link_hook_mode, caller);
-            arche.trigger_on_remove(entity, world.reborrow(), link_hook_mode, caller);
+            arche.trigger_on_despawn(entity, world.reborrow(), caller);
+            arche.trigger_on_discard(entity, world.reborrow(), caller);
+            arche.trigger_on_remove(entity, world.reborrow(), caller);
+        }
+
+        {
+            // despawn entity
+            let world = unsafe { self.world.full_mut() };
+            unsafe {
+                world.entities.set_despawned(self.entity).unwrap_or_else(|e| {
+                    voker_utils::cold_path();
+                    panic!("The location is `EntityOwned` should be valid. {e}");
+                });
+            }
         }
 
         let move_res1 = {
             // move archetype
-            let arche_moved = unsafe { arche.remove_entity(arche_row) };
+            let arche_moved = unsafe { arche.dealloc_row(arche_row) };
             unsafe { world.entities.update_row(arche_moved) }
         };
 
@@ -82,7 +91,7 @@ impl EntityOwned<'_> {
             let table_id = location.table_id;
             let table_row = location.table_row;
             let table = unsafe { world.storages.tables.get_unchecked_mut(table_id) };
-            let table_moved = unsafe { table.swap_remove::<true>(table_row) };
+            let table_moved = unsafe { table.dealloc_row::<true>(table_row) };
             unsafe { world.entities.update_row(table_moved) }
         };
 
@@ -92,8 +101,8 @@ impl EntityOwned<'_> {
             arche.sparse_components().iter().for_each(|&cid| unsafe {
                 let map_id = maps.get_id(cid).debug_checked_unwrap();
                 let map = maps.get_unchecked_mut(map_id);
-                let map_row = map.deallocate(entity).unwrap();
-                map.drop_item(map_row);
+                let map_row = map.get_map_row(entity).unwrap();
+                map.dealloc_row::<true>(map_row);
             });
         }
 

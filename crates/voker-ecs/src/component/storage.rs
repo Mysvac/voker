@@ -66,7 +66,7 @@
 /// Sparse storage should be reserved for special flag components or rarely-present data.
 /// Additionally, sparse components should not be held by large numbers of entities to
 /// minimize random access during queries.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum StorageMode {
     #[default]
     Dense = 0,
@@ -74,11 +74,17 @@ pub enum StorageMode {
 }
 
 impl StorageMode {
+    /// Return true if self is `Dense`.
+    ///
+    /// This function can be used for const context.
     #[inline]
     pub const fn is_dense(self) -> bool {
         self as u8 == StorageMode::Dense as u8
     }
 
+    /// Return true if self is `Sparse`.
+    ///
+    /// This function can be used for const context.
     #[inline]
     pub const fn is_sparse(self) -> bool {
         self as u8 == StorageMode::Sparse as u8

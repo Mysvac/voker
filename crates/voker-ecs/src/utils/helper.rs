@@ -30,6 +30,9 @@ pub(crate) fn contains_entity(id: Entity, slice: &[Entity]) -> bool {
 /// Clamps a tick slice, optimized for bulk processing.
 ///
 /// See: https://godbolt.org/
+///
+/// Internal note: this performs representation casts to `u32` for better code
+/// generation and assumes `Tick` is layout-compatible with `u32`.
 pub(crate) fn check_slice_tick(this: &mut [Tick], now: Tick) {
     use core::mem::transmute;
 

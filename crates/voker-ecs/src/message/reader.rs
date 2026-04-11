@@ -1,7 +1,7 @@
 use crate::borrow::Res;
 use crate::message::{Message, MessageCursor, Messages};
 use crate::message::{MessageIterator, MessageWithIdIterator};
-use crate::system::{Local, ReadOnlySystemParam, SystemParam};
+use crate::system::{Local, ReadOnlySystemParam, SystemParam, SystemParamError};
 
 /// Read-only system parameter for consuming unread messages of type `M`.
 ///
@@ -84,7 +84,7 @@ unsafe impl<M: Message> SystemParam for MessageReader<'_, '_, M> {
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,
-    ) -> Result<Self::Item<'w, 's>, crate::error::GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         // SAFETY: same world/state/tick contract as delegated tuple parameter.
         let (cursor, messages) = unsafe {
             <InternalParam<M> as SystemParam>::build_param(world, state, last_run, this_run)?

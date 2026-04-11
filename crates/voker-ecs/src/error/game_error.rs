@@ -13,14 +13,14 @@ use thiserror::Error;
 /// to decide how to react (for example: ignore, log, or panic).
 ///
 /// To change the behavior of unhandled errors returned from systems,
-/// you can modify the [fallback error handler], and read the [`Severity`]
+/// you can replace the [fallback error handler], and read the [`Severity`]
 /// stored inside of each [`GameError`].
 ///
-/// You can change the severity of an error (including assigning an error severity)
-/// to an ordinary result by calling [`GameError::with_severity`].
+/// You can override the severity of an existing [`GameError`] by calling
+/// [`GameError::with_severity`].
 ///
-/// [`with_severity`]: ResultSeverityExt::with_severity
-/// [fallback error handler]: crate::error::handler::FallbackErrorHandler
+/// [`with_severity`]: GameError::with_severity
+/// [fallback error handler]: crate::error::FallbackErrorHandler
 #[derive(Debug, Clone, Copy, Hash)]
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
@@ -233,7 +233,7 @@ impl GameError {
     /// ```
     /// # use voker_ecs::error::{GameError, Severity};
     /// #
-    /// let err = GameError::panic("fatal").with_severity(Severity::Warning);
+    /// let err = GameError::panic("..").with_severity(Severity::Warning);
     /// assert_eq!(err.severity(), Severity::Warning);
     /// ```
     #[inline]
@@ -251,9 +251,16 @@ impl GameError {
     /// ```
     /// # use voker_ecs::error::{GameError, Severity};
     /// #
-    /// let err = GameError::info("fatal").with_severity(Severity::Warning);
+    /// let err = GameError::info("..").with_severity(Severity::Warning);
     /// assert_eq!(err.severity(), Severity::Warning);
     /// ```
+    #[inline]
+    pub fn merge_severity(mut self, severity: Severity) -> Self {
+        self.inner.severity = severity.max(self.inner.severity);
+        self
+    }
+
+    /// Map severity through given function.
     #[inline]
     pub fn map_severity(mut self, f: impl FnOnce(Severity) -> Severity) -> Self {
         self.inner.severity = f(self.inner.severity);
@@ -293,134 +300,5 @@ impl Debug for GameError {
         #[cfg(feature = "backtrace")]
         Debug::fmt(&self.inner.backtrace, f)?;
         Ok(())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// ToGameError
-
-/// A trait for types that can be converted into an optional [`GameError`].
-///
-/// **Important**: `ToGameError` is not equivalent to `Into<GameError>`.
-///
-/// This trait provides default implementations that enable elegant error handling patterns:
-///
-/// # Type Conversions
-///
-/// | Type | Conversion Result |
-/// |------|-------------------|
-/// | `()` | `None` (no error) |
-/// | `GameError` | `Some(error)` |
-/// | `Option<T>` where `T: ToGameError` | `None` if `None`, otherwise `T::to_err()` |
-/// | `Result<T, E>` where `T: ToGameError`, `E: Into<GameError>` | `T::to_err()` if `Ok`, `Some(error.into())` if `Err` |
-///
-/// # Usage Patterns
-///
-/// ```rust
-/// # use voker_ecs::error::{GameError, Severity, ToGameError};
-/// #
-/// // No error
-/// let result: Option<GameError> = ().to_err();
-/// assert!(result.is_none());
-///
-/// // Direct error
-/// let err = GameError::warning("something wrong");
-/// assert!(err.to_err().is_some());
-///
-/// // Result with unit Ok type
-/// let result: Result<(), &str> = Err("failed");
-/// assert!(result.to_err().is_some());
-///
-/// // Nesting
-/// let result: Result<Option<&str>, &str> = Ok(Some("failed"));
-/// assert!(result.to_err().is_some());
-///
-/// // Simply with severity
-/// let _: Option<GameError> = Err("failed").with_severity(Severity::Info);
-/// ```
-///
-/// # Remember
-/// - `()` represents "no error"
-/// - `GameError` represents "an error occurred"
-/// - `Result<(), E: Into<GameError>>` is the standard pattern for fallible operations
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not a valid `ToGameError` type",
-    note = "the type should be `()`, `GameError`, or an `Option/Result` that can be converted into `Option<GameError>`"
-)]
-pub trait ToGameError: Sized {
-    /// Converts the value into an optional [`GameError`].
-    ///
-    /// Returns `None` if the value represents success or absence of error,
-    /// or `Some(GameError)` if an error occurred.
-    fn to_err(self) -> Option<GameError>;
-
-    /// Converts the value into an optional [`GameError`] with the specified severity.
-    ///
-    /// - If the value represents an error, the severity is applied to the resulting [`GameError`].
-    /// - If the value represents success, `None` is returned regardless of the severity.
-    #[inline]
-    fn with_severity(self, severity: Severity) -> Option<GameError> {
-        self.to_err().map(|e| GameError::with_severity(e, severity))
-    }
-
-    /// Converts the value into an optional [`GameError`] and map it's severity through given function.
-    ///
-    /// - If the value represents an error, the severity is applied to the resulting [`GameError`].
-    /// - If the value represents success, `None` is returned regardless of the severity.
-    #[inline]
-    fn map_severity(self, f: impl FnOnce(Severity) -> Severity) -> Option<GameError> {
-        self.to_err().map(|e| GameError::map_severity(e, f))
-    }
-}
-
-impl ToGameError for () {
-    /// The unit type `()` represents the absence of an error.
-    ///
-    /// Always returns `None`.
-    #[inline(always)]
-    fn to_err(self) -> Option<GameError> {
-        None
-    }
-
-    #[inline(always)]
-    fn with_severity(self, _: Severity) -> Option<GameError> {
-        None
-    }
-
-    #[inline(always)]
-    fn map_severity(self, _: impl FnOnce(Severity) -> Severity) -> Option<GameError> {
-        None
-    }
-}
-
-impl ToGameError for GameError {
-    /// A [`GameError`] represents an error that occurred.
-    ///
-    /// Always returns `Some(self)`.
-    #[inline(always)]
-    fn to_err(self) -> Option<GameError> {
-        Some(self)
-    }
-}
-
-impl<T: ToGameError> ToGameError for Option<T> {
-    /// Propagates `None` or converts `Some(T)` using `T::to_err()`.
-    ///
-    /// Returns `None` if the option is `None`, otherwise returns `T::to_err()`.
-    fn to_err(self) -> Option<GameError> {
-        self.and_then(|e| e.to_err())
-    }
-}
-
-impl<T: ToGameError, E: Into<GameError>> ToGameError for Result<T, E> {
-    /// Converts a `Result` into an optional error.
-    ///
-    /// - `Ok(value)` -> `value.to_err()` (propagates success)
-    /// - `Err(error)` -> `Some(error.into())` (error occurred)
-    fn to_err(self) -> Option<GameError> {
-        match self {
-            Ok(v) => v.to_err(),
-            Err(e) => Some(e.into()),
-        }
     }
 }

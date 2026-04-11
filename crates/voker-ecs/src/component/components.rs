@@ -117,7 +117,7 @@ impl Components {
 
             // We must register ourselves first, otherwise the registration
             // process for the link will be in an infinite loop.
-            if let Some(registrar) = T::LINK_REGISTRAR {
+            if let Some(registrar) = T::RELATIONSHIP_REGISTRAR {
                 let accessor = registrar.register(this);
                 let info = unsafe { this.get_unchecked_mut(component_id) };
                 info.set_link_accessor(accessor);

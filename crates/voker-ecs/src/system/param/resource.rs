@@ -1,25 +1,22 @@
 use super::{ReadOnlySystemParam, SystemParam};
 use crate::borrow::{NonSend, NonSendMut, NonSendRef};
 use crate::borrow::{Res, ResMut, ResRef};
-use crate::error::GameError;
+use crate::error::Severity;
 use crate::resource::{Resource, ResourceId};
-use crate::system::AccessTable;
+use crate::system::{AccessTable, SystemParamError};
 use crate::tick::Tick;
 use crate::utils::DebugName;
 use crate::world::{UnsafeWorld, World};
 
-// -----------------------------------------------------------------------------
-// Resource
-
 #[cold]
 #[inline(never)]
-fn uninit_resource_error<T>() -> GameError {
-    use crate::system::UninitResourceError;
-
-    UninitResourceError {
-        name: DebugName::type_name::<T>(),
-    }
-    .into()
+fn uninit_resource_error<P, R>() -> SystemParamError {
+    SystemParamError::new::<P>()
+        .with_severity(Severity::Warning)
+        .with_info(alloc::format!(
+            "Try to fetch a uninitialized resource `{}`",
+            DebugName::type_name::<R>()
+        ))
 }
 
 // -----------------------------------------------------------------------------
@@ -46,7 +43,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             if let Some(data) = world.storages.res_set.get(*state)
@@ -57,7 +54,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
                     value: ptr.deref::<T>(),
                 })
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -87,7 +84,7 @@ unsafe impl<T: Resource + Sync> SystemParam for ResRef<'_, T> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             if let Some(data) = world.storages.res_set.get(*state)
@@ -95,7 +92,7 @@ unsafe impl<T: Resource + Sync> SystemParam for ResRef<'_, T> {
             {
                 Ok(untyped.into_resource::<T>())
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -123,7 +120,7 @@ unsafe impl<T: Resource + Send> SystemParam for ResMut<'_, T> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
             if let Some(data) = world.storages.res_set.get_mut(*state)
@@ -131,7 +128,7 @@ unsafe impl<T: Resource + Send> SystemParam for ResMut<'_, T> {
             {
                 Ok(untyped.into_resource::<T>())
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -161,7 +158,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<Res<'_, T>> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             let Some(data) = world.storages.res_set.get(*state) else {
@@ -202,7 +199,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<ResRef<'_, T>> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             let Some(data) = world.storages.res_set.get(*state) else {
@@ -238,7 +235,7 @@ unsafe impl<T: Resource + Send> SystemParam for Option<ResMut<'_, T>> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
             let Some(data) = world.storages.res_set.get_mut(*state) else {
@@ -278,7 +275,7 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             if let Some(data) = world.storages.res_set.get(*state)
@@ -289,7 +286,7 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
                     value: ptr.deref::<T>(),
                 })
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -323,7 +320,7 @@ unsafe impl<T: Resource> SystemParam for NonSendRef<'_, T> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             if let Some(data) = world.storages.res_set.get(*state)
@@ -331,7 +328,7 @@ unsafe impl<T: Resource> SystemParam for NonSendRef<'_, T> {
             {
                 Ok(ptr.into_non_send::<T>())
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -361,7 +358,7 @@ unsafe impl<T: Resource> SystemParam for NonSendMut<'_, T> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
             if let Some(data) = world.storages.res_set.get_mut(*state)
@@ -369,7 +366,7 @@ unsafe impl<T: Resource> SystemParam for NonSendMut<'_, T> {
             {
                 Ok(ptr.into_non_send::<T>())
             } else {
-                Err(uninit_resource_error::<T>())
+                Err(uninit_resource_error::<Self, T>())
             }
         }
     }
@@ -401,7 +398,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSend<'_, T>> {
         state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             let Some(data) = world.storages.res_set.get(*state) else {
@@ -444,7 +441,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSendRef<'_, T>> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
             let Some(data) = world.storages.res_set.get(*state) else {
@@ -482,7 +479,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSendMut<'_, T>> {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
             let Some(data) = world.storages.res_set.get_mut(*state) else {

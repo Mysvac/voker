@@ -18,10 +18,7 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                     ret.mutable = lit.value;
                     Ok(())
                 } else {
-                    Err(meta.error(concat! {
-                        "unsupported resource attribute, expected the following:",
-                        "- `mutable = true/false` \n",
-                    }))
+                    Err(meta.error("Unsupported attribute"))
                 }
             });
             result?;

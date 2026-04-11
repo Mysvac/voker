@@ -20,14 +20,12 @@ use crate::utils::DebugName;
 /// use voker_ecs::prelude::*;
 ///
 /// #[derive(Message)]
-/// struct Collision;
+/// struct Collision { /* .. */ }
 ///
 /// let mut world = World::alloc();
 /// world.register_message::<Collision>();
 ///
-/// world
-///     .resource_mut_or_init::<Messages<Collision>>()
-///     .write(Collision);
+/// world.write_message(Collision { /* .. */ });
 ///
 /// world.update_messages();
 /// ```
@@ -35,7 +33,11 @@ use crate::utils::DebugName;
 /// [`Messages<T>`]: crate::message::Messages
 /// [`World::register_message`]: crate::world::World::register_message
 /// [`World::update_messages`]: crate::world::World::update_messages
-#[diagnostic::on_unimplemented(note = "consider annotating `{Self}` with `#[derive(Message)]`")]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a message",
+    label = "invalid message",
+    note = "Consider annotating `{Self}` with `#[derive(Message)]`."
+)]
 pub trait Message: Send + Sync + 'static {}
 
 // -----------------------------------------------------------------------------
@@ -94,7 +96,7 @@ impl<M: Message> Display for MessageId<M> {
 
 impl<M: Message> Debug for MessageId<M> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "message<{}>#{}", DebugName::type_name::<M>(), self.id,)
+        write!(f, "message<{}>#{}", DebugName::type_name::<M>(), self.id)
     }
 }
 

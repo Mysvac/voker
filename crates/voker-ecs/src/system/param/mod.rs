@@ -25,8 +25,7 @@ pub use local::Local;
 // SystemParam
 
 use super::AccessTable;
-use crate::error::GameError;
-use crate::system::SystemMeta;
+use crate::system::{SystemMeta, SystemParamError};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
 
@@ -121,7 +120,7 @@ pub unsafe trait SystemParam: Sized {
         state: &'s mut Self::State,
         last_run: Tick,
         this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError>;
+    ) -> Result<Self::Item<'w, 's>, SystemParamError>;
 
     #[inline]
     #[expect(unused_variables, reason = "default implementation")]

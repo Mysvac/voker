@@ -54,7 +54,7 @@ impl<D: QueryData, F: QueryFilter> QueryIter<'_, '_, D, F> {
     /// - `last_run`/`this_run` must belong to the same world tick stream.
     /// - Caller must ensure no aliasing violations are introduced through
     ///   concurrent mutable iteration paths.
-    unsafe fn new<'w, 's>(
+    pub(super) unsafe fn new<'w, 's>(
         world: UnsafeWorld<'w>,
         state: &'s QueryState<D, F>,
         last_run: Tick,

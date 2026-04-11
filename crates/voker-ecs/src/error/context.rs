@@ -14,10 +14,16 @@ use crate::utils::DebugName;
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ErrorContext {
+    /// Failure raised while running a system.
     System { name: DebugName, last_run: Tick },
+    /// Failure raised while evaluating a run condition.
     Condition { name: DebugName, last_run: Tick },
+    /// Failure raised while running an observer callback.
     Observer { name: DebugName, last_run: Tick },
+    /// Failure raised while applying a command.
     Command { name: DebugName },
+    /// User-defined context string for non-standard error locations.
+    Custom { info: String },
 }
 
 impl Display for ErrorContext {
@@ -27,6 +33,7 @@ impl Display for ErrorContext {
             Self::Condition { name, .. } => write!(f, "Condition `{name}` failed"),
             Self::Observer { name, .. } => write!(f, "Observer `{name}` failed"),
             Self::Command { name, .. } => write!(f, "Command `{name}` failed"),
+            Self::Custom { info, .. } => write!(f, "`{info}`"),
         }
     }
 }
@@ -35,25 +42,28 @@ impl ErrorContext {
     /// The name of the ECS construct that failed.
     ///
     /// For systems, this is the system name.
-    /// For commands, this is the call-site location string.
+    /// For commands, this is usually the call-site location string.
+    /// For custom contexts, this returns the raw custom message.
     pub fn name(&self) -> String {
         match self {
             Self::System { name, .. } => name.to_string(),
             Self::Condition { name, .. } => name.to_string(),
             Self::Observer { name, .. } => name.to_string(),
             Self::Command { name, .. } => name.to_string(),
+            Self::Custom { info, .. } => info.to_string(),
         }
     }
 
     /// A string representation of the kind of ECS construct that failed.
     ///
-    /// This is a simpler helper used for logging.
+    /// This helper is intended for logging and telemetry labels.
     pub fn kind(&self) -> &'static str {
         match self {
             Self::System { .. } => "system",
             Self::Command { .. } => "command",
             Self::Condition { .. } => "condition",
             Self::Observer { .. } => "observer",
+            Self::Custom { .. } => "custom",
         }
     }
 }

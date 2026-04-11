@@ -25,9 +25,9 @@ pub(crate) fn macro_utils_(voker_ecs_path: &syn::Path) -> TokenStream {
 // Resource
 
 #[inline(always)]
-pub(crate) fn cloner_(voker_ecs_path: &syn::Path) -> TokenStream {
+pub(crate) fn component_cloner_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
-        #voker_ecs_path::utils::Cloner
+        #voker_ecs_path::clone::ComponentCloner
     }
 }
 
@@ -98,5 +98,47 @@ pub(crate) fn schedule_label_(voker_ecs_path: &syn::Path) -> TokenStream {
 pub(crate) fn message_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::message::Message
+    }
+}
+
+#[inline(always)]
+pub(crate) fn map_entities_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::entity::MapEntities
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_mapper_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::entity::EntityMapper
+    }
+}
+
+#[inline(always)]
+pub(crate) fn relationship_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::relationship::Relationship
+    }
+}
+
+#[inline(always)]
+pub(crate) fn relationship_target_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::relationship::RelationshipTarget
+    }
+}
+
+#[inline(always)]
+pub(crate) fn relationship_registrar_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::relationship::RelationshipRegistrar
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::entity::Entity
     }
 }

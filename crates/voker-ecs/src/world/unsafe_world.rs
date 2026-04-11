@@ -2,7 +2,7 @@ use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use crate::world::World;
+use super::World;
 
 /// A copyable raw handle to [`World`] with manually enforced borrow rules.
 ///

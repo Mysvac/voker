@@ -106,7 +106,7 @@ impl Bundles {
 
     /// Registers a new bundle from given component ids.
     ///
-    /// The target bundle must be unregistered. In other world,
+    /// The target bundle **must be unregistered**. In other world,
     /// `self.get_id()` must return `None` before this function call.
     ///
     /// # Safety

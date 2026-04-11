@@ -1,9 +1,9 @@
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
+use super::CommandOutput;
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
-use crate::error::{ErrorContext, ErrorHandler, GameError, Severity, ToGameError};
-use crate::link::LinkHookMode;
+use crate::error::{ErrorContext, ErrorHandler, GameError, Severity};
 use crate::message::{Message, Messages};
 use crate::prelude::ScheduleLabel;
 use crate::resource::Resource;
@@ -47,7 +47,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// ```
 pub trait Command: Send + Sized + 'static {
     /// The return type of [`apply`](Command::apply).
-    type Output: ToGameError;
+    type Output: CommandOutput;
 
     /// Applies this command to the provided `world`.
     ///
@@ -58,6 +58,11 @@ pub trait Command: Send + Sized + 'static {
     #[inline]
     fn with_severity(self, severity: Severity) -> impl Command<Output = Option<GameError>> {
         move |world: &mut World| self.apply(world).with_severity(severity)
+    }
+
+    #[inline]
+    fn merge_severity(self, severity: Severity) -> impl Command<Output = Option<GameError>> {
+        move |world: &mut World| self.apply(world).merge_severity(severity)
     }
 
     #[inline]
@@ -129,7 +134,7 @@ pub trait Command: Send + Sized + 'static {
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {
-    type Output: ToGameError;
+    type Output: CommandOutput;
 
     /// Executes this command for the given [`Entity`].
     fn apply(self, entity: EntityOwned) -> Self::Output;
@@ -150,7 +155,7 @@ pub trait EntityCommand: Send + Sized + 'static {
 impl<F, O> Command for F
 where
     F: FnOnce(&mut World) -> O + Send + 'static,
-    O: ToGameError,
+    O: CommandOutput,
 {
     type Output = O;
 
@@ -162,7 +167,7 @@ where
 impl<O, F> EntityCommand for F
 where
     F: FnOnce(EntityOwned) -> O + Send + 'static,
-    O: ToGameError,
+    O: CommandOutput,
 {
     type Output = O;
 
@@ -185,6 +190,8 @@ pub fn spawn<B: Bundle>(bundle: B) -> impl Command {
 }
 
 /// A [`Command`] that spawns a new entity from a [`Bundle`].
+///
+/// Warning if the target entity cannot be spawned (by default).
 #[inline]
 #[track_caller]
 pub fn spawn_at<B: Bundle>(bundle: B, entity: Entity) -> impl Command {
@@ -210,11 +217,21 @@ where
 
 /// A [`Command`] that despawn a entity.
 ///
-/// No-op if the entity does not exist
+/// Log info if the entity does not exist
 #[inline]
+#[track_caller]
 pub fn despawn(entity: Entity) -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| world.despawn_with_caller(entity, caller)
+}
+
+/// A [`Command`] that despawn a entity.
+///
+/// No-Op if the entity does not exist
+#[inline]
+pub fn try_despawn(entity: Entity) -> impl Command {
     move |world: &mut World| {
-        world.despawn(entity);
+        world.try_despawn(entity);
     }
 }
 
@@ -228,7 +245,7 @@ where
 {
     move |world: &mut World| {
         for entity in entity_iter {
-            world.despawn(entity);
+            world.try_despawn(entity);
         }
     }
 }
@@ -290,8 +307,10 @@ where
     move |world: &mut World| -> Result<(), GameError> { world.run_system(system) }
 }
 
-/// A [`Command`] that runs the given system with the given input value,
-/// caching its [`S`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
+/// A [`Command`] that runs the given system with the given input value.
+///
+/// The system is registered and cached in the world's internal system cache,
+/// then executed with the provided input.
 #[inline]
 pub fn run_system_with<I, M, S>(system: S, input: I::Data<'static>) -> impl Command
 where
@@ -302,23 +321,16 @@ where
     move |world: &mut World| -> Result<(), GameError> { world.run_system_with(system, input) }
 }
 
-/// A [`Command`] that runs the given system,
-/// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
+/// A [`Command`] that runs a cached system through it's id;
+///
+/// Wanring if the system does not reigstered (by default).
 #[inline]
-#[track_caller]
 pub fn run_system_cached<I>(id: SystemId, input: I::Data<'static>) -> impl Command
 where
     I: SystemInput<Data<'static>: Send> + Send + 'static,
 {
-    let caller = DebugLocation::caller();
-    move |world: &mut World| {
-        world.run_system_cached::<I, ()>(id, input).map_err(|_| {
-            GameError::warning(alloc::format!(
-                "{caller}Run cached system failed, the given system\
-                {id} is unregistered or input `{}` type mismatched",
-                DebugName::type_name::<I>()
-            ))
-        })
+    move |world: &mut World| -> Result<(), GameError> {
+        world.run_system_cached::<I, ()>(id, input)
     }
 }
 
@@ -347,7 +359,7 @@ pub fn write_message<M: Message>(message: M) -> impl Command {
 pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
-        entity.insert_with_caller(bundle, LinkHookMode::Run, caller);
+        entity.insert_with_caller(bundle, caller);
     }
 }
 
@@ -357,7 +369,7 @@ pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
 pub fn insert_if_new<T: Bundle>(bundle: impl FnOnce() -> T + Send + 'static) -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
-        entity.insert_if_new_with_caller(bundle, LinkHookMode::Run, caller);
+        entity.insert_if_new_with_caller(bundle, caller);
     }
 }
 

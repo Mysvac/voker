@@ -186,6 +186,7 @@ unsafe impl<T: Component> GetComponents for T {
 
         let world = unsafe { world.data_mut() };
         let id = world.components.get_id(TypeId::of::<T>())?;
+
         match T::STORAGE {
             StorageMode::Dense => {
                 let tables = &mut world.storages.tables;

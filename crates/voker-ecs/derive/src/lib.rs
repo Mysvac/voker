@@ -104,7 +104,7 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// #[component(Copy, mutable = false, required = (Foo, Bar))]
 /// struct GameVersion<T: Copy>(T);
 /// ```
-#[proc_macro_derive(Component, attributes(component))]
+#[proc_macro_derive(Component, attributes(component, relationship, relationship_target))]
 pub fn derive_component(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     component::impl_derive_component(ast)

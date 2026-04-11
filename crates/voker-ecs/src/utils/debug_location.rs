@@ -4,7 +4,15 @@ use core::marker::PhantomData;
 use core::panic::Location;
 
 /// A wrapper type that provides [`Location`] information in debug mode.
+///
+/// In `debug_assertions` builds (or with feature `debug`), this stores
+/// `Location::caller()` and prints it through [`Display`] / [`Debug`].
+/// In release-like builds, it becomes a near-zero-cost placeholder.
+///
+/// This type is commonly used in logging and panic diagnostics where call-site
+/// context is useful during development but should not bloat release output.
 #[derive(Clone, Copy)]
+#[repr(transparent)]
 pub struct DebugLocation(
     PhantomData<&'static Location<'static>>,
     #[cfg(any(debug_assertions, feature = "debug"))] &'static Location<'static>,
@@ -29,6 +37,11 @@ impl Debug for DebugLocation {
 }
 
 impl DebugLocation {
+    /// Captures the current call-site location.
+    ///
+    /// The returned value carries caller metadata in debug-style builds, and a
+    /// lightweight placeholder in release-style builds.
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub const fn caller() -> Self {
         Self(

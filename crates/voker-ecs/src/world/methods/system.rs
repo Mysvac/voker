@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
 use voker_utils::hash::NoOpHashMap;
 
-use crate::error::GameError;
+use crate::error::{GameError, Severity};
 use crate::prelude::Resource;
-use crate::system::{IntoSystem, System, SystemId, SystemInput};
+use crate::system::{IntoSystem, System, SystemId, SystemInput, UnregisteredSystemError};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -166,14 +166,15 @@ impl World {
         &mut self,
         system_id: SystemId,
         input: I::Data<'i>,
-    ) -> Result<Result<O, GameError>, I::Data<'i>>
+    ) -> Result<O, GameError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
         match self.take_system::<I, O>(system_id) {
-            Some(system) => Ok(self.run_system_internal::<I, O>(system, input)),
-            None => Err(input),
+            Some(system) => self.run_system_internal::<I, O>(system, input),
+            None => Err(GameError::from(UnregisteredSystemError::new::<SystemId>())
+                .with_severity(Severity::Warning)),
         }
     }
 }

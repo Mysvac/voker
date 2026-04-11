@@ -146,7 +146,8 @@ impl Tick {
 
     /// Clamps a single tick value if it is older than `MAX_TICK_AGE`.
     ///
-    /// Return `true` if is clamped.
+    /// If the tick is too old, it is moved to the fallback value
+    /// `now - Tick::MAX_AGE`.
     #[inline(always)]
     pub const fn check_tick(&mut self, now: Tick) {
         let age = now.relative_to(*self);
@@ -205,7 +206,13 @@ impl CheckTicks {
 /// Types implementing this trait can report when they were inserted and when
 /// they were most recently modified.
 ///
+/// This trait is typically consumed through wrappers such as [`Ref`] and
+/// [`Res`], where `last_run`/`this_run` context is tracked by the scheduler.
+///
 /// See [`voker_ecs::borrow`](crate::borrow) for more information.
+///
+/// [`Ref`]: crate::borrow::Ref
+/// [`Res`]: crate::borrow::Res
 pub trait DetectChanges {
     /// Returns `true` if this value was added after the system last ran.
     fn is_added(&self) -> bool;
@@ -238,6 +245,9 @@ use voker_reflect::Reflect;
 /// Contains immutable references to the added/changed ticks plus the system
 /// run context (`last_run`, `this_run`).
 ///
+/// This is the low-level representation used by read-only change-tracking
+/// system parameters.
+///
 /// See [`Ref`]/[`Res`]/[`UntypedRef`].
 ///
 /// Fields are public for advanced/custom system-parameter use cases.
@@ -264,6 +274,8 @@ pub struct TicksRef<'w> {
 ///
 /// Contains mutable references to the added/changed ticks plus the system
 /// run context (`last_run`, `this_run`).
+///
+/// This enables APIs that both read and update change markers.
 ///
 /// See [`Mut`]/[`ResMut`]/[`UntypedMut`].
 ///
@@ -300,6 +312,8 @@ impl<'w> From<TicksMut<'w>> for TicksRef<'w> {
 /// Contains immutable slices for added/changed ticks plus the system run
 /// context (`last_run`, `this_run`).
 ///
+/// `length` stores the logical element count used by high-level slice wrappers.
+///
 /// See [`SliceRef`]/[`UntypedSliceRef`].
 ///
 /// Fields are public for advanced/custom system-parameter use cases.
@@ -322,6 +336,8 @@ pub struct TicksSliceRef<'w> {
 ///
 /// Contains mutable slices for added/changed ticks plus the system run
 /// context (`last_run`, `this_run`).
+///
+/// This is primarily used by typed/untyped mutable slice accessors.
 ///
 /// See [`SliceMut`]/[`UntypedSliceMut`].
 ///

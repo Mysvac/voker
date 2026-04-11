@@ -4,8 +4,9 @@ use core::fmt::Debug;
 
 use super::hook::{ComponentHook, ComponentHooks};
 use super::{Component, ComponentId, Required, StorageMode};
-use crate::link::LinkAccessor;
-use crate::utils::{Cloner, DebugName, Dropper};
+use crate::clone::ComponentCloner;
+use crate::relationship::RelationshipAccessor;
+use crate::utils::{DebugName, Dropper};
 
 // -----------------------------------------------------------------------------
 // ComponentDescriptor
@@ -20,9 +21,10 @@ pub struct ComponentDescriptor {
     pub type_id: TypeId,
     pub layout: Layout,
     pub mutable: bool,
+    pub no_entity: bool,
     pub storage: StorageMode,
+    pub cloner: ComponentCloner,
     pub dropper: Option<Dropper>,
-    pub cloner: Cloner,
     pub required: Option<Required>,
     pub hooks: ComponentHooks,
 }
@@ -36,6 +38,7 @@ impl ComponentDescriptor {
             layout: Layout::new::<T>(),
             storage: T::STORAGE,
             mutable: T::MUTABLE,
+            no_entity: T::NO_ENTITY,
             dropper: T::DROPPER,
             required: T::REQUIRED,
             cloner: T::CLONER,
@@ -60,7 +63,7 @@ impl ComponentDescriptor {
 pub struct ComponentInfo {
     id: ComponentId,
     descriptor: ComponentDescriptor,
-    link_accessor: Option<LinkAccessor>,
+    link_accessor: Option<RelationshipAccessor>,
 }
 
 impl Debug for ComponentInfo {
@@ -93,7 +96,7 @@ impl ComponentInfo {
 
     /// Returns the component's debug name.
     #[inline(always)]
-    pub fn debug_name(&self) -> DebugName {
+    pub fn name(&self) -> DebugName {
         self.descriptor.name
     }
 
@@ -115,6 +118,12 @@ impl ComponentInfo {
         self.descriptor.mutable
     }
 
+    /// Returns whether the component does not contain entities.
+    #[inline(always)]
+    pub fn no_entity(&self) -> bool {
+        self.descriptor.no_entity
+    }
+
     /// Returns the component's storage strategy.
     #[inline(always)]
     pub fn storage(&self) -> StorageMode {
@@ -129,7 +138,7 @@ impl ComponentInfo {
 
     /// Returns the component's clone function.
     #[inline(always)]
-    pub fn cloner(&self) -> Cloner {
+    pub fn cloner(&self) -> ComponentCloner {
         self.descriptor.cloner
     }
 
@@ -175,10 +184,10 @@ impl ComponentInfo {
         self.descriptor.hooks.on_despawn
     }
 
-    /// Returns the component's `LinkAccessor` if exists.
+    /// Returns the component's `RelationshipAccessor` if exists.
     #[inline(always)]
-    pub fn link_accessor(&self) -> Option<&LinkAccessor> {
-        self.link_accessor.as_ref()
+    pub fn link_accessor(&self) -> Option<RelationshipAccessor> {
+        self.link_accessor
     }
 
     /// Returns a mutable reference to component's hook list.
@@ -194,7 +203,7 @@ impl ComponentInfo {
     ///
     /// It is currently private that only be used by component registration.
     #[inline(always)]
-    pub(crate) fn set_link_accessor(&mut self, accessor: LinkAccessor) {
+    pub(crate) fn set_link_accessor(&mut self, accessor: RelationshipAccessor) {
         self.link_accessor = Some(accessor);
     }
 }

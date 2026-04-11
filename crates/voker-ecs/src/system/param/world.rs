@@ -1,5 +1,4 @@
-use super::SystemParam;
-use crate::error::GameError;
+use super::{SystemParam, SystemParamError};
 use crate::system::{AccessTable, SystemMeta};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
@@ -25,7 +24,7 @@ unsafe impl SystemParam for &World {
         _state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe { Ok(world.read_only()) }
     }
 }
@@ -48,7 +47,7 @@ unsafe impl SystemParam for &mut World {
         _state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe { Ok(world.full_mut()) }
     }
 }
@@ -72,7 +71,7 @@ unsafe impl SystemParam for DeferredWorld<'_> {
         _state: &'s mut Self::State,
         _last_run: Tick,
         _this_run: Tick,
-    ) -> Result<Self::Item<'w, 's>, GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe { Ok(world.deferred()) }
     }
 

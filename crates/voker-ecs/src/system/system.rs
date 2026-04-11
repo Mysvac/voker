@@ -106,7 +106,7 @@ pub trait System: Send + Sync + 'static {
     fn flags(&self) -> SystemFlags;
 
     /// Gets the tick when this system last completed execution.
-    fn get_last_run(&self) -> Tick;
+    fn last_run(&self) -> Tick;
 
     /// Sets the tick when this system last completed execution.
     fn set_last_run(&mut self, last_run: Tick);
@@ -164,6 +164,7 @@ where
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("System")
             .field("id", &self.id())
+            .field("deferred", &self.is_deferred())
             .field("non_send", &self.is_non_send())
             .field("exclusive", &self.is_exclusive())
             .finish_non_exhaustive()
@@ -237,6 +238,8 @@ impl<T: System> IntoSystem<T::Input, T::Output, ()> for T {
 // -----------------------------------------------------------------------------
 // IntoPipeSystem
 
+pub struct PipeSystemMarker;
+
 pub struct IntoPipeSystem<A, B> {
     a: A,
     b: B,
@@ -248,8 +251,16 @@ pub struct PipeSystem<A, B> {
     b: B,
 }
 
-impl<AI, AO, BI, BO, A, B, MA, MB> IntoSystem<AI, BO, (MA, MB, fn(AI) -> AO, fn(BI) -> BO)>
-    for IntoPipeSystem<A, B>
+impl<AI, AO, BI, BO, A, B, MA, MB>
+    IntoSystem<
+        AI,
+        BO,
+        (
+            PipeSystemMarker,
+            (MA, MB, fn(AI) -> AO, fn(BI) -> BO),
+            (A, B),
+        ),
+    > for IntoPipeSystem<A, B>
 where
     AI: SystemInput,
     for<'a> BI: SystemInput<Data<'a> = AO>,
@@ -290,8 +301,8 @@ where
         self.a.flags().union(self.b.flags())
     }
 
-    fn get_last_run(&self) -> Tick {
-        self.a.get_last_run()
+    fn last_run(&self) -> Tick {
+        self.a.last_run()
     }
 
     fn set_last_run(&mut self, last_run: Tick) {
@@ -326,6 +337,8 @@ where
 // -----------------------------------------------------------------------------
 // IntoMapSystem
 
+pub struct MapSystemMarker;
+
 pub struct IntoMapSystem<S, F> {
     s: S,
     f: F,
@@ -337,7 +350,8 @@ pub struct MapSystem<S, F> {
     f: F,
 }
 
-impl<I, O, FO, S, F, M> IntoSystem<I, FO, (M, fn(I) -> O, fn(O) -> FO)> for IntoMapSystem<S, F>
+impl<I, O, FO, S, F, M> IntoSystem<I, FO, (MapSystemMarker, (M, fn(I) -> O, fn(O) -> FO), (S, F))>
+    for IntoMapSystem<S, F>
 where
     I: SystemInput,
     S: IntoSystem<I, O, M>,
@@ -376,8 +390,8 @@ where
         self.s.flags()
     }
 
-    fn get_last_run(&self) -> Tick {
-        self.s.get_last_run()
+    fn last_run(&self) -> Tick {
+        self.s.last_run()
     }
 
     fn set_last_run(&mut self, last_run: Tick) {
@@ -409,6 +423,8 @@ where
 // -----------------------------------------------------------------------------
 // IntoMarkSystem
 
+pub struct MarkSystemMarker;
+
 pub struct IntoMarkSystem<S, M> {
     s: S,
     _marker: PhantomData<M>,
@@ -425,7 +441,8 @@ unsafe impl<S: Send, M> Send for MarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for IntoMarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for MarkSystem<S, M> {}
 
-impl<I, O, S, M1, M2> IntoSystem<I, O, (M2, (M1, fn(I) -> O))> for IntoMarkSystem<S, M2>
+impl<I, O, S, M1, M2> IntoSystem<I, O, (MarkSystemMarker, (M2, M1, fn(I) -> O), (S, M2))>
+    for IntoMarkSystem<S, M2>
 where
     I: SystemInput,
     S: IntoSystem<I, O, M1>,
@@ -464,8 +481,8 @@ where
         self.s.flags()
     }
 
-    fn get_last_run(&self) -> Tick {
-        self.s.get_last_run()
+    fn last_run(&self) -> Tick {
+        self.s.last_run()
     }
 
     fn set_last_run(&mut self, last_run: Tick) {

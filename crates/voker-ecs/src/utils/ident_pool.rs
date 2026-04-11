@@ -4,6 +4,13 @@ use voker_os::sync::{Mutex, PoisonError};
 
 use crate::component::{ComponentHook, ComponentId};
 
+/// Intern pool for deduplicating small immutable identifier slices.
+///
+/// This avoids repeatedly allocating equivalent `'static` slices used by
+/// archetype/component metadata. Identical slice contents are reused whenever
+/// possible.
+///
+/// The pool intentionally leaks accepted slices for process-lifetime reuse.
 pub struct SlicePool;
 
 macro_rules! define_methods {
@@ -48,7 +55,10 @@ mod pool {
 
     static IDENT_POOL: Mutex<MemoryPool> = Mutex::new(MemoryPool(PagePool::new()));
 
-    /// Similar to [`Box::leak`](alloc::boxed::Box), but leaking in memory pool.
+    /// Similar to [`Box::leak`](alloc::boxed::Box), but backed by a page pool.
+    ///
+    /// Returned slices are process-lifetime allocations intended for stable,
+    /// shared metadata identities.
     pub fn leak<T: Copy>(idents: &[T]) -> &'static [T] {
         let guard = IDENT_POOL.lock().unwrap_or_else(PoisonError::into_inner);
         unsafe {

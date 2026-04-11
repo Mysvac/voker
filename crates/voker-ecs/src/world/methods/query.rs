@@ -152,7 +152,7 @@ impl World {
 #[cfg(test)]
 mod tests {
     use crate::borrow::{Mut, Ref};
-    use crate::component::{Component, StorageMode};
+    use crate::component::Component;
     use crate::entity::Entity;
     use crate::query::{And, Or, With, Without};
     use crate::tick::DetectChanges;
@@ -160,28 +160,21 @@ mod tests {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
+    #[component(storage = "sparse")]
     struct Baz(String);
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Component, Clone, Debug, PartialEq)]
     struct Qux(f32);
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Zaz(i32);
-
-    impl Component for Foo {}
-    impl Component for Bar {}
-    impl Component for Baz {
-        const STORAGE: StorageMode = StorageMode::Sparse;
-    }
-    impl Component for Qux {}
-    impl Component for Zaz {}
 
     #[test]
     fn query_raw_ref() {

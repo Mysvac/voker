@@ -1,7 +1,6 @@
 use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::HookContext;
-use crate::link::LinkHookMode;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
@@ -41,8 +40,9 @@ impl EntityOwned<'_> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn remove<B: Bundle>(&mut self) {
+    pub fn remove<B: Bundle>(&mut self) -> &mut Self {
         self.remove_explicit_with_caller::<B>(DebugLocation::caller());
+        self
     }
 
     /// Remove the all components explicitly included in the Bundle.
@@ -78,8 +78,9 @@ impl EntityOwned<'_> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn remove_explicit<B: Bundle>(&mut self) {
+    pub fn remove_explicit<B: Bundle>(&mut self) -> &mut Self {
         self.remove_explicit_with_caller::<B>(DebugLocation::caller());
+        self
     }
 
     /// Remove the all components explicitly and implicitly
@@ -116,8 +117,9 @@ impl EntityOwned<'_> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn remove_required<B: Bundle>(&mut self) {
+    pub fn remove_required<B: Bundle>(&mut self) -> &mut Self {
         self.remove_required_with_caller::<B>(DebugLocation::caller());
+        self
     }
 
     /// Remove the all components included in the target [`BundleInfo`].
@@ -158,8 +160,9 @@ impl EntityOwned<'_> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn remove_dynamic(&mut self, bundle_id: BundleId) {
+    pub fn remove_dynamic(&mut self, bundle_id: BundleId) -> &mut Self {
         self.remove_dynamic_with_caller(bundle_id, DebugLocation::caller());
+        self
     }
 
     /// Internal implementation of [`Self::remove_explicit`].
@@ -196,7 +199,7 @@ impl EntityOwned<'_> {
         let guard = ForgetEntityOnPanic {
             entity: self.entity,
             world: self.world,
-            location: caller,
+            caller,
         };
 
         if old_arche_id != new_arche_id {
@@ -226,18 +229,9 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     {
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        let link_hook_mode = LinkHookMode::Run;
         old_arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
             if !new_arche.contains_component(id) {
-                hook(
-                    world.reborrow(),
-                    HookContext {
-                        id,
-                        entity,
-                        caller,
-                        link_hook_mode,
-                    },
-                );
+                hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
     }
@@ -245,18 +239,9 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     {
         // trigger_on_remove
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-        let link_hook_mode = LinkHookMode::Run;
         old_arche.on_remove_hooks().iter().for_each(|&(id, hook)| {
             if !new_arche.contains_component(id) {
-                hook(
-                    world.reborrow(),
-                    HookContext {
-                        id,
-                        entity,
-                        caller,
-                        link_hook_mode,
-                    },
-                );
+                hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
     }
@@ -264,9 +249,9 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     {
         // Move Arche
         let new_arche_row = unsafe {
-            let moved = old_arche.remove_entity(location.arche_row);
+            let moved = old_arche.dealloc_row(location.arche_row);
             unsafe_world.full_mut().entities.update_row(moved).unwrap();
-            new_arche.insert_entity(entity)
+            new_arche.alloc_row(entity)
         };
 
         location.arche_id = new_arche_id;
@@ -303,9 +288,9 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
             if !new_arche.contains_sparse_component(id) {
                 let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
                 let map = unsafe { maps.get_unchecked_mut(map_id) };
-                let row = unsafe { map.deallocate(entity).unwrap() };
+                let map_row = map.get_map_row(entity).unwrap();
                 unsafe {
-                    map.drop_item(row);
+                    map.dealloc_row::<true>(map_row);
                 }
             }
         });

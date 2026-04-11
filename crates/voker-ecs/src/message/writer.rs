@@ -1,7 +1,7 @@
 use crate::{
     borrow::ResMut,
-    message::{Message, MessageId, MessageIdIterator, Messages},
-    system::SystemParam,
+    message::{Message, MessageId, MessageIdIter, Messages},
+    system::{SystemParam, SystemParamError},
 };
 
 /// System parameter that appends messages of type `M`.
@@ -34,7 +34,7 @@ impl<'w, M: Message> MessageWriter<'w, M> {
 
     /// Writes a batch of messages and returns the generated id range.
     #[inline]
-    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIterator<M> {
+    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIter<M> {
         self.messages.write_batch(messages)
     }
 }
@@ -62,7 +62,7 @@ unsafe impl<M: Message> SystemParam for MessageWriter<'_, M> {
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,
-    ) -> Result<Self::Item<'w, 's>, crate::error::GameError> {
+    ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         // SAFETY: same world/state/tick contract as delegated parameter.
         let messages = unsafe {
             <InternalParam<M> as SystemParam>::build_param(world, state, last_run, this_run)?

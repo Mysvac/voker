@@ -1,8 +1,7 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
-use crate::error::GameError;
-use crate::system::{IntoSystem, SystemId, UninitSystemError};
+use crate::error::{GameError, Severity};
+use crate::system::{IntoSystem, SystemId, UninitializedSystemError};
 use crate::tick::Tick;
-use crate::utils::DebugName;
 use crate::world::{DeferredWorld, World, WorldId};
 
 use super::{SystemInput, SystemParam};
@@ -268,8 +267,8 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         self.meta.flags()
     }
 
-    fn get_last_run(&self) -> Tick {
-        self.meta.get_last_run()
+    fn last_run(&self) -> Tick {
+        self.meta.last_run()
     }
 
     fn set_last_run(&mut self, last_run: Tick) {
@@ -295,14 +294,16 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         world: crate::world::UnsafeWorld<'_>,
     ) -> Result<Self::Output, GameError> {
         let Some(state) = &mut self.state else {
-            return Err(uninit_system_error(self.meta.id().name()));
+            let error = UninitializedSystemError::new::<F>();
+            return Err(GameError::from(error).with_severity(Severity::Warning));
         };
+
         let world_id = unsafe { world.read_only().id() };
         if state.world_id != world_id {
             mismatched_world(self.meta.id(), state.world_id, world_id);
         }
 
-        let last_run = self.meta.get_last_run();
+        let last_run = self.meta.last_run();
         let this_run = unsafe { world.read_only().advance_tick() };
         let param = unsafe {
             <F::Param as SystemParam>::build_param(world, &mut state.param, last_run, this_run)?
@@ -318,8 +319,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
     fn defer(&mut self, world: DeferredWorld) {
         if <F::Param as SystemParam>::DEFERRED {
             let Some(state) = &mut self.state else {
-                let err = uninit_system_error(self.meta.id().name());
-                panic!("System::defer: {err}");
+                panic!("System::defer: {}", UninitializedSystemError::new::<F>());
             };
 
             <F::Param as SystemParam>::defer(&mut state.param, &self.meta, world);
@@ -329,19 +329,15 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
     fn apply_deferred(&mut self, world: &mut World) {
         if <F::Param as SystemParam>::DEFERRED {
             let Some(state) = &mut self.state else {
-                let err = uninit_system_error(self.meta.id().name());
-                panic!("System::apply_deferred: {err}");
+                panic!(
+                    "System::apply_deferred: {}",
+                    UninitializedSystemError::new::<F>()
+                );
             };
 
             <F::Param as SystemParam>::apply_deferred(&mut state.param, &self.meta, world);
         }
     }
-}
-
-#[cold]
-#[inline(never)]
-fn uninit_system_error(name: DebugName) -> GameError {
-    GameError::from(UninitSystemError { name })
 }
 
 #[cold]

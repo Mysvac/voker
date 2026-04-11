@@ -74,7 +74,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run((), world.unsafe_world()).unwrap_or_else(|e| {
                             voker_utils::cold_path();
-                            let last_run = system.get_last_run();
+                            let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             handler(e, ctx);
@@ -105,7 +105,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run((), world.unsafe_world()).unwrap_or_else(|e| {
                             voker_utils::cold_path();
-                            let last_run = system.get_last_run();
+                            let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             handler(e, ctx);

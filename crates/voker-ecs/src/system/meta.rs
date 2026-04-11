@@ -40,7 +40,7 @@ impl Debug for SystemMeta {
 
 impl SystemMeta {
     #[inline]
-    pub const fn new<T: 'static>() -> Self {
+    pub(crate) const fn new<T: 'static>() -> Self {
         Self {
             id: SystemId::of::<T>(),
             flags: SystemFlags::empty(),
@@ -59,7 +59,7 @@ impl SystemMeta {
     }
 
     #[inline]
-    pub const fn get_last_run(&self) -> Tick {
+    pub const fn last_run(&self) -> Tick {
         self.last_run
     }
 

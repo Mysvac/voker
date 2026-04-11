@@ -7,7 +7,6 @@ use crate::archetype::Archetype;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::ComponentWriter;
 use crate::entity::{AllocEntitiesIter, Entity, EntityLocation, SpawnError};
-use crate::link::LinkHookMode;
 use crate::storage::Table;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
@@ -64,15 +63,15 @@ impl<'a> BundleSpawner<'a> {
         let guard = ForgetEntityOnPanic {
             entity,
             world: self.world,
-            location: self.caller,
+            caller: self.caller,
         };
 
-        let arche_row = unsafe { arche.insert_entity(entity) };
-        let table_row = unsafe { table.allocate(entity) };
+        let arche_row = unsafe { arche.alloc_row(entity) };
+        let table_row = unsafe { table.alloc_row(entity) };
         arche.sparse_components().iter().for_each(|&cid| unsafe {
             let map_id = maps.get_id(cid).debug_checked_unwrap();
             let map = maps.get_unchecked_mut(map_id);
-            let _ = map.allocate(entity); // `MapRow` may be cached in the future.
+            let _ = map.alloc_row(entity); // `MapRow` may be cached in the future.
         });
 
         unsafe {
@@ -97,9 +96,8 @@ impl<'a> BundleSpawner<'a> {
 
         {
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            let link_hook_mode = LinkHookMode::Run;
-            arche.trigger_on_add(entity, world.reborrow(), link_hook_mode, self.caller);
-            arche.trigger_on_insert(entity, world.reborrow(), link_hook_mode, self.caller);
+            arche.trigger_on_add(entity, world.reborrow(), self.caller);
+            arche.trigger_on_insert(entity, world.reborrow(), self.caller);
         }
 
         // We do not flush World here, ensure the location is valid.
@@ -400,24 +398,19 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use crate::component::{Component, StorageMode};
+    use crate::component::Component;
     use crate::world::World;
     use alloc::string::String;
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Foo;
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Bar(u64);
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Component, Clone, Debug, PartialEq, Eq)]
+    #[component(storage = "sparse")]
     struct Baz(String);
-
-    impl Component for Foo {}
-    impl Component for Bar {}
-    impl Component for Baz {
-        const STORAGE: StorageMode = StorageMode::Sparse;
-    }
 
     #[test]
     fn spawn_single() {

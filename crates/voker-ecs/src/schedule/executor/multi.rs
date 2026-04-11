@@ -308,7 +308,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     let func = AssertUnwindSafe(|| unsafe {
                         if let Err(e) = system.run((), context.world) {
                             voker_utils::cold_path();
-                            let last_run = system.get_last_run();
+                            let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             (context.error_handler)(e, ctx);
@@ -344,7 +344,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run((), context.world).unwrap_or_else(|e| {
                             voker_utils::cold_path();
-                            let last_run = system.get_last_run();
+                            let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
                             (context.error_handler)(e, ctx);

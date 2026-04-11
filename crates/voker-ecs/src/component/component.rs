@@ -1,10 +1,11 @@
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
 use super::{Required, StorageMode};
+use crate::clone::ComponentCloner;
 use crate::component::hook::ComponentHook;
 use crate::entity::EntityMapper;
-use crate::link::LinkRegistrar;
-use crate::utils::{Cloner, Dropper};
+use crate::relationship::RelationshipRegistrar;
+use crate::utils::Dropper;
 
 // -----------------------------------------------------------------------------
 // Component
@@ -124,7 +125,10 @@ use crate::utils::{Cloner, Dropper};
     label = "invalid component",
     note = "Consider annotating `{Self}` with `#[derive(Component)]`."
 )]
-pub trait Component: Clone + Send + Sync + 'static {
+pub trait Component: Sized + Send + Sync + 'static {
+    /// The function pointer of [`Clone`] or [`Copy`].
+    const CLONER: ComponentCloner;
+
     /// The storage type of component, default is `Dense`.
     const STORAGE: StorageMode = StorageMode::Dense;
 
@@ -133,9 +137,6 @@ pub trait Component: Clone + Send + Sync + 'static {
 
     /// The function pointer of [`Drop`].
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
-
-    /// The function pointer of [`Clone`] or [`Copy`].
-    const CLONER: Cloner = Cloner::clonable::<Self>();
 
     /// The required components, default is `None`.
     const REQUIRED: Option<Required> = None;
@@ -158,9 +159,13 @@ pub trait Component: Clone + Send + Sync + 'static {
     /// Component Hook - OnDespawn
     const ON_DESPAWN: Option<ComponentHook> = None;
 
-    const LINK_REGISTRAR: Option<LinkRegistrar> = None;
+    /// The runtime information of `Link`.
+    const RELATIONSHIP_REGISTRAR: Option<RelationshipRegistrar> = None;
+
+    /// If it's true, `map_entities` methods can be eliminate.
+    const NO_ENTITY: bool = false;
 
     #[inline(always)]
     #[expect(unused_variables, reason = "default implementation")]
-    fn map_entities(this: &mut Self, mapper: &mut dyn EntityMapper) {}
+    fn map_entities<E: EntityMapper>(this: &mut Self, mapper: &mut E) {}
 }

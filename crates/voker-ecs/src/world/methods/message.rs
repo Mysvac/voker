@@ -1,4 +1,4 @@
-use crate::message::{Message, MessageId, MessageIdIterator, MessageRegistry, Messages};
+use crate::message::{Message, MessageId, MessageIdIter, MessageRegistry, Messages};
 use crate::utils::DebugName;
 use crate::world::World;
 
@@ -41,7 +41,7 @@ impl World {
     pub fn write_message_batch<M: Message>(
         &mut self,
         messages: impl IntoIterator<Item = M>,
-    ) -> Option<MessageIdIterator<M>> {
+    ) -> Option<MessageIdIter<M>> {
         let Some(mut msgs) = self.get_resource_mut::<Messages<M>>() else {
             unregistered_message(DebugName::type_name::<M>());
             return None;

@@ -1,3 +1,10 @@
+//! Interning primitives used by ECS label systems.
+//!
+//! This module provides a generic interner and type-erased equality/hash tools
+//! used by label traits such as [`ScheduleLabel`](crate::schedule::ScheduleLabel).
+//! Most users will interact through derive macros and interned label handles,
+//! while contributors may implement low-level traits here.
+
 use core::any::Any;
 use core::hash::Hash;
 use core::ops::Deref;
@@ -15,6 +22,17 @@ pub use alloc::boxed::Box;
 ///
 /// Implementations define how values are leaked, how pointer-level equality is
 /// checked, and how pointer identity is hashed.
+///
+/// # Implementer Notes
+///
+/// `leak`, `ref_eq`, and `ref_hash` must describe the same identity model.
+/// If two references are considered equal by [`Internable::ref_eq`], they must
+/// also produce identical hashes via [`Internable::ref_hash`].
+///
+/// In most cases this means:
+/// - `leak` returns a canonical `'static` reference,
+/// - `ref_eq` compares reference identity,
+/// - `ref_hash` hashes the same reference identity.
 pub trait Internable: Hash + Eq + 'static {
     /// Creates a static reference to `self`, possibly leaking memory.
     fn leak(&self) -> &'static Self;
@@ -35,6 +53,39 @@ pub trait Internable: Hash + Eq + 'static {
 ///   [`Internable::ref_eq`] and [`Internable::ref_hash`].
 ///
 /// Equivalent label values resolve to the same interned instance.
+///
+/// # Examples
+/// ```
+/// # use core::hash::Hasher;
+/// # use voker_ecs::label::{Internable, Interner};
+/// #[derive(Debug, Hash, PartialEq, Eq)]
+/// enum Stage {
+///     Update,
+///     Render,
+/// }
+///
+/// impl Internable for Stage {
+///     fn leak(&self) -> &'static Self {
+///         match self {
+///             Stage::Update => &Stage::Update,
+///             Stage::Render => &Stage::Render,
+///         }
+///     }
+///
+///     fn ref_eq(&self, other: &Self) -> bool {
+///         core::ptr::eq(self, other)
+///     }
+///
+///     fn ref_hash(&self, mut state: &mut dyn Hasher) {
+///         core::ptr::hash(self, &mut state);
+///     }
+/// }
+///
+/// let interner = Interner::new();
+/// let x = interner.intern(&Stage::Update);
+/// let y = interner.intern(&Stage::Update);
+/// assert_eq!(x, y);
+/// ```
 pub struct Interned<T: ?Sized + Internable>(pub &'static T);
 
 impl<T: ?Sized + Internable> Copy for Interned<T> {}
@@ -87,6 +138,11 @@ impl<T: ?Sized + Internable> From<&Interned<T>> for Interned<T> {
 /// In the Label system, this is used to canonicalize dynamic labels into
 /// unique `'static` references, enabling fast comparisons, stable hashing,
 /// and cheap copies via [`Interned<T>`].
+///
+/// # Memory Behavior
+///
+/// New unique values may be leaked to produce stable `'static` references.
+/// This is intentional for label-like domains with a small bounded set.
 pub struct Interner<T: ?Sized + 'static>(RwLock<HashSet<&'static T>>);
 
 impl<T: ?Sized> Interner<T> {
@@ -108,6 +164,33 @@ impl<T: ?Sized + Internable> Interner<T> {
     /// On first encounter, the value may be leaked to obtain a stable `'static`
     /// reference. Subsequent calls with an equivalent value return an
     /// [`Interned<T>`] backed by the same reference.
+    ///
+    /// # Examples
+    /// ```
+    /// # use core::hash::Hasher;
+    /// # use voker_ecs::label::{Internable, Interner};
+    /// #[derive(Debug, Hash, PartialEq, Eq)]
+    /// struct Marker;
+    ///
+    /// impl Internable for Marker {
+    ///     fn leak(&self) -> &'static Self {
+    ///         &Marker
+    ///     }
+    ///
+    ///     fn ref_eq(&self, other: &Self) -> bool {
+    ///         core::ptr::eq(self, other)
+    ///     }
+    ///
+    ///     fn ref_hash(&self, mut state: &mut dyn Hasher) {
+    ///         core::ptr::hash(self, &mut state);
+    ///     }
+    /// }
+    ///
+    /// let interner = Interner::new();
+    /// let a = interner.intern(&Marker);
+    /// let b = interner.intern(&Marker);
+    /// assert_eq!(a, b);
+    /// ```
     pub fn intern(&self, value: &T) -> Interned<T> {
         {
             let set = self.0.read().unwrap_or_else(PoisonError::into_inner);
@@ -130,12 +213,18 @@ impl<T: ?Sized + Internable> Interner<T> {
 // Dyn Hash/Eq
 
 /// Type-erased equality for label trait objects.
+///
+/// This is used so `dyn LabelTrait` values can be compared without knowing the
+/// concrete type at compile time.
 pub trait DynEq: Any {
     /// Compares two dynamic values for equality.
     fn dyn_eq(&self, other: &dyn DynEq) -> bool;
 }
 
 /// Type-erased hashing for label trait objects.
+///
+/// Implementations should include both value hash and type identity to avoid
+/// collisions between different concrete types with matching value bits.
 pub trait DynHash: Any {
     /// Hashes this dynamic value into the provided hasher.
     fn dyn_hash(&self, state: &mut dyn Hasher);
@@ -176,6 +265,30 @@ impl<T: Any + Hash> DynHash for T {
 /// For example, [`ScheduleLabel`] is a trait with multiple concrete
 /// implementations. Using [`Interned`] gives each label value a canonical
 /// `'static` reference and ensures each distinct logical value is stored once.
+///
+/// # Examples
+/// ```
+/// use voker_ecs::define_label;
+///
+/// define_label!(
+///     /// Example label trait.
+///     ExampleLabel,
+///     EXAMPLE_LABEL_INTERNER
+/// );
+///
+/// #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+/// struct MainSchedule;
+///
+/// impl ExampleLabel for MainSchedule {
+///     fn dyn_clone(&self) -> voker_ecs::label::Box<dyn ExampleLabel> {
+///         voker_ecs::label::Box::new(self.clone())
+///     }
+/// }
+///
+/// let a = MainSchedule.intern();
+/// let b = MainSchedule.intern();
+/// assert_eq!(a, b);
+/// ```
 ///
 /// [`ScheduleLabel`]: crate::schedule::ScheduleLabel
 #[macro_export]

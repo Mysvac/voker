@@ -7,12 +7,14 @@ use voker_utils::vec::SmallVec;
 use crate::entity::{Entity, EntityHashSet, EntityIndexSet};
 
 // -----------------------------------------------------------------------------
-// LinkSourceSet & OrderedLinkSourceSet
+// RelationshipSourceSet & OrderedRelationshipSourceSet
 
-pub trait LinkSourceSet {
+pub trait RelationshipSourceSet {
     type SourceIter<'a>: Iterator<Item = Entity>
     where
         Self: 'a;
+
+    const SINGLE_ENTITY: bool;
 
     /// Creates a new empty instance.
     ///
@@ -66,7 +68,7 @@ pub trait LinkSourceSet {
     }
 }
 
-pub trait OrderedLinkSourceSet: LinkSourceSet {
+pub trait OrderedRelationshipSourceSet: RelationshipSourceSet {
     /// Inserts the entity at a specific index.
     ///
     /// This will never reorder other entities.
@@ -123,8 +125,10 @@ pub trait OrderedLinkSourceSet: LinkSourceSet {
 // -----------------------------------------------------------------------------
 // Entity / Option<Entity>
 
-impl LinkSourceSet for Entity {
+impl RelationshipSourceSet for Entity {
     type SourceIter<'a> = core::option::IntoIter<Entity>;
+
+    const SINGLE_ENTITY: bool = true;
 
     #[inline]
     fn with_hint(_: usize) -> Self {
@@ -185,8 +189,10 @@ impl LinkSourceSet for Entity {
     }
 }
 
-impl LinkSourceSet for Option<Entity> {
+impl RelationshipSourceSet for Option<Entity> {
     type SourceIter<'a> = core::option::IntoIter<Entity>;
+
+    const SINGLE_ENTITY: bool = true;
 
     #[inline]
     fn with_hint(_: usize) -> Self {
@@ -246,15 +252,18 @@ impl LinkSourceSet for Option<Entity> {
 // -----------------------------------------------------------------------------
 // Ordered Container
 
-impl LinkSourceSet for Vec<Entity> {
+impl RelationshipSourceSet for Vec<Entity> {
     type SourceIter<'a> = Copied<core::slice::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(size_hint: usize) -> Self {
         Vec::with_capacity(size_hint)
     }
 
     fn insert(&mut self, entity: Entity) -> bool {
-        if self.contains(&entity) {
+        use crate::utils::contains_entity;
+        if contains_entity(entity, self.as_slice()) {
             false
         } else {
             Vec::push(self, entity);
@@ -298,7 +307,7 @@ impl LinkSourceSet for Vec<Entity> {
     }
 }
 
-impl OrderedLinkSourceSet for Vec<Entity> {
+impl OrderedRelationshipSourceSet for Vec<Entity> {
     fn insert_at(&mut self, index: usize, entity: Entity) {
         let index = index.min(Vec::len(self));
         Vec::insert(self, index, entity);
@@ -359,8 +368,10 @@ impl OrderedLinkSourceSet for Vec<Entity> {
     }
 }
 
-impl LinkSourceSet for VecDeque<Entity> {
+impl RelationshipSourceSet for VecDeque<Entity> {
     type SourceIter<'a> = Copied<alloc::collections::vec_deque::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(size_hint: usize) -> Self {
         VecDeque::with_capacity(size_hint)
@@ -411,7 +422,7 @@ impl LinkSourceSet for VecDeque<Entity> {
     }
 }
 
-impl OrderedLinkSourceSet for VecDeque<Entity> {
+impl OrderedRelationshipSourceSet for VecDeque<Entity> {
     fn insert_at(&mut self, index: usize, entity: Entity) {
         let index = index.min(VecDeque::len(self));
         VecDeque::insert(self, index, entity);
@@ -466,8 +477,10 @@ impl OrderedLinkSourceSet for VecDeque<Entity> {
     }
 }
 
-impl<const N: usize> LinkSourceSet for SmallVec<Entity, N> {
+impl<const N: usize> RelationshipSourceSet for SmallVec<Entity, N> {
     type SourceIter<'a> = Copied<core::slice::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(size_hint: usize) -> Self {
         SmallVec::with_capacity(size_hint)
@@ -518,7 +531,7 @@ impl<const N: usize> LinkSourceSet for SmallVec<Entity, N> {
     }
 }
 
-impl<const N: usize> OrderedLinkSourceSet for SmallVec<Entity, N> {
+impl<const N: usize> OrderedRelationshipSourceSet for SmallVec<Entity, N> {
     fn insert_at(&mut self, index: usize, entity: Entity) {
         let index = index.min(SmallVec::len(self));
         SmallVec::insert(self, index, entity);
@@ -582,8 +595,10 @@ impl<const N: usize> OrderedLinkSourceSet for SmallVec<Entity, N> {
 // -----------------------------------------------------------------------------
 // Set
 
-impl LinkSourceSet for BTreeSet<Entity> {
+impl RelationshipSourceSet for BTreeSet<Entity> {
     type SourceIter<'a> = Copied<alloc::collections::btree_set::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(_: usize) -> Self {
         BTreeSet::new()
@@ -618,8 +633,10 @@ impl LinkSourceSet for BTreeSet<Entity> {
     fn shrink_to_fit(&mut self) {}
 }
 
-impl LinkSourceSet for EntityHashSet {
+impl RelationshipSourceSet for EntityHashSet {
     type SourceIter<'a> = Copied<crate::entity::hash_set::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(size_hint: usize) -> Self {
         EntityHashSet::with_capacity(size_hint)
@@ -658,8 +675,10 @@ impl LinkSourceSet for EntityHashSet {
     }
 }
 
-impl LinkSourceSet for EntityIndexSet {
+impl RelationshipSourceSet for EntityIndexSet {
     type SourceIter<'a> = Copied<crate::entity::index_set::Iter<'a, Entity>>;
+
+    const SINGLE_ENTITY: bool = false;
 
     fn with_hint(size_hint: usize) -> Self {
         EntityIndexSet::with_capacity(size_hint)

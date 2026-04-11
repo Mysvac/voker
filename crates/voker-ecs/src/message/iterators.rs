@@ -9,16 +9,16 @@ use super::ident::MessageId;
 use super::{Message, Messages};
 
 // -----------------------------------------------------------------------------
-// MessageIdIterator
+// MessageIdIter
 
 /// Iterator over [`MessageId`] values written by a batch call.
-pub struct MessageIdIterator<M: Message> {
+pub struct MessageIdIter<M: Message> {
     pub(super) last: usize,
     pub(super) end: usize,
     pub(super) _marker: PhantomData<M>,
 }
 
-impl<M: Message> Iterator for MessageIdIterator<M> {
+impl<M: Message> Iterator for MessageIdIter<M> {
     type Item = MessageId<M>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,8 +41,8 @@ impl<M: Message> Iterator for MessageIdIterator<M> {
     }
 }
 
-impl<M: Message> ExactSizeIterator for MessageIdIterator<M> {}
-impl<M: Message> FusedIterator for MessageIdIterator<M> {}
+impl<M: Message> ExactSizeIterator for MessageIdIter<M> {}
+impl<M: Message> FusedIterator for MessageIdIter<M> {}
 
 // -----------------------------------------------------------------------------
 // MessageWithIdIter
@@ -58,6 +58,7 @@ impl<M: Message> FromWorld for MessageCursor<M> {
             .get_resource::<Messages<M>>()
             .map(Messages::<M>::oldest_message_index)
             .unwrap_or_default();
+
         Self {
             last_index,
             _marker: PhantomData,

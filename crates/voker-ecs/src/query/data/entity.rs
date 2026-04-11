@@ -124,7 +124,7 @@ unsafe impl QueryData for EntityRef<'_> {
         let world = unsafe { cache.world.read_only() };
         let location = world.entities.locate(entity).unwrap();
         Some(EntityRef {
-            world,
+            world: world.unsafe_world(),
             entity,
             location,
             last_run: cache.last_run,
@@ -185,7 +185,7 @@ unsafe impl QueryData for EntityMut<'_> {
         let world = unsafe { cache.world.data_mut() };
         let location = world.entities.locate(entity).unwrap();
         Some(EntityMut {
-            world,
+            world: world.unsafe_world(),
             entity,
             location,
             last_run: cache.last_run,

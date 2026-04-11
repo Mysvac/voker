@@ -25,7 +25,7 @@ pub use error::*;
 
 pub use access::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
 pub use function::{FunctionSystem, SystemFunction};
-pub use ident::{SystemEntity, SystemId};
+pub use ident::SystemId;
 pub use input::{In, InMut, InRef, SystemInput};
 pub use meta::{SystemFlags, SystemMeta};
 pub use param::{Local, ReadOnlySystemParam, SystemParam};

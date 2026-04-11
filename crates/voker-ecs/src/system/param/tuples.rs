@@ -1,5 +1,4 @@
-use super::{ReadOnlySystemParam, SystemParam};
-use crate::error::GameError;
+use super::{ReadOnlySystemParam, SystemParam, SystemParamError};
 use crate::system::{AccessTable, SystemMeta};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
@@ -24,7 +23,7 @@ macro_rules! impl_tuple {
                 _state: &'s mut Self::State,
                 _last_run: Tick,
                 _this_run: Tick,
-            ) -> Result<Self::Item<'w, 's>, GameError> {
+            ) -> Result<Self::Item<'w, 's>, SystemParamError> {
                 Ok(())
             }
         }
@@ -60,7 +59,7 @@ macro_rules! impl_tuple {
                 state: &'s mut Self::State,
                 last_run: Tick,
                 this_run: Tick,
-            ) -> Result<Self::Item<'w, 's>, GameError> {
+            ) -> Result<Self::Item<'w, 's>, SystemParamError> {
                 unsafe { Ok(( <$name>::build_param(world, state, last_run, this_run)?, )) }
             }
 
@@ -101,7 +100,7 @@ macro_rules! impl_tuple {
                 state: &'s mut Self::State,
                 last_run: Tick,
                 this_run: Tick,
-            ) -> Result<Self::Item<'w, 's>, GameError> {
+            ) -> Result<Self::Item<'w, 's>, SystemParamError> {
                 unsafe { Ok(( $( <$name>::build_param(world, &mut state.$index, last_run, this_run)? ),* )) }
             }
 

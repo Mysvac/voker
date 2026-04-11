@@ -7,6 +7,7 @@ use voker_os::utils::CachePadded;
 
 use voker_os::sync::atomic::AtomicU32;
 
+use super::WorldId;
 use crate::archetype::Archetypes;
 use crate::bundle::Bundles;
 use crate::command::CommandQueue;
@@ -18,7 +19,6 @@ use crate::resource::Resources;
 use crate::schedule::Schedules;
 use crate::storage::Storages;
 use crate::tick::{CHECK_CYCLE, CheckTicks, Tick};
-use crate::world::WorldId;
 
 // -----------------------------------------------------------------------------
 // World

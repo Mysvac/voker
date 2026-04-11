@@ -1,5 +1,4 @@
 use crate::archetype::ArcheId;
-use crate::link::LinkHookMode;
 use crate::storage::TableId;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
@@ -35,8 +34,9 @@ impl EntityOwned<'_> {
     /// ```
     #[inline]
     #[track_caller]
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> &mut Self {
         self.clear_with_caller(DebugLocation::caller());
+        self
     }
 
     pub(crate) fn clear_with_caller(&mut self, caller: DebugLocation) {
@@ -55,7 +55,7 @@ impl EntityOwned<'_> {
         let guard = ForgetEntityOnPanic {
             entity,
             world: unsafe_world,
-            location: caller,
+            caller,
         };
 
         let old_arche_id = location.arche_id;
@@ -70,17 +70,16 @@ impl EntityOwned<'_> {
         {
             // trigger component hooks
             let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
-            let link_hook_mode = LinkHookMode::Run;
-            old_arche.trigger_on_discard(entity, world.reborrow(), link_hook_mode, caller);
-            old_arche.trigger_on_remove(entity, world.reborrow(), link_hook_mode, caller);
+            old_arche.trigger_on_discard(entity, world.reborrow(), caller);
+            old_arche.trigger_on_remove(entity, world.reborrow(), caller);
         }
 
         {
             // update row
             let new_arche_row = unsafe {
-                let moved = old_arche.remove_entity(location.arche_row);
+                let moved = old_arche.dealloc_row(location.arche_row);
                 self.world.full_mut().entities.update_row(moved).unwrap();
-                new_arche.insert_entity(self.entity)
+                new_arche.alloc_row(self.entity)
             };
             location.arche_id = new_arche_id;
             location.arche_row = new_arche_row;
@@ -115,10 +114,8 @@ impl EntityOwned<'_> {
             old_arche.sparse_components().iter().for_each(|&id| {
                 let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
                 let map = unsafe { maps.get_unchecked_mut(map_id) };
-                let row = unsafe { map.deallocate(entity).unwrap() };
-                unsafe {
-                    map.drop_item(row);
-                }
+                let map_row = map.get_map_row(entity).unwrap();
+                unsafe { map.dealloc_row::<true>(map_row) };
             });
         }
 

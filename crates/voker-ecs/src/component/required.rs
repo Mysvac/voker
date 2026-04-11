@@ -29,12 +29,18 @@ impl Required {
     }
 
     /// Registers all required components with the given registrar.
+    ///
+    /// This includes the type itself.
     #[inline(always)]
     pub fn register(&self, param: &mut ComponentRegistrar) {
         (self.register)(param)
     }
 
-    /// Collects all required components using the given collector.
+    /// Collects (and registers) all required components using the given collector.
+    ///
+    /// This includes the type itself.
+    ///
+    /// See [`ComponentCollector`] .
     #[inline(always)]
     pub fn collect(&self, param: &mut ComponentCollector) {
         (self.collect)(param)
@@ -43,7 +49,7 @@ impl Required {
     /// Writes all required components using the given writer.
     ///
     /// # Safety
-    /// See [`RequiredComponents`]
+    /// See [`ComponentWriter`] and [`RequiredComponents`] .
     #[inline(always)]
     pub unsafe fn write(&self, param: &mut ComponentWriter) {
         unsafe { (self.write)(param) }

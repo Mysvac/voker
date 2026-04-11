@@ -35,7 +35,7 @@ use crate::world::{UnsafeWorld, World};
 ///
 /// The Entity must be spawned.
 pub struct EntityMut<'a> {
-    pub(crate) world: &'a mut World,
+    pub(crate) world: UnsafeWorld<'a>,
     pub(crate) entity: Entity,
     pub(crate) location: EntityLocation,
     pub(crate) last_run: Tick,
@@ -46,7 +46,7 @@ pub struct EntityMut<'a> {
 ///
 /// The Entity must be spawned.
 pub struct EntityRef<'a> {
-    pub(crate) world: &'a World,
+    pub(crate) world: UnsafeWorld<'a>,
     pub(crate) entity: Entity,
     pub(crate) location: EntityLocation,
     pub(crate) last_run: Tick,
@@ -72,7 +72,23 @@ impl<'a> EntityMut<'a> {
     pub fn get_mut<T: GetComponents>(&mut self) -> Option<T::Mut<'_>> {
         unsafe {
             T::get_mut(
-                self.world.unsafe_world(),
+                self.world,
+                self.entity,
+                self.location.table_id,
+                self.location.table_row,
+                self.last_run,
+                self.this_run,
+            )
+        }
+    }
+
+    /// Gets change-aware mutable component reference for `T`.
+    ///
+    /// See [`GetComponents`] for examples.
+    pub fn into_mut<T: GetComponents>(self) -> Option<T::Mut<'a>> {
+        unsafe {
+            T::get_mut(
+                self.world,
                 self.entity,
                 self.location.table_id,
                 self.location.table_row,
@@ -89,7 +105,7 @@ impl<'a> EntityMut<'a> {
         unsafe {
             T::fetch(
                 true,
-                self.world.unsafe_world(),
+                self.world,
                 self.entity,
                 self.location.table_id,
                 self.location.table_row,
@@ -101,18 +117,19 @@ impl<'a> EntityMut<'a> {
 
     /// Gets type-erased change-aware mutable component reference by given ComponentId.
     pub fn get_mut_by_id(&mut self, id: ComponentId) -> Option<UntypedMut<'_>> {
-        let arches = &self.world.archetypes;
+        let world = unsafe { self.world.data_mut() };
+        let arches = &world.archetypes;
         let info = unsafe { arches.get_unchecked(self.location.arche_id) };
 
         if info.contains_dense_component(id) {
             let table_id = self.location.table_id;
             let table_row = self.location.table_row;
-            let tables = &mut self.world.storages.tables;
+            let tables = &mut world.storages.tables;
             let table = unsafe { tables.get_unchecked_mut(table_id) };
             let table_col = unsafe { table.get_table_col(id).debug_checked_unwrap() };
             unsafe { Some(table.get_mut(table_row, table_col, self.last_run, self.this_run)) }
         } else if info.contains_sparse_component(id) {
-            let maps = &mut self.world.storages.maps;
+            let maps = &mut world.storages.maps;
             let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
             let map = unsafe { maps.get_unchecked_mut(map_id) };
             let map_row = unsafe { map.get_map_row(self.entity).debug_checked_unwrap() };
@@ -134,7 +151,7 @@ macro_rules! impl_common_methods {
             }
         }
 
-        impl $name<'_> {
+        impl<'a> $name<'a> {
             /// Returns the underlying entity id.
             pub fn entity(&self) -> Entity {
                 self.entity
@@ -148,23 +165,24 @@ macro_rules! impl_common_methods {
             /// Returns this entity's Archetype.
             pub fn archetype(&self) -> &Archetype {
                 let arche_id = self.location.arche_id;
-                unsafe { self.world.archetypes.get_unchecked(arche_id) }
+                let world = unsafe { self.world.read_only() };
+                unsafe { world.archetypes.get_unchecked(arche_id) }
             }
 
             /// Returns whether the entity's archetype contains `T`.
             ///
             /// See [`GetComponents`] for examples.
             pub fn contains<T: GetComponents>(&self) -> bool {
-                unsafe { T::contains(self.world.unsafe_world(), self.location.arche_id) }
+                unsafe { T::contains(self.world, self.location.arche_id) }
             }
 
             /// Gets raw shared component reference for `T`.
             ///
             /// See [`GetComponents`] for examples.
-            pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'_>> {
+            pub fn get<T: GetComponents>(&self) -> Option<T::Raw<'a>> {
                 unsafe {
                     T::get(
-                        self.world.unsafe_world(),
+                        self.world,
                         self.entity,
                         self.location.table_id,
                         self.location.table_row,
@@ -178,7 +196,23 @@ macro_rules! impl_common_methods {
             pub fn get_ref<T: GetComponents>(&self) -> Option<T::Ref<'_>> {
                 unsafe {
                     T::get_ref(
-                        self.world.unsafe_world(),
+                        self.world,
+                        self.entity,
+                        self.location.table_id,
+                        self.location.table_row,
+                        self.last_run,
+                        self.this_run,
+                    )
+                }
+            }
+
+            /// Gets change-aware shared component reference for `T`.
+            ///
+            /// See [`GetComponents`] for examples.
+            pub fn into_ref<T: GetComponents>(self) -> Option<T::Ref<'a>> {
+                unsafe {
+                    T::get_ref(
+                        self.world,
                         self.entity,
                         self.location.table_id,
                         self.location.table_row,
@@ -190,24 +224,26 @@ macro_rules! impl_common_methods {
 
             /// Checks whether the entity contains given Component(Id).
             pub fn contains_by_id(&self, id: ComponentId) -> bool {
-                let arches = &self.world.archetypes;
+                let world = unsafe { self.world.read_only() };
+                let arches = &world.archetypes;
                 let info = unsafe { arches.get_unchecked(self.location.arche_id) };
                 info.contains_component(id)
             }
 
             /// Gets raw shared type-erased pointer by given ComponentId.
             pub fn get_by_id(&self, id: ComponentId) -> Option<Ptr<'_>> {
-                let arches = &self.world.archetypes;
+                let world = unsafe { self.world.read_only() };
+                let arches = &world.archetypes;
                 let info = unsafe { arches.get_unchecked(self.location.arche_id) };
                 if info.contains_dense_component(id) {
                     let table_id = self.location.table_id;
                     let table_row = self.location.table_row;
-                    let tables = &self.world.storages.tables;
+                    let tables = &world.storages.tables;
                     let table = unsafe { tables.get_unchecked(table_id) };
                     let table_col = unsafe { table.get_table_col(id).debug_checked_unwrap() };
                     unsafe { Some(table.get_data(table_row, table_col)) }
                 } else if info.contains_sparse_component(id) {
-                    let maps = &self.world.storages.maps;
+                    let maps = &world.storages.maps;
                     let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
                     let map = unsafe { maps.get_unchecked(map_id) };
                     let map_row = unsafe { map.get_map_row(self.entity).debug_checked_unwrap() };
@@ -219,19 +255,20 @@ macro_rules! impl_common_methods {
 
             /// Gets type-erased change-aware shared component reference by given ComponentId.
             pub fn get_ref_by_id(&self, id: ComponentId) -> Option<UntypedRef<'_>> {
-                let arches = &self.world.archetypes;
+                let world = unsafe { self.world.read_only() };
+                let arches = &world.archetypes;
                 let info = unsafe { arches.get_unchecked(self.location.arche_id) };
                 if info.contains_dense_component(id) {
                     let table_id = self.location.table_id;
                     let table_row = self.location.table_row;
-                    let tables = &self.world.storages.tables;
+                    let tables = &world.storages.tables;
                     let table = unsafe { tables.get_unchecked(table_id) };
                     let table_col = unsafe { table.get_table_col(id).debug_checked_unwrap() };
                     unsafe {
                         Some(table.get_ref(table_row, table_col, self.last_run, self.this_run))
                     }
                 } else if info.contains_sparse_component(id) {
-                    let maps = &self.world.storages.maps;
+                    let maps = &world.storages.maps;
                     let map_id = unsafe { maps.get_id(id).debug_checked_unwrap() };
                     let map = unsafe { maps.get_unchecked(map_id) };
                     let map_row = unsafe { map.get_map_row(self.entity).debug_checked_unwrap() };
@@ -282,7 +319,7 @@ impl<'a> From<EntityOwned<'a>> for EntityMut<'a> {
             location: value.location.unwrap_or_else(|| value.panic_despawned()),
             last_run: value.last_run(),
             this_run: value.this_run(),
-            world: unsafe { value.world.data_mut() },
+            world: value.world,
             entity: value.entity,
         }
     }
@@ -294,7 +331,7 @@ impl<'a> From<EntityOwned<'a>> for EntityRef<'a> {
             location: value.location.unwrap_or_else(|| value.panic_despawned()),
             last_run: value.last_run(),
             this_run: value.this_run(),
-            world: unsafe { value.world.read_only() },
+            world: value.world,
             entity: value.entity,
         }
     }
@@ -395,7 +432,7 @@ impl<'a> EntityOwned<'a> {
             location: self.location.unwrap_or_else(|| self.panic_despawned()),
             last_run: self.last_run(),
             this_run: self.this_run(),
-            world: unsafe { self.world.read_only() },
+            world: self.world,
             entity: self.entity,
         }
     }
@@ -411,7 +448,7 @@ impl<'a> EntityOwned<'a> {
             location: self.location.unwrap_or_else(|| self.panic_despawned()),
             last_run: self.last_run(),
             this_run: self.this_run(),
-            world: unsafe { self.world.data_mut() },
+            world: self.world,
             entity: self.entity,
         }
     }

@@ -8,7 +8,6 @@ use crate::bundle::BundleId;
 use crate::component::{ComponentHook, HookContext};
 use crate::component::{ComponentId, Components};
 use crate::entity::{Entity, MovedEntityRow};
-use crate::link::LinkHookMode;
 use crate::storage::TableId;
 use crate::utils::DebugLocation;
 use crate::world::DeferredWorld;
@@ -71,7 +70,7 @@ pub struct Archetype {
     components: &'static [ComponentId],
     // Maps archetype rows to entities.
     entities: Vec<Entity>,
-    // Cached hooks grouped by operation.
+    // Cached component hooks.
     on_add: &'static [HookItem],
     on_clone: &'static [HookItem],
     on_insert: &'static [HookItem],
@@ -95,6 +94,8 @@ impl Archetype {
         idents: &'static [ComponentId],
         components: &Components,
     ) -> Self {
+        use crate::utils::SlicePool;
+
         debug_assert!(idents[..dense_len].is_sorted());
         debug_assert!(idents[dense_len..].is_sorted());
 
@@ -116,12 +117,12 @@ impl Archetype {
             if let Some(hk) = info.on_despawn() { on_despawn.push((id, hk)); }
         });
 
-        let on_add = crate::utils::SlicePool::component_hook(&on_add);
-        let on_clone = crate::utils::SlicePool::component_hook(&on_clone);
-        let on_insert = crate::utils::SlicePool::component_hook(&on_insert);
-        let on_remove = crate::utils::SlicePool::component_hook(&on_remove);
-        let on_discard = crate::utils::SlicePool::component_hook(&on_discard);
-        let on_despawn = crate::utils::SlicePool::component_hook(&on_despawn);
+        let on_add = SlicePool::component_hook(&on_add);
+        let on_clone = SlicePool::component_hook(&on_clone);
+        let on_insert = SlicePool::component_hook(&on_insert);
+        let on_remove = SlicePool::component_hook(&on_remove);
+        let on_discard = SlicePool::component_hook(&on_discard);
+        let on_despawn = SlicePool::component_hook(&on_despawn);
 
         Archetype {
             id: arche_id,
@@ -294,6 +295,8 @@ impl Archetype {
 impl Archetype {
     /// Finds the row index for a given entity using linear search.
     ///
+    /// It can also be used to check whether a specified entity is included.
+    ///
     /// Note: This is inefficient and should be avoided.
     ///
     /// # Complexity
@@ -306,17 +309,6 @@ impl Archetype {
             .map(|idx| ArcheRow(idx as u32))
     }
 
-    /// Returns the entity at the specified archetype row.
-    ///
-    /// # Safety
-    /// The provided `row` must be currently occupied by an entity.
-    /// Calling with an invalid or empty row leads to undefined behavior.
-    #[must_use]
-    pub unsafe fn entity_at(&mut self, row: ArcheRow) -> Entity {
-        debug_assert!((row.0 as usize) < self.entities.len());
-        unsafe { *self.entities.get_unchecked(row.0 as usize) }
-    }
-
     /// Inserts a new entity into this archetype, reserving space at the end.
     ///
     /// # Safety
@@ -324,7 +316,7 @@ impl Archetype {
     /// - **Storage preparation**: The caller must ensure that component storage is
     ///   prepared for this entity before or immediately after insertion.
     #[must_use]
-    pub unsafe fn insert_entity(&mut self, entity: Entity) -> ArcheRow {
+    pub unsafe fn alloc_row(&mut self, entity: Entity) -> ArcheRow {
         debug_assert!(!crate::utils::contains_entity(entity, &self.entities));
         // 0 < EntityId < u32::MAX
         let row = ArcheRow(self.entities.len() as u32);
@@ -342,7 +334,7 @@ impl Archetype {
     /// - **External reference updates**: The caller MUST update any external references
     ///   that pointed to the moved entity's old location.
     #[must_use]
-    pub unsafe fn remove_entity(&mut self, row: ArcheRow) -> MovedEntityRow {
+    pub unsafe fn dealloc_row(&mut self, row: ArcheRow) -> MovedEntityRow {
         debug_assert!((row.0 as usize) < self.entities.len());
 
         let last = self.entities.len() - 1;
@@ -427,140 +419,85 @@ impl Archetype {
         self.on_despawn
     }
 
-    /// Triggers all cached `on_add` hooks for the given entity.
+    /// Triggers all `on_add` hooks in this archetype for the given entity.
     #[inline]
     #[track_caller]
     pub(crate) fn trigger_on_add(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_add.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
-    /// Triggers all cached `on_clone` hooks for the given entity.
-    #[expect(unused, reason = "todo")]
+    /// Triggers all `on_clone` hooks in this archetype for the given entity.
     #[inline]
     #[track_caller]
     pub(crate) fn trigger_on_clone(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_clone.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
-    /// Triggers all cached `on_insert` hooks for the given entity.
+    /// Triggers all `on_insert` hooks in this archetype for the given entity.
     #[inline]
     #[track_caller]
     pub(crate) fn trigger_on_insert(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_insert.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
-    /// Triggers all cached `on_remove` hooks for the given entity.
+    /// Triggers all `on_remove` hooks in this archetype for the given entity.
     #[inline]
     #[track_caller]
     pub(crate) fn trigger_on_remove(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_remove.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
-    /// Triggers all cached `on_discard` hooks for the given entity.
+    /// Triggers all `on_discard` hooks in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_discard(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_discard.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 
-    /// Triggers all cached `on_despawn` hooks for the given entity.
+    /// Triggers all `on_despawn` hooks in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_despawn(
         &self,
         entity: Entity,
         mut world: DeferredWorld,
-        link_hook_mode: LinkHookMode,
         caller: DebugLocation,
     ) {
         self.on_despawn.iter().for_each(|&(id, hook)| {
-            hook(
-                world.reborrow(),
-                HookContext {
-                    id,
-                    entity,
-                    caller,
-                    link_hook_mode,
-                },
-            );
+            hook(world.reborrow(), HookContext { id, entity, caller });
         });
     }
 }

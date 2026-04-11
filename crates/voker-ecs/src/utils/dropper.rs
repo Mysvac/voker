@@ -30,6 +30,8 @@ impl Dropper {
     ///
     /// Returns `None` for trivially droppable types, allowing callers to skip
     /// storing or invoking unnecessary drop callbacks.
+    ///
+    /// This is typically used by type-erased storage metadata.
     pub const fn of<T>() -> Option<Dropper> {
         if ::core::mem::needs_drop::<T>() {
             Some(Dropper {
@@ -44,7 +46,8 @@ impl Dropper {
     ///
     /// # Safety
     /// The caller must ensure `ptr` points to a valid initialized value of the
-    /// exact type this [`Dropper`] was created for.
+    /// exact type this [`Dropper`] was created for, and that this value is
+    /// dropped at most once.
     #[inline(always)]
     pub unsafe fn call(self, ptr: OwningPtr<'_>) {
         unsafe {

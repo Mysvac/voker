@@ -30,7 +30,7 @@ mod writer;
 pub use voker_ecs_derive::Message;
 
 pub use ident::{Message, MessageId};
-pub use iterators::{MessageCursor, MessageIdIterator};
+pub use iterators::{MessageCursor, MessageIdIter};
 pub use iterators::{MessageIterator, MessageWithIdIterator};
 pub use iterators::{MessageMutIterator, MessageMutWithIdIterator};
 pub use messages::Messages;

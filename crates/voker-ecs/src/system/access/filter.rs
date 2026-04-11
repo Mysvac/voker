@@ -47,6 +47,8 @@ impl FilterParamBuilder {
     }
 
     pub fn build(self) -> Option<FilterParam> {
+        use crate::utils::SlicePool;
+
         if self.with.is_disjoint(&self.without) {
             let with_len = self.with.len();
             let without_len = self.without.len();
@@ -55,7 +57,7 @@ impl FilterParamBuilder {
             vec.extend(self.with);
             vec.extend(self.without);
 
-            let params = crate::utils::SlicePool::component(&vec);
+            let params = SlicePool::component(&vec);
 
             let mut hasher = FixedHashState.build_hasher();
             with_len.hash(&mut hasher);

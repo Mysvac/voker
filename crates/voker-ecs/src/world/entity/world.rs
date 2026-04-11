@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
+use crate::clone::EntityCloner;
 use crate::command::Commands;
 use crate::entity::{AllocEntitiesIter, Entity, FetchError};
 use crate::world::{EntityMut, EntityOwned, EntityRef, UnsafeWorld, World};
@@ -31,6 +32,30 @@ impl World {
     pub fn alloc_entities(&self, count: usize) -> AllocEntitiesIter<'_> {
         assert!(count < u32::MAX as usize, "too many entities");
         self.allocator.alloc_many(count as u32)
+    }
+
+    /// Creates an [`EntityCloner`] bound to this world.
+    ///
+    /// This is the main entry point for cloning one or more entities while
+    /// preserving component-level clone policies.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use voker_ecs::prelude::*;
+    ///
+    /// #[derive(Component, Clone)]
+    /// struct Marker;
+    ///
+    /// let mut world = World::alloc();
+    /// let source = world.spawn(Marker).entity();
+    /// let cloned = world.entity_cloner().spawn_clone(source, false);
+    ///
+    /// assert_ne!(source, cloned);
+    /// assert!(world.entity_ref(cloned).contains::<Marker>());
+    /// ```
+    #[inline]
+    pub fn entity_cloner(&mut self) -> EntityCloner<'_> {
+        EntityCloner::new(self)
     }
 
     /// Returns a shared entity view with cached tick context.
@@ -158,7 +183,7 @@ fn get_entity_ref(world: &World, entity: Entity) -> Result<EntityRef<'_>, FetchE
     let last_run = world.last_run();
     let this_run = world.this_run();
     Ok(EntityRef {
-        world,
+        world: world.unsafe_world(),
         entity,
         location,
         last_run,
@@ -168,11 +193,11 @@ fn get_entity_ref(world: &World, entity: Entity) -> Result<EntityRef<'_>, FetchE
 
 /// Returns a mutable entity view with cached tick context.
 fn get_entity_mut(world: &mut World, entity: Entity) -> Result<EntityMut<'_>, FetchError> {
-    let location = world.entities.locate(entity).unwrap();
+    let location = world.entities.locate(entity)?;
     let last_run = world.last_run();
     let this_run = world.this_run();
     Ok(EntityMut {
-        world,
+        world: world.unsafe_world(),
         entity,
         location,
         last_run,
