@@ -60,7 +60,7 @@ pub unsafe trait QueryFilter {
     ///
     /// This is typically built once during query construction and contains
     /// information like component IDs that don't change over the query's lifetime.
-    type State: Send + Sync + 'static;
+    type State: Clone + Send + Sync + 'static;
 
     /// Per-query cached data for a specific world state.
     ///
@@ -88,6 +88,9 @@ pub unsafe trait QueryFilter {
     /// This is called once when the query is first created. The state is
     /// shared across all query executions.
     fn build_state(world: &mut World) -> Self::State;
+
+    /// Try get the static state from given world without mutable reference.
+    fn fetch_state(world: &World) -> Option<Self::State>;
 
     /// Builds a per-execution cache for this filter.
     ///
@@ -198,6 +201,10 @@ unsafe impl QueryFilter for () {
     const ENABLE_ENTITY_FILTER: bool = false;
 
     fn build_state(_world: &mut World) -> Self::State {}
+
+    fn fetch_state(_world: &World) -> Option<Self::State> {
+        Some(())
+    }
 
     unsafe fn build_cache<'w>(
         _state: &Self::State,

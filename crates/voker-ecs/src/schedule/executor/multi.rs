@@ -311,7 +311,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
-                            (context.error_handler)(e, ctx);
+                            (context.error_handler)(e.into(), ctx);
                             return false; // Error -> false
                         }
                         true // Success -> true
@@ -347,7 +347,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
-                            (context.error_handler)(e, ctx);
+                            (context.error_handler)(e.into(), ctx);
                             false // Error -> false
                         })
                     });

@@ -1,3 +1,5 @@
+//! Entity storage identifiers shared across table and archetype paths.
+
 use core::fmt::Debug;
 
 use voker_utils::num::NonMaxU32;
@@ -18,7 +20,7 @@ use crate::storage::TableId;
 /// - Both variants occupy the same memory location
 ///
 /// # Safety
-/// This type uses a union to achieve zero-cost abstraction. Users must
+/// This type uses a union to achieve a zero-cost abstraction. Users must
 /// be careful to read from the correct variant that was last written.
 #[derive(Clone, Copy)]
 pub union StorageId {

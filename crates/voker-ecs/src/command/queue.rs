@@ -13,7 +13,11 @@ use crate::world::World;
 /// A queue for storing and executing deferred [`Command`]s.
 ///
 /// `CommandQueue` stores commands as type-erased bytes in a
-/// contiguous buffer, which is faster then `Box<dyn Command>`.
+/// contiguous buffer, which is faster than `Box<dyn Command>`.
+///
+/// Internally, each queued item is encoded as `CommandMeta` followed by the
+/// command payload bytes. During application, `cursor` marks the already
+/// drained prefix, while the active pass processes `[start, stop)`.
 pub struct CommandQueue {
     bytes: Vec<MaybeUninit<u8>>,
     cursor: usize,
@@ -29,7 +33,7 @@ pub(crate) struct RawCommandQueue {
     panic_recovery: NonNull<Vec<MaybeUninit<u8>>>,
 }
 
-/// The function pointer used for execution(or dropping) command and move cursor.
+/// Function pointer used to execute (or drop) a command and advance the cursor.
 #[repr(transparent)]
 struct CommandMeta {
     /// - If world is Some(_), execute the command and move cursor.
@@ -174,7 +178,7 @@ impl RawCommandQueue {
                     *self.cursor.as_mut() = start;
                 }
 
-                // Restore the remaining commands when reaching the bottom level loop.
+                // Restore remaining commands when reaching the top-level apply pass.
                 if start == 0 {
                     bytes.append(panic_recovery);
                 }
@@ -288,8 +292,12 @@ impl CommandQueue {
 
     /// Applies all commands in the queue to the given `World`.
     ///
-    /// This function flushes any pending world commands before applying
-    /// the queued commands. After application, the queue is cleared.
+    /// This function first applies commands currently queued in `world`, then
+    /// applies this queue. The queue is cleared after application.
+    ///
+    /// Calling `world.flush()` from inside command execution is supported:
+    /// cursor bookkeeping ensures already-scheduled commands in the current
+    /// pass are not re-applied.
     #[inline]
     pub fn apply(&mut self, world: &mut World) {
         world.apply_commands();

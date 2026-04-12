@@ -1,23 +1,14 @@
 use crate::query::{Query, QueryData, QueryFilter, QueryState};
-use crate::system::SystemParam;
 use crate::world::{UnsafeWorld, World};
 
 impl World {
-    /// Creates a fresh [`QueryState`] from query parameters.
-    ///
-    /// This function does **not** cache(register) the query state as a world resource.
-    /// Use this for one-off query setup when you do not want persistent state.
-    pub fn query_once<D: QueryData, F: QueryFilter>(&mut self) -> QueryState<D, F> {
-        <QueryState<D, F>>::new(self)
-    }
-
     /// Returns a cached [`QueryState`] resource, creating it if missing.
     ///
     /// [`World::query`] and [`World::query_with`] call this automatically to
     /// avoid repeated initialization and archetype/filter setup costs.
     ///
-    /// If you do not want caching, use [`World::query_once`] for ad-hoc
-    /// query construction.
+    /// For a one-off query state value, call [`World::query_state`] and use
+    /// the returned state directly.
     ///
     /// Note: when `Query` is used as a system parameter, its query state is
     /// stored on the system instance, not in [`World`].
@@ -28,11 +19,13 @@ impl World {
     {
         let unsafe_world = self.unsafe_world();
         let data_mut = unsafe { unsafe_world.data_mut() };
-        if let Some(state) = data_mut.get_resource_mut::<QueryState<D, F>>() {
+        if let Some(mut state) = data_mut.get_resource_mut::<QueryState<D, F>>() {
+            let read_world = unsafe { unsafe_world.read_only() };
+            state.update(read_world);
             state.into_inner()
         } else {
             let full_mut = unsafe { unsafe_world.full_mut() };
-            let state = <QueryState<D, F>>::new(full_mut);
+            let state = <QueryState<D, F>>::build(full_mut);
             full_mut.insert_resource(state)
         }
     }
@@ -46,6 +39,47 @@ impl World {
         F: QueryFilter + 'static,
     {
         self.drop_resource::<QueryState<D, F>>();
+    }
+
+    /// Create a `QueryState` if all state can be initialized.
+    ///
+    /// It's always success because we hold exclusive reference of world.
+    ///
+    /// If the state is unregistered, `register_query` will be called.
+    pub fn query_state<D, F>(&mut self) -> QueryState<D, F>
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
+        self.register_query::<D, F>().clone()
+    }
+
+    /// Create a `QueryState` if all state can be initialized.
+    ///
+    /// This function can be used for `&World`, be may return `None`
+    /// if some component (need to access) is unregistered.
+    ///
+    /// For example, the query usually used for access component,
+    /// then the state required the Component ID is registered.
+    ///
+    /// We hold a immutable world, cannot register component id,
+    /// so this function return None is required Component ID
+    /// can not be find through [`World::get_component_id`].
+    ///
+    /// In the future, we may add auto-register implementation
+    /// for components, so this function usually return Some.
+    pub fn get_query_state<D, F>(&self) -> Option<QueryState<D, F>>
+    where
+        D: QueryData + 'static,
+        F: QueryFilter + 'static,
+    {
+        if let Some(state) = self.get_resource::<QueryState<D, F>>() {
+            let mut state = state.clone();
+            state.update(self);
+            Some(state)
+        } else {
+            QueryState::<D, F>::try_build(self)
+        }
     }
 
     /// Creates a registered query view with no explicit filter.
@@ -77,7 +111,7 @@ impl World {
         let last_run = read_only_world.last_run();
         let this_run = read_only_world.this_run();
 
-        unsafe { <Query<D> as SystemParam>::build_param(world, state, last_run, this_run).unwrap() }
+        unsafe { Query::<D, ()>::new(world, state, last_run, this_run) }
     }
 
     /// Creates a registered query view with an explicit filter.
@@ -118,34 +152,41 @@ impl World {
         let last_run = read_only_world.last_run();
         let this_run = read_only_world.this_run();
 
-        unsafe {
-            <Query<D, F> as SystemParam>::build_param(world, state, last_run, this_run).unwrap()
-        }
+        unsafe { Query::<D, F>::new(world, state, last_run, this_run) }
     }
 
-    /// Creates a query view from an already cached [`QueryState`].
+    /// Creates a registered query view with no explicit filter.
     ///
-    /// Returns `None` when the query state has not been registered.
-    /// Register it first via [`World::register_query`] or call [`World::query`]
-    /// / [`World::query_with`] to auto-register.
+    /// Return `None` if the query state is unregistered.
     ///
-    /// This is primarily useful in contexts where structural mutation is not
-    /// available during access and only pre-registered query states can be used.
-    pub fn query_cached<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
+    /// This function can be used for `DeferredWorld`.
+    pub fn try_query<D: QueryData + 'static>(&mut self) -> Option<Query<'_, '_, D>> {
+        let unsafe_world = self.unsafe_world();
+        let data_mut = unsafe { unsafe_world.data_mut() };
+        let state = data_mut.get_resource_mut::<QueryState<D>>()?;
+        let state = state.into_inner();
+        let world = unsafe { unsafe_world.data_mut() };
+        state.update(world);
+        Some(state.query_mut(world))
+    }
+
+    /// Creates a registered query view with with an explicit filter.
+    ///
+    /// Return `None` if the query state is unregistered.
+    ///
+    /// This function can be used for `DeferredWorld`.
+    pub fn try_query_with<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
     where
         D: QueryData + 'static,
         F: QueryFilter + 'static,
     {
-        let world = self.unsafe_world();
-        let data_mut = unsafe { world.data_mut() };
+        let unsafe_world = self.unsafe_world();
+        let data_mut = unsafe { unsafe_world.data_mut() };
         let state = data_mut.get_resource_mut::<QueryState<D, F>>()?;
         let state = state.into_inner();
-        let read_only_world = unsafe { world.read_only() };
-        state.update(read_only_world);
-        let last_run = read_only_world.last_run();
-        let this_run = read_only_world.this_run();
-
-        unsafe { <Query<D, F> as SystemParam>::build_param(world, state, last_run, this_run).ok() }
+        let world = unsafe { unsafe_world.data_mut() };
+        state.update(world);
+        Some(state.query_mut(world))
     }
 }
 
@@ -202,7 +243,7 @@ mod tests {
         world.reset_last_run();
 
         let query = world.query::<&mut Bar>();
-        for bar in query {
+        for mut bar in query {
             bar.0 += 50;
         }
 
@@ -443,4 +484,84 @@ mod tests {
         let qux_values: Vec<f32> = query.into_iter().map(|q| q.0).collect();
         assert!(qux_values.contains(&3.0));
     }
+
+    // #[test]
+    // fn query_get_and_get_mut() {
+    //     let mut world = World::alloc();
+
+    //     let e1 = world.spawn((Foo, Bar(10))).entity();
+    //     let e2 = world.spawn((Foo,)).entity();
+
+    //     {
+    //         let query = world.query_with::<&Bar, With<Foo>>();
+    //         assert_eq!(query.get(e1).unwrap().0, 10);
+    //         assert!(matches!(
+    //             query.get(e2),
+    //             Err(QueryEntityError::QueryMismatch(entity)) if entity == e2
+    //         ));
+    //     }
+
+    //     {
+    //         let mut query = world.query::<&mut Bar>();
+    //         query.get_mut(e1).unwrap().0 = 99;
+    //     }
+
+    //     let query = world.query::<&Bar>();
+    //     assert_eq!(query.get(e1).unwrap().0, 99);
+    // }
+
+    // #[test]
+    // fn query_get_many_mut_rejects_duplicates() {
+    //     let mut world = World::alloc();
+    //     let e = world.spawn((Foo, Bar(1))).entity();
+
+    //     let mut query = world.query::<&mut Bar>();
+    //     let err = query.get_many([e, e]).unwrap_err();
+    //     assert!(matches!(err, QueryEntityError::DuplicateEntity(entity) if entity == e));
+    // }
+
+    // #[test]
+    // fn query_get_single_variants() {
+    //     let mut world = World::alloc();
+
+    //     {
+    //         let query = world.query::<&Foo>();
+    //         assert!(matches!(
+    //             query.get_single(),
+    //             Err(QuerySingleError::NoEntities)
+    //         ));
+    //     }
+
+    //     let e = world.spawn((Foo,)).entity();
+    //     {
+    //         let query = world.query::<Entity>();
+    //         assert_eq!(query.get_single().unwrap(), e);
+    //     }
+
+    //     world.spawn((Foo,));
+    //     {
+    //         let query = world.query::<&Foo>();
+    //         assert!(matches!(
+    //             query.get_single(),
+    //             Err(QuerySingleError::MultipleEntities)
+    //         ));
+    //     }
+    // }
+
+    // #[test]
+    // fn single_system_param_reports_system_param_error() {
+    //     let mut world = World::alloc();
+
+    //     fn need_exact_one(_single: Single<&Foo>) {}
+
+    //     let err = world.run_system(need_exact_one).unwrap_err();
+    //     assert!(matches!(err, SystemError::Param(_)));
+
+    //     world.spawn((Foo,));
+    //     world.run_system(need_exact_one).unwrap();
+
+    //     world.spawn((Foo,));
+    //     let err = world.run_system(need_exact_one).unwrap_err();
+    //     assert!(matches!(err, SystemError::Param(_)));
+    // }
 }

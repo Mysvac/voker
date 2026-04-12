@@ -8,6 +8,9 @@ use crate::system::{AccessTable, Local, SystemParam, SystemParamError};
 /// Like [`crate::message::MessageReader`], each system instance maintains its
 /// own local cursor.
 ///
+/// Reading mutably still follows unread semantics: this parameter only yields
+/// messages not yet observed by this system's cursor.
+///
 /// # Example
 ///
 /// ```rust
@@ -31,6 +34,8 @@ pub struct MessageMutator<'w, 's, M: Message> {
 
 impl<'w, 's, M: Message> MessageMutator<'w, 's, M> {
     /// Returns a mutable iterator over unread messages for this cursor.
+    ///
+    /// Iteration advances the cursor.
     pub fn read(&mut self) -> MessageMutIterator<'_, M> {
         self.cursor.read_mut(&mut self.messages)
     }

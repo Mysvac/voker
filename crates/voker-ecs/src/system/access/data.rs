@@ -124,6 +124,20 @@ impl AccessParam {
         self.writing.is_disjoint(&other.reading) && other.writing.is_disjoint(&self.reading)
     }
 
+    /// Query 有两个参数：QueryData 和 QueryFilter
+    /// 同时包含两个访问参数：AccessParam 和 AccessFilter。
+    ///
+    /// - 对于 AccessFilter，先通过 QueryFilter 初始化，后通过 QueryData 初始化。
+    /// - 对于 AccessParam ，先通过 QueryData 初始化，后通过 QueryFilter 初始化。
+    ///
+    /// AccessFilter 是好理解的，QueryFilter 是显式参数，而 QueryData 需要访问的目标是隐式参数。
+    ///
+    /// 对于 AccessParam 最初设想是只需要通过 QueryData 初始化，与 QueryFilter 无关。
+    /// 但我们发现对于 Added、Changed 等特殊过滤器，需要访问组件的附加数据，逻辑上是需要“读”的。
+    /// 但是过滤器的读数据发生在数据获取时，与用户操作不会冲突，因此我们需要直接“强制设置”，且
+    /// 保证 QueryFilter 的这些强制操作发生在 QueryData 的设置之后。
+    ///
+    /// 注意我们要求 QueryFilter 是只读，因此只有 force_reading ，没有 force_writing。
     pub fn force_reading(&mut self, id: ComponentId) {
         if !self.entity_mut && !self.entity_ref {
             self.reading.insert(id);

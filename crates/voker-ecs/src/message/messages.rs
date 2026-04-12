@@ -25,6 +25,29 @@ pub(super) struct MessageSequence<M: Message> {
 ///
 /// After calling [`Self::update`], sequences are rotated so new writes start in
 /// a fresh `messages_b` while old values remain observable for one extra update.
+///
+/// # Example
+///
+/// ```rust
+/// use voker_ecs::message::{Message, Messages};
+///
+/// #[derive(Message)]
+/// struct Hit {
+///     value: u32,
+/// }
+///
+/// let mut messages = Messages::<Hit>::default();
+/// let id = messages.write(Hit { value: 10 });
+///
+/// assert_eq!(messages.len(), 1);
+/// assert_eq!(messages.get(id.index()).map(|(_, m)| m.value), Some(10));
+///
+/// messages.update();
+/// assert_eq!(messages.len(), 1);
+///
+/// messages.update();
+/// assert_eq!(messages.len(), 0);
+/// ```
 pub struct Messages<M: Message> {
     /// Holds the oldest still active messages.
     /// Note that `a.start_id + a.len()` should always be equal to `messages_b.start_id`.
@@ -123,6 +146,9 @@ impl<M: Message> Messages<M> {
     }
 
     /// Returns the global index of the oldest still-readable message.
+    ///
+    /// This value is used by [`crate::message::MessageCursor`] to determine the
+    /// lower bound of readable ids.
     pub fn oldest_message_index(&self) -> usize {
         self.messages_a.start_id
     }
@@ -175,6 +201,20 @@ impl<M: Message> Messages<M> {
     }
 
     /// Appends a batch of messages and returns the generated id range.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use voker_ecs::message::{Message, Messages};
+    ///
+    /// #[derive(Message)]
+    /// struct Ping(u32);
+    ///
+    /// let mut messages = Messages::<Ping>::default();
+    /// let count = messages.write_batch([Ping(1), Ping(2)]).count();
+    /// assert_eq!(count, 2);
+    /// assert_eq!(messages.len(), 2);
+    /// ```
     pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIter<M> {
         let last = self.counter;
         self.extend(messages);
@@ -200,6 +240,9 @@ impl<M: Message> Messages<M> {
     ///
     /// The current write sequence becomes the older readable sequence. Then a new
     /// empty write sequence is prepared by clearing the previous older sequence.
+    ///
+    /// This method is usually driven by [`crate::message::MessageRegistry`] or
+    /// [`crate::world::World::update_messages`].
     pub fn update(&mut self) {
         core::mem::swap(&mut self.messages_a, &mut self.messages_b);
 

@@ -10,7 +10,7 @@ use crate::utils::DebugName;
 
 /// Context for a [`GameError`] to aid in debugging.
 ///
-/// [`GameError`]: super::GameError
+/// [`GameError`]: struct@super::GameError
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ErrorContext {

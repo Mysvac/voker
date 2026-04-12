@@ -4,10 +4,12 @@ use core::fmt::Debug;
 
 use voker_utils::hash::NoOpHashSet;
 
-use super::{QueryData, QueryFilter};
+use super::error::{QueryEntityError, QuerySingleError};
+use super::{QueryData, QueryFilter, QueryIter};
 use crate::archetype::{ArcheId, Archetypes};
 use crate::component::ComponentId;
-use crate::entity::StorageId;
+use crate::entity::{Entity, StorageId};
+use crate::query::{Query, ReadOnlyQueryData, Single};
 use crate::resource::Resource;
 use crate::storage::{TableId, Tables};
 use crate::system::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
@@ -52,15 +54,31 @@ use crate::world::{World, WorldId};
 ///
 /// A `QueryState` is bound to the world it was built from.
 /// Reusing it with another world is invalid and guarded by runtime checks.
-#[derive(Clone)]
 pub struct QueryState<D: QueryData, F: QueryFilter = ()> {
     pub(super) world_id: WorldId,
-    pub(super) version: usize,
+    pub(super) version: u32,
     pub(super) storages: Vec<StorageId>,
     pub(super) filter_data: AccessParam,
     pub(super) filter_params: Box<[FilterParam]>,
     pub(super) d_state: D::State,
     pub(super) f_state: F::State,
+}
+
+// -----------------------------------------------------------------------------
+// Basic
+
+impl<D: QueryData, F: QueryFilter> Clone for QueryState<D, F> {
+    fn clone(&self) -> Self {
+        Self {
+            world_id: self.world_id,
+            version: self.version,
+            storages: self.storages.clone(),
+            filter_data: self.filter_data.clone(),
+            filter_params: self.filter_params.clone(),
+            d_state: self.d_state.clone(),
+            f_state: self.f_state.clone(),
+        }
+    }
 }
 
 impl<D: QueryData + 'static, F: QueryFilter + 'static> Resource for QueryState<D, F> {}
@@ -102,11 +120,23 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This initializes query/filter internal states, computes filter params,
     /// and collects the initial matched storage set.
-    pub fn new(world: &mut World) -> Self {
-        let world_id = world.id();
-
+    pub fn build(world: &mut World) -> Self {
         let d_state = D::build_state(world);
         let f_state = F::build_state(world);
+
+        Self::build_internal(world, d_state, f_state)
+    }
+
+    /// Try builds a new query state from the given world.
+    pub fn try_build(world: &World) -> Option<Self> {
+        let d_state = D::fetch_state(world)?;
+        let f_state = F::fetch_state(world)?;
+
+        Some(Self::build_internal(world, d_state, f_state))
+    }
+
+    fn build_internal(world: &World, d_state: D::State, f_state: F::State) -> Self {
+        let world_id = world.id();
 
         let mut filter_data = AccessParam::new();
         if !D::build_access(&d_state, &mut filter_data) {
@@ -120,7 +150,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         D::build_filter(&d_state, &mut builders);
         let filter_params: Box<[FilterParam]> = collect_param(builders);
 
-        let mut version: usize = 0;
+        let mut version: u32 = 0;
         let mut storages: Vec<StorageId> = Vec::new();
 
         if Self::IS_DENSE {
@@ -155,7 +185,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
         if Self::IS_DENSE {
             let tables = &world.storages.tables;
-            if tables.len() > self.version {
+            if tables.len() > self.version as usize {
                 updata_table_state(
                     &mut self.version,
                     &mut self.storages,
@@ -165,7 +195,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             }
         } else {
             let arches = &world.archetypes;
-            if arches.len() > self.version {
+            if arches.len() > self.version as usize {
                 updata_arche_state(
                     &mut self.version,
                     &mut self.storages,
@@ -179,7 +209,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// Records this query's access requirements into an [`AccessTable`].
     ///
     /// Returns `false` when access conflicts are detected.
-    pub(crate) fn mark_assess(&self, access_table: &mut AccessTable) -> bool {
+    pub fn mark_assess(&self, access_table: &mut AccessTable) -> bool {
         let data: &AccessParam = &self.filter_data;
         let params: &[FilterParam] = &self.filter_params;
         access_table.set_query(data, params)
@@ -201,15 +231,15 @@ fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
 
 #[inline(never)]
 fn updata_table_state(
-    version: &mut usize,
+    version: &mut u32,
     storages: &mut Vec<StorageId>,
     filter_params: &[FilterParam],
     tables: &Tables,
 ) {
-    let new_version = tables.len();
+    let new_version = tables.len() as u32;
 
     for table_id in (*version)..new_version {
-        let table_id = unsafe { TableId::new_unchecked(table_id as u32) };
+        let table_id = unsafe { TableId::new_unchecked(table_id) };
         let table = unsafe { tables.get_unchecked(table_id) };
         let dense = table.components();
 
@@ -228,15 +258,15 @@ fn updata_table_state(
 
 #[inline(never)]
 fn updata_arche_state(
-    version: &mut usize,
+    version: &mut u32,
     storages: &mut Vec<StorageId>,
     filter_params: &[FilterParam],
     arches: &Archetypes,
 ) {
-    let new_version = arches.len();
+    let new_version = arches.len() as u32;
 
     for arche_id in (*version)..new_version {
-        let arche_id = unsafe { ArcheId::new_unchecked(arche_id as u32) };
+        let arche_id = unsafe { ArcheId::new_unchecked(arche_id) };
         let arche = unsafe { arches.get_unchecked(arche_id) };
         let dense = arche.dense_components();
         let sparse = arche.sparse_components();
@@ -333,5 +363,139 @@ fn matches_sorted(
             }
             true
         })
+    }
+}
+
+// -----------------------------------------------------------------------------
+// QueryState -> QueryIter
+
+impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
+    /// Creates a mutable iterator from this query state and mutable world.
+    pub fn iter_mut<'s, 'w>(&'s self, world: &'w mut World) -> QueryIter<'w, 's, D, F> {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { QueryIter::new(world, self, last_run, this_run) }
+    }
+
+    /// Creates a read-only iterator from this query state and immutable world.
+    pub fn iter<'s, 'w>(&'s self, world: &'w World) -> QueryIter<'w, 's, D, F>
+    where
+        D: ReadOnlyQueryData,
+    {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { QueryIter::new(world, self, last_run, this_run) }
+    }
+
+    /// Creates a [`Query`] view from this query state and mutable world.
+    pub fn query_mut<'s, 'w>(&'s self, world: &'w mut World) -> Query<'w, 's, D, F> {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run) }
+    }
+
+    /// Creates a [`Query`] view from this query state and immutable world.
+    pub fn query<'s, 'w>(&'s self, world: &'w World) -> Query<'w, 's, D, F>
+    where
+        D: ReadOnlyQueryData,
+    {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run) }
+    }
+
+    /// Returns exactly one query match from a mutable world.
+    pub fn single_mut<'w>(
+        &self,
+        world: &'w mut World,
+    ) -> Result<Single<'w, D, F>, QuerySingleError> {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Single::new(world, self, last_run, this_run) }
+    }
+
+    /// Returns exactly one query match from an immutable world.
+    pub fn single<'w>(&self, world: &'w World) -> Result<Single<'w, D, F>, QuerySingleError>
+    where
+        D: ReadOnlyQueryData,
+    {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Single::new(world, self, last_run, this_run) }
+    }
+
+    /// Fetches one entity from this query state using mutable world access.
+    pub fn get_mut<'w>(
+        &mut self,
+        world: &'w mut World,
+        entity: Entity,
+    ) -> Result<D::Item<'w>, QueryEntityError> {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).get_impl(entity) }
+    }
+
+    /// Fetches one entity from this query state using read-only world access.
+    pub fn get<'w>(&self, world: &'w World, entity: Entity) -> Result<D::Item<'w>, QueryEntityError>
+    where
+        D: ReadOnlyQueryData,
+    {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).get_impl(entity) }
+    }
+
+    /// Fetches multiple entities from this query state using mutable world access.
+    ///
+    /// Returns [`QueryEntityError::DuplicateEntity`] if input contains duplicates.
+    pub fn get_many_mut<'w, const N: usize>(
+        &mut self,
+        world: &'w mut World,
+        entities: [Entity; N],
+    ) -> Result<[D::Item<'w>; N], QueryEntityError> {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).get_many_mut_impl(entities) }
+    }
+
+    /// Fetches multiple entities from this query state using read-only world access.
+    pub fn get_many<'w, const N: usize>(
+        &self,
+        world: &'w World,
+        entities: [Entity; N],
+    ) -> Result<[D::Item<'w>; N], QueryEntityError>
+    where
+        D: ReadOnlyQueryData,
+    {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).get_many_impl(entities) }
+    }
+
+    /// Returns `true` when this query currently matches no entities.
+    ///
+    /// This method updates cached archetype/table matches before evaluation.
+    pub fn is_empty(&self, world: &World) -> bool {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).is_empty() }
+    }
+
+    pub fn contains(&self, world: &World, entity: Entity) -> bool {
+        let last_run = world.last_run();
+        let this_run = world.this_run();
+        let world = world.unsafe_world();
+        unsafe { Query::new(world, self, last_run, this_run).contains(entity) }
     }
 }

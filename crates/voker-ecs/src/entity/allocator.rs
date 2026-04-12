@@ -9,7 +9,7 @@
 //! - Entity recycling requires mutable access (`&mut self`).
 //! - Entity allocation is thread-safe, supporting concurrent allocation from multiple threads,
 //!   including allocations without direct `World` access.
-//! - Entity allocation and recycling do not modify the entity's `Generation` field.
+//! - Entity allocation and recycling do not modify an entity's tag (`EntityTag`).
 //!   This must be managed separately by the caller.
 //!
 //! # Implementation Details

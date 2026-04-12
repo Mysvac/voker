@@ -8,7 +8,7 @@ use super::{ErrorContext, GameError, Severity};
 /// Receives the captured error and its execution context.
 ///
 /// This is used by schedule executors and command application paths when
-/// fallible work returns a [`GameError`].
+/// fallible work returns a [`struct@GameError`].
 pub type ErrorHandler = fn(GameError, ErrorContext);
 
 /// Resource wrapper for the fallback ECS error handler.

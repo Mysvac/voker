@@ -254,6 +254,33 @@ macro_rules! impl_non_max {
                 UpperExp::fmt(&self.get(), f)
             }
         }
+
+        impl serde_core::Serialize for $NonMax {
+            #[inline]
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde_core::Serializer,
+            {
+                self.get().serialize(serializer)
+            }
+        }
+
+        impl<'de> serde_core::Deserialize<'de> for $NonMax {
+            #[inline]
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde_core::Deserializer<'de>,
+            {
+                let value = <$Int as serde_core::Deserialize>::deserialize(deserializer)?;
+                Self::new(value).ok_or_else(|| {
+                    crate::cold_path();
+                    serde_core::de::Error::invalid_value(
+                        serde_core::de::Unexpected::Unsigned(value as u64),
+                        &alloc::format!("an integer not equal to {}", <$Int>::MAX).as_str(),
+                    )
+                })
+            }
+        }
     };
 }
 

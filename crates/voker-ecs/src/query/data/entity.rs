@@ -22,6 +22,10 @@ unsafe impl QueryData for Entity {
 
     fn build_state(_world: &mut World) -> Self::State {}
 
+    fn fetch_state(_world: &World) -> Option<Self::State> {
+        Some(())
+    }
+
     unsafe fn build_cache<'w>(
         _state: &Self::State,
         _world: UnsafeWorld<'w>,
@@ -80,6 +84,10 @@ unsafe impl QueryData for EntityRef<'_> {
     const COMPONENTS_ARE_DENSE: bool = true;
 
     fn build_state(_world: &mut World) -> Self::State {}
+
+    fn fetch_state(_world: &World) -> Option<Self::State> {
+        Some(())
+    }
 
     unsafe fn build_cache<'w>(
         _state: &Self::State,
@@ -141,6 +149,10 @@ unsafe impl QueryData for EntityMut<'_> {
     const COMPONENTS_ARE_DENSE: bool = true;
 
     fn build_state(_world: &mut World) -> Self::State {}
+
+    fn fetch_state(_world: &World) -> Option<Self::State> {
+        Some(())
+    }
 
     unsafe fn build_cache<'w>(
         _state: &Self::State,

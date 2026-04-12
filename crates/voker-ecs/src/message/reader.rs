@@ -1,12 +1,15 @@
 use crate::borrow::Res;
 use crate::message::{Message, MessageCursor, Messages};
 use crate::message::{MessageIterator, MessageWithIdIterator};
-use crate::system::{Local, ReadOnlySystemParam, SystemParam, SystemParamError};
+use crate::system::{Local, SystemParam, SystemParamError};
 
 /// Read-only system parameter for consuming unread messages of type `M`.
 ///
 /// Each system instance keeps its own local [`MessageCursor`], so independent
 /// systems can read the same messages without interfering with each other.
+///
+/// Calling [`Self::read`] or [`Self::read_with_id`] advances this system's local
+/// cursor as iterator items are consumed.
 ///
 /// # Example
 ///
@@ -32,6 +35,8 @@ pub struct MessageReader<'w, 's, M: Message> {
 
 impl<'w, 's, M: Message> MessageReader<'w, 's, M> {
     /// Returns an iterator over unread messages for this reader cursor.
+    ///
+    /// Iteration advances the cursor.
     pub fn read(&mut self) -> MessageIterator<'_, M> {
         self.cursor.read(&self.messages)
     }
@@ -56,9 +61,6 @@ impl<'w, 's, M: Message> MessageReader<'w, 's, M> {
         self.cursor.clear(&self.messages);
     }
 }
-
-// SAFETY: Delegates access and parameter building to `(Local<MessageCursor<M>>, Res<Messages<M>>)`.
-unsafe impl<M: Message> ReadOnlySystemParam for MessageReader<'_, '_, M> {}
 
 type InternalParam<M> = (Local<'static, MessageCursor<M>>, Res<'static, Messages<M>>);
 

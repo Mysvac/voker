@@ -1,10 +1,10 @@
 use alloc::collections::BinaryHeap;
+use alloc::vec::Vec;
 use core::cmp::Reverse;
 use core::fmt::Debug;
 use core::iter::FusedIterator;
 use core::num::NonZeroUsize;
 use core::panic::{RefUnwindSafe, UnwindSafe};
-use std::vec::Vec;
 
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
 use voker_utils::hash::SparseHashMap;
@@ -113,16 +113,19 @@ impl RefUnwindSafe for Map {}
 // Basic
 
 impl Map {
+    /// Returns this sparse map's identifier.
     #[inline]
     pub fn id(&self) -> MapId {
         self.id
     }
 
+    /// Returns the component type identifier stored by this map.
     #[inline]
     pub fn component(&self) -> ComponentId {
         self.component
     }
 
+    /// Iterates all entities that currently have this sparse component.
     #[inline]
     pub fn entities(&self) -> impl ExactSizeIterator + FusedIterator<Item = Entity> + '_ {
         self.mapper.keys().copied()
@@ -174,6 +177,11 @@ impl Map {
         row
     }
 
+    /// Deallocates a map row and optionally drops the stored component value.
+    ///
+    /// # Safety
+    /// - `map_row` must reference a live row in this map
+    /// - If `DROP` is `false`, caller is responsible for value-drop semantics
     pub unsafe fn dealloc_row<const DROP: bool>(&mut self, map_row: MapRow) {
         let removal = map_row.0 as usize;
         debug_assert!(removal < self.capacity());
@@ -199,7 +207,7 @@ impl Map {
     /// Gets a raw pointer to the component data at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     /// - The caller must ensure proper synchronization when accessing the data
     #[inline(always)]
     pub unsafe fn get_data(&self, map_row: MapRow) -> Ptr<'_> {
@@ -210,7 +218,7 @@ impl Map {
     /// Gets a raw pointer to the component data at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     /// - The caller must ensure proper synchronization when accessing the data
     #[inline(always)]
     pub unsafe fn get_data_mut(&mut self, map_row: MapRow) -> PtrMut<'_> {
@@ -221,7 +229,7 @@ impl Map {
     /// Gets the tick when the component was added at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     #[inline(always)]
     pub unsafe fn get_added(&self, map_row: MapRow) -> Tick {
         debug_assert!((map_row.0 as usize) < self.capacity());
@@ -231,7 +239,7 @@ impl Map {
     /// Gets the tick when the component was last changed at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     #[inline(always)]
     pub unsafe fn get_changed(&self, map_row: MapRow) -> Tick {
         debug_assert!((map_row.0 as usize) < self.capacity());
@@ -241,7 +249,7 @@ impl Map {
     /// Gets the tick when the component was added at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     #[inline(always)]
     pub unsafe fn get_added_mut(&mut self, map_row: MapRow) -> &mut Tick {
         debug_assert!((map_row.0 as usize) < self.capacity());
@@ -251,11 +259,11 @@ impl Map {
     /// Gets the tick when the component was last changed at the specified row.
     ///
     /// # Safety
-    /// - `map_row` must be valid (obtained from `allocate` or `get_map_row`)
+    /// - `map_row` must be valid (obtained from `alloc_row` or `get_map_row`)
     #[inline(always)]
     pub unsafe fn get_changed_mut(&mut self, map_row: MapRow) -> &mut Tick {
         debug_assert!((map_row.0 as usize) < self.capacity());
-        unsafe { self.column.get_added_mut(map_row.0 as usize) }
+        unsafe { self.column.get_changed_mut(map_row.0 as usize) }
     }
 
     /// Gets an immutable reference to the component at the specified row.

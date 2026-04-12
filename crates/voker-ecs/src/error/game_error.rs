@@ -90,11 +90,19 @@ impl GameError {
     /// let err = GameError::new(Severity::Warning, "Configuration file not found");
     /// assert_eq!(err.severity(), Severity::Warning);
     /// ```
+    #[cold]
     pub fn new<E>(severity: Severity, error: E) -> Self
     where
         Box<dyn Error + Sync + Send>: From<E>,
     {
-        Self::from(error).with_severity(severity)
+        GameError {
+            inner: Box::new(InnerError {
+                severity,
+                error: error.into(),
+                #[cfg(feature = "backtrace")]
+                backtrace: std::backtrace::Backtrace::capture(),
+            }),
+        }
     }
 
     /// Creates a new [`GameError`] with [`Severity::Ignore`].
@@ -268,23 +276,6 @@ impl GameError {
     }
 }
 
-impl<E> From<E> for GameError
-where
-    Box<dyn Error + Send + Sync + 'static>: From<E>,
-{
-    #[cold]
-    fn from(error: E) -> Self {
-        GameError {
-            inner: Box::new(InnerError {
-                error: error.into(),
-                severity: Severity::Panic,
-                #[cfg(feature = "backtrace")]
-                backtrace: std::backtrace::Backtrace::capture(),
-            }),
-        }
-    }
-}
-
 impl Display for GameError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Display::fmt(&self.inner.error, f)?;
@@ -300,5 +291,120 @@ impl Debug for GameError {
         #[cfg(feature = "backtrace")]
         Debug::fmt(&self.inner.backtrace, f)?;
         Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoGameError
+
+/// Converts a value into an optional [`GameError`].
+///
+/// This trait unifies different error-returning styles into one interface used
+/// by ECS internals.
+///
+/// - `Some(GameError)` means an error is present.
+/// - `None` means no error should be reported.
+///
+/// # Implementations
+///
+/// The crate provides these blanket implementations:
+/// - `E` where `E: Into<GameError>` -> always `Some(...)`
+/// - `()` -> always `None`
+/// - `Option<T>` where `T: IntoGameError` -> propagates inner value
+/// - `Result<T, E>` where `T: IntoGameError`, `E: IntoGameError`
+///
+/// This allows APIs to accept flexible return forms.
+///
+/// # Examples
+///
+/// ```
+/// # use voker_ecs::error::{GameError, IntoGameError, Severity};
+/// #
+/// let e = GameError::warning("bad state");
+/// assert!(e.to_err().is_some());
+///
+/// let ok = ().to_err();
+/// assert!(ok.is_none());
+///
+/// let nested: Option<Result<(), GameError>> = Some(Err(GameError::panic("boom")));
+/// assert_eq!(nested.to_err().unwrap().severity(), Severity::Panic);
+/// ```
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a GameError",
+    label = "invalid GameError",
+    note = "Consider annotating `{Self}` with `#[derive(GameError)]`."
+)]
+pub trait IntoGameError: Sized {
+    /// Converts `self` into `Option<GameError>`.
+    ///
+    /// Return `None` to represent success/no error.
+    fn to_err(self) -> Option<GameError>;
+
+    /// Overrides the severity of the produced error, if any.
+    ///
+    /// If `self.to_err()` is `None`, this method also returns `None`.
+    #[inline]
+    fn with_severity(self, severity: Severity) -> Option<GameError> {
+        self.to_err().map(|e| GameError::with_severity(e, severity))
+    }
+
+    /// Raises severity to `max(current, severity)` for the produced error, if any.
+    #[inline]
+    fn merge_severity(self, severity: Severity) -> Option<GameError> {
+        self.to_err().map(|e| GameError::merge_severity(e, severity))
+    }
+
+    /// Maps the severity of the produced error through a function, if any.
+    #[inline]
+    fn map_severity(self, f: impl FnOnce(Severity) -> Severity) -> Option<GameError> {
+        self.to_err().map(|e| GameError::map_severity(e, f))
+    }
+}
+
+impl<E> IntoGameError for E
+where
+    E: Into<GameError>,
+{
+    fn to_err(self) -> Option<GameError> {
+        Some(self.into())
+    }
+}
+
+impl IntoGameError for () {
+    #[inline(always)]
+    fn to_err(self) -> Option<GameError> {
+        None
+    }
+
+    #[inline(always)]
+    fn with_severity(self, _: Severity) -> Option<GameError> {
+        None
+    }
+
+    #[inline(always)]
+    fn merge_severity(self, _: Severity) -> Option<GameError> {
+        None
+    }
+
+    #[inline(always)]
+    fn map_severity(self, _: impl FnOnce(Severity) -> Severity) -> Option<GameError> {
+        None
+    }
+}
+
+impl<T: IntoGameError> IntoGameError for Option<T> {
+    #[inline]
+    fn to_err(self) -> Option<GameError> {
+        self.and_then(IntoGameError::to_err)
+    }
+}
+
+impl<T: IntoGameError, E: IntoGameError> IntoGameError for Result<T, E> {
+    #[inline]
+    fn to_err(self) -> Option<GameError> {
+        match self {
+            Ok(x) => x.to_err(),
+            Err(y) => y.to_err(),
+        }
     }
 }

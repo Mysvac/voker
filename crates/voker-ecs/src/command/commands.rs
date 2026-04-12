@@ -9,10 +9,8 @@ use crate::entity::{Entity, FetchError};
 use crate::error::ErrorHandler;
 use crate::message::Message;
 use crate::prelude::{Resource, ScheduleLabel};
-use crate::system::{
-    AccessTable, IntoSystem, ReadOnlySystemParam, SystemId, SystemInput, SystemMeta, SystemParam,
-    SystemParamError,
-};
+use crate::system::{AccessTable, SystemParam, SystemParamError};
+use crate::system::{IntoSystem, SystemId, SystemInput, SystemMeta};
 use crate::tick::Tick;
 use crate::utils::DebugLocation;
 use crate::world::{FromWorld, UnsafeWorld, World, WorldId};
@@ -28,6 +26,8 @@ use crate::world::{FromWorld, UnsafeWorld, World, WorldId};
 /// This lets systems request structural world changes (spawn, insert/remove
 /// components, resource updates) without requiring immediate exclusive access
 /// to `World` during system execution.
+///
+/// Queued commands are applied later at deferred synchronization points.
 ///
 /// # Examples
 ///
@@ -70,7 +70,7 @@ impl RefUnwindSafe for Commands<'_, '_> {}
 ///
 /// fn buff_player(mut commands: Commands, players: Query<Entity, Without<Hp>>) {
 ///     for entity in players {
-///         commands.with_entity(entity).insert(Hp(150));
+///         commands.with_entity(entity).insert((Hp(150),));
 ///     }
 /// }
 /// ```
@@ -87,8 +87,6 @@ impl Debug for Commands<'_, '_> {
         f.debug_struct("Commands").field("world", &self.world.id()).finish()
     }
 }
-
-unsafe impl ReadOnlySystemParam for Commands<'_, '_> {}
 
 unsafe impl SystemParam for Commands<'_, '_> {
     type State = CommandQueue;
@@ -132,7 +130,7 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Creates a command writer from a world view and a target queue.
     ///
-    /// Most users obtain this from system parameters or deferred-world helpers.
+    /// Most users obtain this through the [`SystemParam`] implementation.
     #[inline]
     pub fn new(world: &'w World, queue: &'s mut CommandQueue) -> Self {
         Commands {
@@ -181,8 +179,8 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Returns an [`EntityCommands`] handle for the given [`Entity`].
     ///
-    /// Validity is checked when queued commands are executed, not when they are
-    /// queued. The entity may be despawned before application time.
+    /// Existence is validated when queued commands execute, not when queued.
+    /// The entity may be despawned before application time.
     #[inline]
     pub fn with_entity(&mut self, entity: Entity) -> EntityCommands<'_> {
         EntityCommands {
@@ -200,7 +198,6 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// Returns [`FetchError`] if the requested entity does not currently exist.
     #[inline]
-    #[track_caller]
     pub fn try_with_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
         let _ = self.world.entities.locate(entity)?;
         Ok(self.with_entity(entity))
@@ -245,7 +242,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// To spawn many entities with the same combination of components,
     /// [`spawn_batch`](Self::spawn_batch) can be used for better performance.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
         let caller = DebugLocation::caller();
         let entity = self.world.alloc_entity();
@@ -266,7 +263,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// This is equivalent to repeatedly calling [`spawn`](Self::spawn), but can
     /// be faster due to batched allocation and contiguous processing.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_batch<I>(&mut self, batch: I)
     where
         I: IntoIterator + Send + Sync + 'static,
@@ -277,9 +274,9 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Despawns an entity and removes all of its components.
     ///
-    /// log info if the entity is already despawned.
+    /// Logs at info level if the entity is already despawned.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn(&mut self, entity: Entity) {
         self.push(super::despawn(entity));
     }
@@ -288,6 +285,7 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// No-op if the entity is already despawned.
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn(&mut self, entity: Entity) {
         self.push(super::try_despawn(entity));
     }
@@ -296,6 +294,7 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// No-op for entities that are already despawned.
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_batch<I>(&mut self, batch: I)
     where
         I: IntoIterator<Item = Entity> + Send + Sync + 'static,
@@ -354,7 +353,7 @@ impl<'w, 's> Commands<'w, 's> {
         system_id
     }
 
-    /// A [`Command`] that runs the system corresponding to the given [`IntoSystem`].
+    /// Runs the system corresponding to the given [`IntoSystem`].
     #[inline]
     pub fn run_system<M, S>(&mut self, system: S)
     where
@@ -364,7 +363,7 @@ impl<'w, 's> Commands<'w, 's> {
         self.push(super::run_system::<M, S>(system));
     }
 
-    /// A [`Command`] that runs the given system with the given input value,
+    /// Runs the given system with the given input value,
     /// caching its [`SystemId`] in a resource.
     #[inline]
     pub fn run_system_with<I, M, S>(&mut self, system: S, input: I::Data<'static>)
@@ -381,12 +380,11 @@ impl<'w, 's> Commands<'w, 's> {
     /// Before running a cached system, it must first be registered via
     /// [`Commands::register_system`] or [`World::register_system`].
     #[inline]
-    #[track_caller]
-    pub fn run_system_cached<I>(&mut self, id: SystemId, input: I::Data<'static>)
+    pub fn run_system_by_id<I>(&mut self, id: SystemId, input: I::Data<'static>)
     where
         I: SystemInput<Data<'static>: Send> + Send + 'static,
     {
-        self.push(super::run_system_cached::<I>(id, input));
+        self.push(super::run_system_by_id::<I>(id, input));
     }
 
     /// Runs the schedule corresponding to the given [`ScheduleLabel`].
@@ -425,11 +423,13 @@ impl<'a> EntityCommands<'a> {
     }
 
     /// Returns the underlying [`Commands`].
+    #[inline]
     pub fn commands(&mut self) -> Commands<'_, '_> {
         self.commands.reborrow()
     }
 
     /// Returns a mutable reference to the underlying [`Commands`].
+    #[inline]
     pub fn commands_mut(&mut self) -> &mut Commands<'a, 'a> {
         &mut self.commands
     }
@@ -476,7 +476,7 @@ impl<'a> EntityCommands<'a> {
     ///
     /// This will overwrite any previous value(s) of the same component type.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn insert(&mut self, bundle: impl Bundle) -> &mut Self {
         self.push(super::insert(bundle))
     }
@@ -485,14 +485,14 @@ impl<'a> EntityCommands<'a> {
     ///
     /// Errors are ignored if the entity is despawned before command execution.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_insert(&mut self, bundle: impl Bundle) -> &mut Self {
         self.push_silenced(super::insert(bundle))
     }
 
     /// Removes all explicit component types in a [`Bundle`] from the entity.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove<B: Bundle>(&mut self) -> &mut Self {
         self.push(super::remove::<B>())
     }
@@ -501,14 +501,14 @@ impl<'a> EntityCommands<'a> {
     ///
     /// Errors are ignored if the entity is despawned before command execution.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_remove<B: Bundle>(&mut self) -> &mut Self {
         self.push_silenced(super::remove::<B>())
     }
 
     /// Removes all components from this entity.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clear(&mut self) -> &mut Self {
         self.push(super::clear())
     }
@@ -517,15 +517,16 @@ impl<'a> EntityCommands<'a> {
     ///
     /// Errors are ignored if the entity is despawned before command execution.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_clear(&mut self) -> &mut Self {
         self.push_silenced(super::clear())
     }
 
     /// Despawns an entity and removes all of its components.
     ///
-    /// log info if the entity is already despawned.
+    /// Logs at info level if the entity is already despawned.
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn(mut self) {
         self.commands.despawn(self.entity);
     }
@@ -534,6 +535,7 @@ impl<'a> EntityCommands<'a> {
     ///
     /// No-op if the entity is already despawned.
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn(mut self) {
         self.commands.try_despawn(self.entity);
     }

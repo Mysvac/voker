@@ -1,4 +1,4 @@
-use super::{ReadOnlySystemParam, SystemParam};
+use super::SystemParam;
 use crate::borrow::{NonSend, NonSendMut, NonSendRef};
 use crate::borrow::{Res, ResMut, ResRef};
 use crate::error::Severity;
@@ -21,8 +21,6 @@ fn uninit_resource_error<P, R>() -> SystemParamError {
 
 // -----------------------------------------------------------------------------
 // Res
-
-unsafe impl<T: Resource + Sync> ReadOnlySystemParam for Res<'_, T> {}
 
 unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
     type State = ResourceId;
@@ -62,8 +60,6 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
 
 // -----------------------------------------------------------------------------
 // ResRef
-
-unsafe impl<T: Resource + Sync> ReadOnlySystemParam for ResRef<'_, T> {}
 
 unsafe impl<T: Resource + Sync> SystemParam for ResRef<'_, T> {
     type State = ResourceId;
@@ -137,8 +133,6 @@ unsafe impl<T: Resource + Send> SystemParam for ResMut<'_, T> {
 // -----------------------------------------------------------------------------
 // Option<Res>
 
-unsafe impl<T: Resource + Sync> ReadOnlySystemParam for Option<Res<'_, T>> {}
-
 unsafe impl<T: Resource + Sync> SystemParam for Option<Res<'_, T>> {
     type State = ResourceId;
     type Item<'world, 'state> = Option<Res<'world, T>>;
@@ -177,8 +171,6 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<Res<'_, T>> {
 
 // -----------------------------------------------------------------------------
 // Option<ResRef>
-
-unsafe impl<T: Resource + Sync> ReadOnlySystemParam for Option<ResRef<'_, T>> {}
 
 unsafe impl<T: Resource + Sync> SystemParam for Option<ResRef<'_, T>> {
     type State = ResourceId;
@@ -252,8 +244,6 @@ unsafe impl<T: Resource + Send> SystemParam for Option<ResMut<'_, T>> {
 // -----------------------------------------------------------------------------
 // NonSend
 
-unsafe impl<T: Resource> ReadOnlySystemParam for NonSend<'_, T> {}
-
 unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
     type State = ResourceId;
     type Item<'world, 'state> = NonSend<'world, T>;
@@ -294,8 +284,6 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
 
 // -----------------------------------------------------------------------------
 // NonSendRef
-
-unsafe impl<T: Resource> ReadOnlySystemParam for NonSendRef<'_, T> {}
 
 unsafe impl<T: Resource> SystemParam for NonSendRef<'_, T> {
     type State = ResourceId;
@@ -375,8 +363,6 @@ unsafe impl<T: Resource> SystemParam for NonSendMut<'_, T> {
 // -----------------------------------------------------------------------------
 // Option<NonSend>
 
-unsafe impl<T: Resource> ReadOnlySystemParam for Option<NonSend<'_, T>> {}
-
 unsafe impl<T: Resource> SystemParam for Option<NonSend<'_, T>> {
     type State = ResourceId;
     type Item<'world, 'state> = Option<NonSend<'world, T>>;
@@ -417,8 +403,6 @@ unsafe impl<T: Resource> SystemParam for Option<NonSend<'_, T>> {
 
 // -----------------------------------------------------------------------------
 // Option<NonSendRef>
-
-unsafe impl<T: Resource> ReadOnlySystemParam for Option<NonSendRef<'_, T>> {}
 
 unsafe impl<T: Resource> SystemParam for Option<NonSendRef<'_, T>> {
     type State = ResourceId;

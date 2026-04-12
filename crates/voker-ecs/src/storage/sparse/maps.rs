@@ -59,7 +59,7 @@ impl Maps {
 
     /// Registers multiple components for sparse storage.
     ///
-    /// This is typically called during archetype registrationn.
+    /// This is typically called during archetype registration.
     ///
     /// # Safety
     /// - All `ComponentId`s in `idents` must be valid and registered in `components`
@@ -145,13 +145,13 @@ impl Maps {
         self.maps.as_mut_slice()
     }
 
-    /// Returns an iterator over the tables.
+    /// Returns an iterator over the maps.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<'_, Map> {
         self.maps.iter()
     }
 
-    /// Returns an iterator that allows modifying each table.
+    /// Returns an iterator that allows modifying each map.
     #[inline]
     pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, Map> {
         self.maps.iter_mut()

@@ -83,7 +83,8 @@ impl<'m> SceneEntityMapper<'m> {
         self.mapper
     }
 
-    /// Creates a new [`SceneEntityMapper`], spawning a temporary base [`Entity`] in the provided [`World`]
+    /// Creates a new [`SceneEntityMapper`] by reserving a temporary base [`Entity`]
+    /// in the provided [`World`].
     pub fn new(world: &World, mapper: &'m mut EntityHashMap<Entity>) -> Self {
         Self {
             mapper,
@@ -101,7 +102,7 @@ impl<'m> SceneEntityMapper<'m> {
         world.allocator.free(reuse_row);
     }
 
-    /// Creates an [`SceneEntityMapper`] from a provided [`World`] and
+    /// Creates a [`SceneEntityMapper`] from a provided [`World`] and
     /// [`EntityHashMap<Entity>`], then calls the provided function with it.
     ///
     /// This allows one to allocate new entity references in this [`World`] that are guaranteed

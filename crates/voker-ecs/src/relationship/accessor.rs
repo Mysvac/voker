@@ -6,6 +6,11 @@ use crate::component::{ComponentId, Components};
 use crate::entity::Entity;
 use crate::relationship::{Relationship, RelationshipTarget};
 
+/// Registration-time relationship metadata.
+///
+/// This stores deferred registration callbacks and static flags collected from
+/// derive metadata. It is converted into [`RelationshipAccessor`] after all
+/// dependent component IDs are registered.
 #[derive(Clone, Copy, Debug)]
 pub enum RelationshipRegistrar {
     Relationship {
@@ -22,6 +27,10 @@ pub enum RelationshipRegistrar {
     },
 }
 
+/// Runtime-accessible relationship metadata.
+///
+/// This variant stores concrete component IDs and iteration callbacks used by
+/// internals that need relationship introspection without generic type params.
 #[derive(Clone, Copy, Debug)]
 pub enum RelationshipAccessor {
     Relationship {
@@ -39,6 +48,7 @@ pub enum RelationshipAccessor {
 }
 
 impl RelationshipRegistrar {
+    /// Builds registrar metadata for a source-side relationship component.
     pub const fn relationship<C: Relationship>() -> Self {
         Self::Relationship {
             target_offset: C::TARGET_FIELD_OFFSET,
@@ -48,6 +58,7 @@ impl RelationshipRegistrar {
         }
     }
 
+    /// Builds registrar metadata for a target-side cache component.
     pub const fn relationship_target<C: RelationshipTarget>() -> Self {
         Self::RelationshipTarget {
             sources_iter: |ptr| unsafe { Box::new(RelationshipTarget::iter(ptr.deref::<C>())) },
@@ -57,6 +68,7 @@ impl RelationshipRegistrar {
         }
     }
 
+    /// Registers dependent component types and resolves into runtime accessor metadata.
     pub fn register(self, components: &mut Components) -> RelationshipAccessor {
         match self {
             RelationshipRegistrar::Relationship {

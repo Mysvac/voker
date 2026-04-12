@@ -30,6 +30,7 @@ use voker_ecs_derive::Component;
 /// The hash is eagerly re-computed upon each update to the name.
 ///
 /// # Examples
+///
 /// ```
 /// # use voker_ecs::name::Name;
 /// let mut name = Name::new("Player");

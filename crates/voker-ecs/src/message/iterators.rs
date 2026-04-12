@@ -12,6 +12,24 @@ use super::{Message, Messages};
 // MessageIdIter
 
 /// Iterator over [`MessageId`] values written by a batch call.
+///
+/// This iterator yields ids in write order: `[start, end)`.
+///
+/// # Example
+///
+/// ```rust
+/// use voker_ecs::message::{Message, Messages};
+///
+/// #[derive(Message)]
+/// struct Event;
+///
+/// let mut messages = Messages::<Event>::default();
+/// let mut ids = messages.write_batch([Event, Event]);
+///
+/// assert_eq!(ids.next().map(|id| id.index()), Some(0));
+/// assert_eq!(ids.next().map(|id| id.index()), Some(1));
+/// assert_eq!(ids.next(), None);
+/// ```
 pub struct MessageIdIter<M: Message> {
     pub(super) last: usize,
     pub(super) end: usize,
@@ -47,6 +65,15 @@ impl<M: Message> FusedIterator for MessageIdIter<M> {}
 // -----------------------------------------------------------------------------
 // MessageWithIdIter
 
+/// Per-system read position for one `Messages<M>` stream.
+///
+/// `MessageCursor` is usually managed by ECS as a local system parameter state
+/// (see [`crate::message::MessageReader`] and [`crate::message::MessageMutator`]).
+/// Each system instance has its own cursor, so one system reading messages does
+/// not consume them for other systems.
+///
+/// Cursor advancement is pull-based: it advances when iterator items are
+/// consumed (or when methods like `count`/`nth`/`last` skip items).
 pub struct MessageCursor<M: Message> {
     pub(super) last_index: usize,
     pub(super) _marker: PhantomData<M>,
@@ -81,23 +108,28 @@ impl<M: Message> Clone for MessageCursor<M> {
 }
 
 impl<M: Message> MessageCursor<M> {
+    /// Returns unread count for this cursor in the given message storage.
     pub fn len(&self, messages: &Messages<M>) -> usize {
         let upper = messages.counter.wrapping_sub(self.last_index);
         upper.min(messages.len())
     }
 
+    /// Returns `true` if this cursor has no unread messages.
     pub fn is_empty(&self, messages: &Messages<M>) -> bool {
         messages.is_empty() || messages.counter == self.last_index
     }
 
+    /// Marks all currently readable messages as consumed for this cursor.
     pub fn clear(&mut self, messages: &Messages<M>) {
         self.last_index = messages.counter;
     }
 
+    /// Reads unread messages and advances the cursor as items are consumed.
     pub fn read<'a>(&'a mut self, messages: &'a Messages<M>) -> MessageIterator<'a, M> {
         MessageWithIdIterator::new(self, messages).without_id()
     }
 
+    /// Reads unread messages with ids and advances the cursor as items are consumed.
     pub fn read_with_id<'a>(
         &'a mut self,
         messages: &'a Messages<M>,
@@ -105,10 +137,12 @@ impl<M: Message> MessageCursor<M> {
         MessageWithIdIterator::new(self, messages)
     }
 
+    /// Reads unread messages mutably and advances the cursor as items are consumed.
     pub fn read_mut<'a>(&'a mut self, messages: &'a mut Messages<M>) -> MessageMutIterator<'a, M> {
         MessageMutWithIdIterator::new(self, messages).without_id()
     }
 
+    /// Reads unread mutable messages with ids and advances the cursor.
     pub fn read_mut_with_id<'a>(
         &'a mut self,
         messages: &'a mut Messages<M>,
@@ -121,6 +155,11 @@ impl<M: Message> MessageCursor<M> {
 // MessageWithIdIterator
 
 /// Iterator over unread messages with their message IDs.
+///
+/// Created by [`MessageCursor::read_with_id`] and
+/// [`crate::message::MessageReader::read_with_id`].
+///
+/// Consuming this iterator advances the underlying cursor.
 #[derive(Debug)]
 pub struct MessageWithIdIterator<'a, M: Message> {
     cursor: &'a mut MessageCursor<M>,
@@ -204,6 +243,21 @@ impl<M: Message> FusedIterator for MessageWithIdIterator<'_, M> {}
 // MessageIterator
 
 /// Iterator over unread messages.
+///
+/// This is the id-stripped form of [`MessageWithIdIterator`].
+///
+/// # Example
+///
+/// ```rust
+/// use voker_ecs::prelude::*;
+///
+/// #[derive(Message)]
+/// struct Hit;
+///
+/// fn read_hits(mut reader: MessageReader<Hit>) {
+///     for _ in reader.read() {}
+/// }
+/// ```
 #[derive(Debug)]
 pub struct MessageIterator<'a, M: Message> {
     iter: MessageWithIdIterator<'a, M>,
@@ -243,6 +297,13 @@ impl<M: Message> FusedIterator for MessageIterator<'_, M> {}
 // MessageMutWithIdIterator
 
 /// Iterator over unread messages with their message IDs.
+///
+/// Mutable counterpart of [`MessageWithIdIterator`].
+///
+/// Created by [`MessageCursor::read_mut_with_id`] and
+/// [`crate::message::MessageMutator::read_with_id`].
+///
+/// Consuming this iterator advances the underlying cursor.
 #[derive(Debug)]
 pub struct MessageMutWithIdIterator<'a, M: Message> {
     cursor: &'a mut MessageCursor<M>,
@@ -325,7 +386,26 @@ impl<M: Message> FusedIterator for MessageMutWithIdIterator<'_, M> {}
 // -----------------------------------------------------------------------------
 // MessageWithIdIterator
 
-/// Iterator over unread messages.
+/// Iterator over unread mutable messages.
+///
+/// This is the id-stripped form of [`MessageMutWithIdIterator`].
+///
+/// # Example
+///
+/// ```rust
+/// use voker_ecs::prelude::*;
+///
+/// #[derive(Message)]
+/// struct Damage {
+///     amount: u32,
+/// }
+///
+/// fn clamp(mut mutator: MessageMutator<Damage>) {
+///     for msg in mutator.read() {
+///         msg.amount = msg.amount.min(100);
+///     }
+/// }
+/// ```
 #[derive(Debug)]
 pub struct MessageMutIterator<'a, M: Message> {
     iter: MessageMutWithIdIterator<'a, M>,

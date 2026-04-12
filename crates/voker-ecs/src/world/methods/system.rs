@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
 use voker_utils::hash::NoOpHashMap;
 
-use crate::error::{GameError, Severity};
-use crate::prelude::Resource;
-use crate::system::{IntoSystem, System, SystemId, SystemInput, UnregisteredSystemError};
+use crate::resource::Resource;
+use crate::system::{IntoSystem, System, SystemId, SystemInput};
+use crate::system::{SystemError, UnregisteredSystemError};
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -40,7 +40,7 @@ impl World {
         &mut self,
         mut system: BoxedSystem<I, O>,
         input: I::Data<'_>,
-    ) -> Result<O, GameError>
+    ) -> Result<O, SystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -128,7 +128,7 @@ impl World {
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
         input: I::Data<'_>,
-    ) -> Result<O, GameError>
+    ) -> Result<O, SystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -149,7 +149,7 @@ impl World {
     pub fn run_system<O: 'static, M>(
         &mut self,
         system: impl IntoSystem<(), O, M> + 'static,
-    ) -> Result<O, GameError> {
+    ) -> Result<O, SystemError> {
         let opt = self.take_system::<(), O>(system.system_id());
         let system = opt.unwrap_or_else(|| self.build_system::<(), O, M>(system));
         self.run_system_internal::<(), O>(system, ())
@@ -162,19 +162,18 @@ impl World {
     ///
     /// This means you should call [`World::register_system`] before calling
     /// this function.
-    pub fn run_system_cached<'i, I, O>(
+    pub fn run_system_by_id<'i, I, O>(
         &mut self,
         system_id: SystemId,
         input: I::Data<'i>,
-    ) -> Result<O, GameError>
+    ) -> Result<O, SystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
         match self.take_system::<I, O>(system_id) {
             Some(system) => self.run_system_internal::<I, O>(system, input),
-            None => Err(GameError::from(UnregisteredSystemError::new::<SystemId>())
-                .with_severity(Severity::Warning)),
+            None => Err(UnregisteredSystemError::new::<SystemId>().into()),
         }
     }
 }

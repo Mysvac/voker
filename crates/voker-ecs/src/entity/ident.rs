@@ -12,7 +12,7 @@ use voker_reflect::derive::Reflect;
 
 /// This represents the index of an [`Entity`] within the [`Entities`] array.
 ///
-/// This is a unique identifier for an entity in the world, a lighter weight
+/// This is a unique identifier for an entity in the world, a lightweight
 /// version of [`Entity`].
 ///
 /// This differs from [`Entity`] in that [`Entity`] is unique for all entities
@@ -40,7 +40,7 @@ impl EntityId {
         unsafe { mem::transmute::<EntityId, u32>(self) }
     }
 
-    /// Creates a new `ComponentId` from a usize.
+    /// Creates a new `EntityId` from a raw index value.
     ///
     /// # Panics
     /// Panics if `id == 0 || id > u32::MAX`.
@@ -48,7 +48,7 @@ impl EntityId {
     pub const fn without_provenance(id: usize) -> Self {
         if id == 0 || id > u32::MAX as usize {
             voker_utils::cold_path();
-            panic!("ComponentId must be > 0 and <= u32::MAX");
+            panic!("EntityId must be > 0 and <= u32::MAX");
         }
         unsafe { Self(NonZeroU32::new_unchecked(id as u32)) }
     }
@@ -93,7 +93,7 @@ impl Display for EntityId {
 // -----------------------------------------------------------------------------
 // EntityTag
 
-/// This tracks different versions(generations) of an [`EntityId`].
+/// This tracks different versions (generations) of an [`EntityId`].
 ///
 /// Importantly, this can wrap, meaning each tag is not necessarily
 /// unique per [`EntityId`].
@@ -205,7 +205,7 @@ pub struct Entity {
 
 impl Entity {
     const _STATIC_ASSERT_: () = const {
-        // Ensure `EntityId` is storaged in lower bits.
+        // Ensure `EntityId` is stored in lower bits.
         assert!(Entity::from_bits(20260101).id.to_bits() == 20260101);
     };
 
@@ -220,7 +220,7 @@ impl Entity {
 
     /// Returns the entity's index as a `usize`.
     ///
-    /// As same as [`EntityId::index`] .
+    /// Equivalent to [`EntityId::index`].
     #[inline(always)]
     pub const fn index(self) -> usize {
         self.id.index()

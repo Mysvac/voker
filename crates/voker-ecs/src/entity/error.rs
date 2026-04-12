@@ -1,11 +1,15 @@
+//! Errors produced by entity lifecycle and location operations.
+
 use thiserror::Error;
+use voker_ecs_derive::GameError;
 
 use crate::entity::{Entity, EntityId};
 
 // -----------------------------------------------------------------------------
 // Error
 
-#[derive(Debug, Error, Clone, Copy)]
+#[derive(Debug, Error, GameError, Clone, Copy)]
+#[game_error(severity = "info")]
 pub enum FetchError {
     #[error("Entity with ID {0} was not found during fetch operation")]
     NotFound(EntityId),
@@ -17,7 +21,8 @@ pub enum FetchError {
     Mismatch { expect: Entity, actual: Entity },
 }
 
-#[derive(Debug, Error, Clone, Copy)]
+#[derive(Debug, Error, GameError, Clone, Copy)]
+#[game_error(severity = "error")]
 pub enum MoveError {
     #[error("Entity with ID {0} was not found during move operation")]
     NotFound(EntityId),
@@ -29,7 +34,8 @@ pub enum MoveError {
     Mismatch { expect: Entity, actual: Entity },
 }
 
-#[derive(Debug, Error, Clone, Copy)]
+#[derive(Debug, Error, GameError, Clone, Copy)]
+#[game_error(severity = "info")]
 pub enum DespawnError {
     #[error("Entity with ID {0} was not found during despawn operation")]
     NotFound(EntityId),
@@ -41,7 +47,8 @@ pub enum DespawnError {
     Mismatch { expect: Entity, actual: Entity },
 }
 
-#[derive(Debug, Error, Clone, Copy)]
+#[derive(Debug, Error, GameError, Clone, Copy)]
+#[game_error(severity = "warning")]
 pub enum SpawnError {
     #[error("Entity with ID {0} was not found during spawn operation")]
     NotFound(EntityId),

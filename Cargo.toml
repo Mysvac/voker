@@ -25,13 +25,15 @@ dynlib = ["dep:voker-dylib"]
 
 std = ["voker-internal/std"]
 
-debug = ["voker-internal/debug"]
-
 web = ["voker-internal/web"]
 
-reflect_docs = ["voker-internal/reflect_docs"]
-
 async_io = ["voker-internal/async_io"]
+
+backtrace = ["voker-internal/backtrace"]
+
+debug = ["voker-internal/debug"]
+
+reflect_docs = ["voker-internal/reflect_docs"]
 
 [dependencies]
 voker-internal = { path = "./crates/voker-internal", default-features = false }

@@ -225,8 +225,8 @@ impl ComponentWriter<'_> {
         table_row: TableRow,
     ) -> ComponentWriter<'a> {
         let world_mut = unsafe { world.data_mut() };
-        // Strictly speaking, writer runing `data_mut`,
-        // intead of `full_mut`, cannot use `this_run_fast`.
+        // This writer only requires `data_mut` (not `full_mut`),
+        // so it must use `this_run` instead of `this_run_fast`.
         let tick = world_mut.this_run();
         let table = unsafe { world_mut.storages.tables.get_unchecked_mut(table_id) };
         let maps = &mut world_mut.storages.maps;

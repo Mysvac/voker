@@ -3,6 +3,28 @@
 //! `ChildOf` is the source-of-truth relationship stored on the child entity.
 //! `Children` is the reverse cached relationship target stored on the parent entity.
 //! Keep hierarchy edits on `ChildOf`; `Children` is maintained by hooks.
+//!
+//! # Lifecycle semantics
+//!
+//! - Inserting/replacing `ChildOf(parent)` updates the old/new parent `Children`
+//!   cache immediately through hooks.
+//! - Removing `ChildOf` detaches the child from its parent.
+//! - With `linked_lifecycle` on [`Children`], despawning a parent recursively
+//!   despawns all descendants.
+//!
+//! # Recursive operations
+//!
+//! [`EntityOwned::insert_recursive`] and [`EntityOwned::remove_recursive`] can
+//! traverse hierarchy trees through `Children`. Traversal does not detect cycles;
+//! use these APIs only on acyclic graphs.
+//!
+//! # Complexity
+//!
+//! Single edge attach/detach is $O(1)$ plus source-set insertion/removal cost.
+//! Recursive operations are $O(n)$ in the number of traversed descendants.
+//!
+//! [`EntityOwned::insert_recursive`]: crate::world::EntityOwned::insert_recursive
+//! [`EntityOwned::remove_recursive`]: crate::world::EntityOwned::remove_recursive
 
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -23,7 +45,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// When inserted or updated, `Children` is synchronized immediately via hooks.
 /// When removed, the child is detached from the previous parent.
 ///
-/// With `linked_spawn = true`, despawning a parent recursively despawns children.
+/// With `linked_lifecycle = true`, despawning a parent recursively despawns children.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 #[relationship(relationship_target = Children)]
 #[repr(transparent)]
@@ -47,6 +69,9 @@ impl FromWorld for ChildOf {
 ///
 /// This component is maintained by relationship hooks and should be treated
 /// as read-only view data.
+///
+/// Avoid mutating this component directly. Update `ChildOf` on child entities
+/// instead so both sides of the relationship remain synchronized.
 #[derive(Component, Default, Debug, PartialEq, Eq)]
 #[component(cloner = Children::cloner)]
 #[relationship_target(relationship = ChildOf, linked_lifecycle)]
@@ -134,12 +159,17 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Removes all child relationships from this entity.
+    ///
+    /// This detaches children but does not despawn child entities.
     #[track_caller]
     pub fn detach_all_children(&mut self) -> &mut Self {
         self.detach_related::<Children>()
     }
 
     /// Despawns all children of this entity.
+    ///
+    /// This removes child entities entirely (and recursively, because
+    /// `Children` enables linked lifecycle).
     #[track_caller]
     pub fn despawn_children(&mut self) -> &mut Self {
         self.despawn_related::<Children>()
@@ -177,11 +207,16 @@ impl<'a> EntityCommands<'a> {
     }
 
     /// Removes all child relationships from this entity.
+    ///
+    /// This detaches children but does not despawn child entities.
     pub fn detach_all_children(&mut self) -> &mut Self {
         self.detach_all_related::<ChildOf>()
     }
 
     /// Despawns all children of this entity.
+    ///
+    /// This removes child entities entirely (and recursively, because
+    /// `Children` enables linked lifecycle).
     pub fn despawn_children(&mut self) -> &mut Self {
         self.despawn_all_related::<ChildOf>()
     }

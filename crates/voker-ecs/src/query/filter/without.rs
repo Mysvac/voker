@@ -40,6 +40,10 @@ unsafe impl<T: Component> QueryFilter for Without<T> {
         world.register_component::<T>()
     }
 
+    fn fetch_state(world: &World) -> Option<Self::State> {
+        world.get_component_id::<T>()
+    }
+
     unsafe fn build_cache<'w>(
         _state: &Self::State,
         _world: UnsafeWorld<'w>,
@@ -120,10 +124,12 @@ macro_rules! impl_tuple {
             const COMPONENTS_ARE_DENSE: bool = <$name>::STORAGE.is_dense();
             const ENABLE_ENTITY_FILTER: bool = false;
 
-            fn build_state(
-                world: &mut World,
-            ) -> Self::State {
+            fn build_state(world: &mut World) -> Self::State {
                 world.register_component::<$name>()
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                world.get_component_id::<$name>()
             }
 
             unsafe fn build_cache<'w>(
@@ -198,10 +204,12 @@ macro_rules! impl_tuple {
             };
             const ENABLE_ENTITY_FILTER: bool = false;
 
-            fn build_state(
-                world: &mut World,
-            ) -> Self::State {
+            fn build_state(world: &mut World) -> Self::State {
                 ( $( world.register_component::<$name>(), )* )
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                Some(( $( world.get_component_id::<$name>()?, )* ))
             }
 
             unsafe fn build_cache<'w>(

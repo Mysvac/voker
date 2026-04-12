@@ -24,7 +24,13 @@ web = [
 ]
 
 async_io = [
+    "std",
     "voker-task/async_io",
+]
+
+backtrace = [
+    "std",
+    "voker-ecs/backtrace"
 ]
 
 debug = [

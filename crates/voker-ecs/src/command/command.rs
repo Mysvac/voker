@@ -1,9 +1,8 @@
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
-use super::CommandOutput;
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
-use crate::error::{ErrorContext, ErrorHandler, GameError, Severity};
+use crate::error::{ErrorContext, ErrorHandler, GameError, IntoGameError, Severity};
 use crate::message::{Message, Messages};
 use crate::prelude::ScheduleLabel;
 use crate::resource::Resource;
@@ -47,7 +46,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// ```
 pub trait Command: Send + Sized + 'static {
     /// The return type of [`apply`](Command::apply).
-    type Output: CommandOutput;
+    type Output: IntoGameError;
 
     /// Applies this command to the provided `world`.
     ///
@@ -73,8 +72,8 @@ pub trait Command: Send + Sized + 'static {
         move |world: &mut World| self.apply(world).map_severity(f)
     }
 
-    /// Takes a [`Command`] that returns a Result and uses a given error handler
-    /// function to convert it into a [`Command`].
+    /// Converts a fallible [`Command`] into an infallible one using the
+    /// provided error handler.
     ///
     /// The error handler internally handles an error if it occurs and returns `()`.
     #[inline]
@@ -87,8 +86,8 @@ pub trait Command: Send + Sized + 'static {
         }
     }
 
-    /// Takes a [`Command`] that returns a Result and uses the fallback error handler
-    /// function to convert it into a [`Command`].
+    /// Converts a fallible [`Command`] into an infallible one using the
+    /// world's fallback error handler.
     ///
     /// The error handler internally handles an error if it occurs and returns `()`.
     #[inline]
@@ -101,7 +100,7 @@ pub trait Command: Send + Sized + 'static {
         }
     }
 
-    /// Takes a [`Command`] that returns a Result and ignores any error that occurs.
+    /// Converts a fallible [`Command`] into an infallible one by ignoring errors.
     #[inline]
     fn ignore_error(self) -> impl Command<Output = ()> {
         move |world: &mut World| {
@@ -134,7 +133,8 @@ pub trait Command: Send + Sized + 'static {
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {
-    type Output: CommandOutput;
+    /// The return type of [`apply`](EntityCommand::apply).
+    type Output: IntoGameError;
 
     /// Executes this command for the given [`Entity`].
     fn apply(self, entity: EntityOwned) -> Self::Output;
@@ -155,7 +155,7 @@ pub trait EntityCommand: Send + Sized + 'static {
 impl<F, O> Command for F
 where
     F: FnOnce(&mut World) -> O + Send + 'static,
-    O: CommandOutput,
+    O: IntoGameError,
 {
     type Output = O;
 
@@ -167,7 +167,7 @@ where
 impl<O, F> EntityCommand for F
 where
     F: FnOnce(EntityOwned) -> O + Send + 'static,
-    O: CommandOutput,
+    O: IntoGameError,
 {
     type Output = O;
 
@@ -181,7 +181,7 @@ where
 
 /// A [`Command`] that spawns a new entity from a [`Bundle`].
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn spawn<B: Bundle>(bundle: B) -> impl Command {
     let caller = DebugLocation::caller();
     move |world: &mut World| {
@@ -189,21 +189,21 @@ pub fn spawn<B: Bundle>(bundle: B) -> impl Command {
     }
 }
 
-/// A [`Command`] that spawns a new entity from a [`Bundle`].
+/// A [`Command`] that spawns a new entity at a specific [`Entity`] id.
 ///
-/// Warning if the target entity cannot be spawned (by default).
+/// Returns an error if the target entity id cannot be used.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn spawn_at<B: Bundle>(bundle: B, entity: Entity) -> impl Command {
     let caller = DebugLocation::caller();
-    move |world: &mut World| world.spawn_at_with_caller(bundle, entity, caller).map(|_| ())
+    move |world: &mut World| world.spawn_at_with_caller(bundle, entity, caller).err()
 }
 
 /// A [`Command`] that consumes an iterator of [`Bundle`]s to spawn a series of entities.
 ///
 /// This is more efficient than spawning the entities individually.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn spawn_batch<I>(bundles_iter: I) -> impl Command
 where
     I: IntoIterator + Send + Sync + 'static,
@@ -215,42 +215,46 @@ where
     }
 }
 
-/// A [`Command`] that despawn a entity.
+/// A [`Command`] that despawns an entity.
 ///
-/// Log info if the entity does not exist
+/// Logs at info level if the entity does not exist.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn despawn(entity: Entity) -> impl Command {
     let caller = DebugLocation::caller();
     move |world: &mut World| world.despawn_with_caller(entity, caller)
 }
 
-/// A [`Command`] that despawn a entity.
+/// A [`Command`] that despawns an entity.
 ///
-/// No-Op if the entity does not exist
+/// No-op if the entity does not exist.
 #[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn try_despawn(entity: Entity) -> impl Command {
+    let caller = DebugLocation::caller();
     move |world: &mut World| {
-        world.try_despawn(entity);
+        world.try_despawn_with_caller(entity, caller);
     }
 }
 
-/// A [`Command`] that despawn entities from iterator.
+/// A [`Command`] that despawns entities from an iterator.
 ///
-/// Simply ignore entities that won't spawn.
+/// Ignores entities that do not exist.
 #[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn despawn_batch<I>(entity_iter: I) -> impl Command
 where
     I: IntoIterator<Item = Entity> + Send + Sync + 'static,
 {
+    let caller = DebugLocation::caller();
     move |world: &mut World| {
         for entity in entity_iter {
-            world.try_despawn(entity);
+            world.try_despawn_with_caller(entity, caller);
         }
     }
 }
 
-/// A [`Command`] that initialize [`Resource`] if it does not exist.
+/// A [`Command`] that initializes a [`Resource`] if it does not exist.
 #[inline]
 pub fn init_resource<R: Resource + Send + FromWorld>() -> impl Command {
     move |world: &mut World| {
@@ -258,7 +262,7 @@ pub fn init_resource<R: Resource + Send + FromWorld>() -> impl Command {
     }
 }
 
-/// A [`Command`] that initialize [`Resource`] if it does not exist.
+/// A [`Command`] that initializes a non-send [`Resource`] if it does not exist.
 #[inline]
 pub fn init_non_send<R: Resource + FromWorld>() -> impl Command {
     move |world: &mut World| {
@@ -282,9 +286,9 @@ pub fn remove_resource<R: Resource + Send>() -> impl Command {
     }
 }
 
-/// Registers a system so it can later be called by [`Commands::run_system_cached`] or [`World::run_system_cached`].
+/// Registers a system so it can later be called by [`Commands::run_system_by_id`] or [`World::run_system_by_id`].
 ///
-/// [`Commands::run_system_cached`]: super::Commands::run_system_cached
+/// [`Commands::run_system_by_id`]: super::Commands::run_system_by_id
 #[inline]
 pub fn register_system<I, O, M>(system: impl IntoSystem<I, O, M> + Send + 'static) -> impl Command
 where
@@ -304,7 +308,7 @@ where
     M: 'static,
     S: IntoSystem<(), (), M> + Send + 'static,
 {
-    move |world: &mut World| -> Result<(), GameError> { world.run_system(system) }
+    move |world: &mut World| world.run_system(system)
 }
 
 /// A [`Command`] that runs the given system with the given input value.
@@ -318,20 +322,18 @@ where
     M: 'static,
     S: IntoSystem<I, (), M> + Send + 'static,
 {
-    move |world: &mut World| -> Result<(), GameError> { world.run_system_with(system, input) }
+    move |world: &mut World| world.run_system_with(system, input)
 }
 
-/// A [`Command`] that runs a cached system through it's id;
+/// A [`Command`] that runs a cached system by id.
 ///
-/// Wanring if the system does not reigstered (by default).
+/// Returns an error if the system id is not registered.
 #[inline]
-pub fn run_system_cached<I>(id: SystemId, input: I::Data<'static>) -> impl Command
+pub fn run_system_by_id<I>(id: SystemId, input: I::Data<'static>) -> impl Command
 where
     I: SystemInput<Data<'static>: Send> + Send + 'static,
 {
-    move |world: &mut World| -> Result<(), GameError> {
-        world.run_system_cached::<I, ()>(id, input)
-    }
+    move |world: &mut World| world.run_system_by_id::<I, ()>(id, input)
 }
 
 /// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
@@ -353,9 +355,9 @@ pub fn write_message<M: Message>(message: M) -> impl Command {
 // -----------------------------------------------------------------------------
 // pre-defined EntityCommand
 
-/// A [`Command`] that insert a [`Bundle`] for a entity.
+/// An [`EntityCommand`] that inserts a [`Bundle`] into an entity.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
@@ -363,9 +365,9 @@ pub fn insert(bundle: impl Bundle) -> impl EntityCommand {
     }
 }
 
-/// A [`Command`] that insert a [`Bundle`] for a entity if it does not exist.
+/// An [`EntityCommand`] that inserts a [`Bundle`] into an entity if missing.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn insert_if_new<T: Bundle>(bundle: impl FnOnce() -> T + Send + 'static) -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
@@ -373,9 +375,9 @@ pub fn insert_if_new<T: Bundle>(bundle: impl FnOnce() -> T + Send + 'static) -> 
     }
 }
 
-/// A [`Command`] that remove a [`Bundle`]'s explict components for a entity.
+/// An [`EntityCommand`] that removes a bundle's explicit components from an entity.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove<T: Bundle>() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
@@ -383,9 +385,9 @@ pub fn remove<T: Bundle>() -> impl EntityCommand {
     }
 }
 
-/// A [`Command`] that remove a [`Bundle`]'s explict components for a entity.
+/// An [`EntityCommand`] that removes a bundle's explicit components from an entity.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove_explicit<T: Bundle>() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
@@ -393,9 +395,9 @@ pub fn remove_explicit<T: Bundle>() -> impl EntityCommand {
     }
 }
 
-/// A [`Command`] that remove a [`Bundle`]'s all components for a entity.
+/// An [`EntityCommand`] that removes a bundle's required components from an entity.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove_required<T: Bundle>() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
@@ -403,9 +405,9 @@ pub fn remove_required<T: Bundle>() -> impl EntityCommand {
     }
 }
 
-/// A [`Command`] that clear all components for a entity.
+/// An [`EntityCommand`] that clears all components from an entity.
 #[inline]
-#[track_caller]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn clear() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {

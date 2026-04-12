@@ -5,11 +5,10 @@ use crate::borrow::{NonSendMut, ResMut, UntypedMut};
 use crate::command::Commands;
 use crate::component::HookContext;
 use crate::entity::{Entity, FetchError};
-use crate::error::GameError;
 use crate::message::{Message, MessageId, MessageIdIter};
 use crate::prelude::{Component, ComponentId, Resource};
 use crate::query::{Query, QueryData, QueryFilter};
-use crate::system::{SystemId, SystemInput};
+use crate::system::{SystemError, SystemId, SystemInput};
 use crate::utils::DebugLocation;
 use crate::world::{EntityFetcher, FetchEntities, GetComponents, UnsafeWorld, World};
 
@@ -178,34 +177,32 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().write_message_batch(messages)
     }
 
-    /// Creates a query view from an already cached [`QueryState`].
-    ///
-    /// Returns `None` when the query state has not been registered.
-    /// Register it first via [`World::register_query`] or call [`World::query`]
-    /// / [`World::query_with`] to auto-register.
-    ///
-    /// [`QueryState`]: crate::query::QueryState
     #[inline]
-    pub fn query_cached<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
+    pub fn try_query<D: QueryData + 'static>(&mut self) -> Option<Query<'_, '_, D>> {
+        self.world_mut().try_query::<D>()
+    }
+
+    #[inline]
+    pub fn try_query_with<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
     where
         D: QueryData + 'static,
         F: QueryFilter + 'static,
     {
-        self.world_mut().query_cached()
+        self.world_mut().try_query_with::<D, F>()
     }
 
     /// Runs a registered system by id and returns the input back on cache miss.
     #[inline]
-    pub fn run_system_cached<'a, I, O>(
+    pub fn run_system_by_id<'a, I, O>(
         &mut self,
         id: SystemId,
         input: I::Data<'a>,
-    ) -> Result<O, GameError>
+    ) -> Result<O, SystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        self.world_mut().run_system_cached::<I, O>(id, input)
+        self.world_mut().run_system_by_id::<I, O>(id, input)
     }
 
     #[inline]

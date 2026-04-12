@@ -95,6 +95,20 @@ pub(crate) fn schedule_label_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
+pub(crate) fn game_error_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::error::GameError
+    }
+}
+
+#[inline(always)]
+pub(crate) fn severity_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::error::Severity
+    }
+}
+
+#[inline(always)]
 pub(crate) fn message_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::message::Message
@@ -140,5 +154,110 @@ pub(crate) fn relationship_registrar_(voker_ecs_path: &syn::Path) -> TokenStream
 pub(crate) fn entity_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::entity::Entity
+    }
+}
+
+#[inline(always)]
+pub(crate) fn query_data_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::query::QueryData
+    }
+}
+
+#[inline(always)]
+pub(crate) fn readonly_query_data_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::query::ReadOnlyQueryData
+    }
+}
+
+#[inline(always)]
+pub(crate) fn world_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::world::World
+    }
+}
+
+#[inline(always)]
+pub(crate) fn unsafe_world_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::world::UnsafeWorld
+    }
+}
+
+#[inline(always)]
+pub(crate) fn tick_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::tick::Tick
+    }
+}
+
+#[inline(always)]
+pub(crate) fn archetype_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::archetype::Archetype
+    }
+}
+
+#[inline(always)]
+pub(crate) fn table_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::storage::Table
+    }
+}
+
+#[inline(always)]
+pub(crate) fn table_row_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::storage::TableRow
+    }
+}
+
+#[inline(always)]
+pub(crate) fn access_param_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::AccessParam
+    }
+}
+
+#[inline(always)]
+pub(crate) fn filter_param_builder_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::FilterParamBuilder
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_param_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::SystemParam
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_param_error_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::SystemParamError
+    }
+}
+
+#[inline(always)]
+pub(crate) fn access_table_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::AccessTable
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_meta_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::SystemMeta
+    }
+}
+
+#[inline(always)]
+pub(crate) fn deferred_world_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::world::DeferredWorld
     }
 }

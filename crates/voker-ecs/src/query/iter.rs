@@ -1,10 +1,10 @@
 use core::iter::FusedIterator;
 
-use super::{Query, QueryData, QueryFilter, QueryState, ReadOnlyQueryData};
+use super::{QueryData, QueryFilter, QueryState};
 use crate::entity::{Entity, StorageId};
 use crate::storage::TableRow;
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::UnsafeWorld;
 
 // -----------------------------------------------------------------------------
 // QueryIter
@@ -22,6 +22,9 @@ use crate::world::{UnsafeWorld, World};
 /// - `Query` by value via [`IntoIterator::into_iter`]
 /// - `&mut Query` via [`IntoIterator::into_iter`]
 /// - `&Query` via [`IntoIterator::into_iter`] for read-only data
+///
+/// [`Query::iter_mut`]: crate::query::Query::iter_mut
+/// [`Query::iter`]: crate::query::Query::iter
 ///
 /// # Examples
 ///
@@ -54,7 +57,7 @@ impl<D: QueryData, F: QueryFilter> QueryIter<'_, '_, D, F> {
     /// - `last_run`/`this_run` must belong to the same world tick stream.
     /// - Caller must ensure no aliasing violations are introduced through
     ///   concurrent mutable iteration paths.
-    pub(super) unsafe fn new<'w, 's>(
+    pub unsafe fn new<'w, 's>(
         world: UnsafeWorld<'w>,
         state: &'s QueryState<D, F>,
         last_run: Tick,
@@ -159,74 +162,3 @@ impl<'w, D: QueryData, F: QueryFilter> Iterator for QueryIter<'w, '_, D, F> {
 }
 
 impl<D: QueryData, F: QueryFilter> FusedIterator for QueryIter<'_, '_, D, F> {}
-
-// -----------------------------------------------------------------------------
-// Query -> QueryIter
-
-impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for Query<'w, 's, D, F> {
-    type Item = D::Item<'w>;
-    type IntoIter = QueryIter<'w, 's, D, F>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
-    }
-}
-
-impl<'a, 'w: 'a, 's, D: ReadOnlyQueryData, F: QueryFilter> IntoIterator
-    for &'a Query<'w, 's, D, F>
-{
-    type Item = D::Item<'a>;
-    type IntoIter = QueryIter<'a, 's, D, F>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
-    }
-}
-
-impl<'a, 'w: 'a, 's, D: QueryData, F: QueryFilter> IntoIterator for &'a mut Query<'w, 's, D, F> {
-    type Item = D::Item<'a>;
-    type IntoIter = QueryIter<'a, 's, D, F>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
-    }
-}
-
-impl<'s, D: QueryData, F: QueryFilter> Query<'_, 's, D, F> {
-    /// Returns a mutable iterator over query results.
-    pub fn iter_mut(&mut self) -> QueryIter<'_, 's, D, F> {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
-    }
-
-    /// Returns a read-only iterator over query results.
-    pub fn iter(&self) -> QueryIter<'_, 's, D, F>
-    where
-        D: ReadOnlyQueryData,
-    {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// QueryState -> QueryIter
-
-impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
-    /// Creates a mutable iterator from this query state and world.
-    pub fn iter_mut<'s, 'w>(&'s self, world: &'w mut World) -> QueryIter<'w, 's, D, F> {
-        let last_run = world.last_run();
-        let this_run = world.this_run();
-        let world = world.unsafe_world();
-        unsafe { QueryIter::new(world, self, last_run, this_run) }
-    }
-
-    /// Creates a read-only iterator from this query state and world.
-    pub fn iter<'s, 'w>(&'s self, world: &'w World) -> QueryIter<'w, 's, D, F>
-    where
-        D: ReadOnlyQueryData,
-    {
-        let last_run = world.last_run();
-        let this_run = world.this_run();
-        let world = world.unsafe_world();
-        unsafe { QueryIter::new(world, self, last_run, this_run) }
-    }
-}

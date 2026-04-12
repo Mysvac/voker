@@ -23,13 +23,11 @@ pub(super) struct AbortOnPanic;
 
 impl Drop for AbortOnPanic {
     /// Aborts the process when dropped.
-    ///
-    /// This method is marked `#[cold]` and `#[inline(never)]` because:
-    /// - It's an error path that rarely executes
-    /// - We want to keep it out of hot code paths
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
+        log::error!("Aborting due to allocator error.");
+
         crate::cfg::std! {
             if {
                 ::std::eprintln!("Aborting due to allocator error.");

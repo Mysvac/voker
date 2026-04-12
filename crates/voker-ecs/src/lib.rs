@@ -74,16 +74,20 @@ pub mod prelude {
     pub use crate::bundle::{Bundle, BundleId};
     pub use crate::command::{Command, Commands, EntityCommands};
     pub use crate::component::{Component, ComponentHook, ComponentId, HookContext};
-    pub use crate::entity::{Entity, EntityId, EntityLocation, EntityTag};
+    pub use crate::entity::{Entity, EntityLocation};
     pub use crate::entity::{EntityHashMap, EntityHashSet, EntityIndexMap, EntityIndexSet};
-    pub use crate::error::{ErrorContext, ErrorHandler, FallbackErrorHandler, GameError};
-    // pub use crate::hierarchy::{ChildOf, Children};
-    pub use crate::message::{Message, MessageMutator, MessageReader, MessageWriter, Messages};
+    pub use crate::error::{ErrorContext, ErrorHandler, FallbackErrorHandler};
+    pub use crate::error::{GameError, IntoGameError};
+    pub use crate::hierarchy::{ChildOf, Children};
+    pub use crate::message::{Message, MessageId, MessageMutator, MessageReader, MessageWriter};
     pub use crate::name::Name;
-    pub use crate::query::{Added, And, Changed, Or, Query, With, Without};
+    pub use crate::query::{Added, And, Changed, Or, With, Without};
+    pub use crate::query::{Query, QueryEntityError, QuerySingleError, QueryState, Single};
+    pub use crate::relationship::{RelatedSpawner, RelatedSpawnerCommands};
+    pub use crate::relationship::{Relationship, RelationshipTarget};
     pub use crate::resource::{Resource, ResourceId};
     pub use crate::schedule::{Schedule, ScheduleLabel};
-    pub use crate::system::{IntoSystem, Local, System, SystemId};
+    pub use crate::system::{IntoSystem, Local, System, SystemError, SystemId};
     pub use crate::tick::{DetectChanges, Tick};
     pub use crate::world::{DeferredWorld, EntityMut, EntityOwned, EntityRef, World};
 }

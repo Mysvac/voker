@@ -81,7 +81,7 @@ impl Debug for Tables {
 }
 
 impl Tables {
-    /// Returns the number of registered archetypes.
+    /// Returns the number of registered tables.
     #[inline]
     #[expect(clippy::len_without_is_empty, reason = "len > 0")]
     pub fn len(&self) -> usize {
@@ -89,6 +89,9 @@ impl Tables {
     }
 
     /// Returns the ID of the table exactly matching the given component set, if any.
+    ///
+    /// The component slice must use the same canonical ordering used during
+    /// table registration.
     #[inline]
     pub fn get_id(&self, components: &[ComponentId]) -> Option<TableId> {
         self.mapper.get(components).copied()
@@ -128,13 +131,13 @@ impl Tables {
         unsafe { self.tables.get_unchecked_mut(id.index()) }
     }
 
-    /// Extracts a slice containing the entire Tables.
+    /// Returns all tables as a shared slice.
     #[inline]
     pub fn as_slice(&self) -> &[Table] {
         self.tables.as_slice()
     }
 
-    /// Extracts a mutable slice of the entire Tables.
+    /// Returns all tables as a mutable slice.
     #[inline]
     pub fn as_mut_slice(&mut self) -> &mut [Table] {
         self.tables.as_mut_slice()

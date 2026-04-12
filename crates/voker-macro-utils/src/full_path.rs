@@ -52,4 +52,6 @@ define_fp! {
     DisplayFP => ::core::fmt::Display,
     ErrorFP => ::core::error::Error,
     TypeIdFP => ::core::any::TypeId,
+    FromFP => ::core::convert::From,
+    IntoFP => ::core::convert::Into,
 }

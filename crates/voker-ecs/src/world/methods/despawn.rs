@@ -28,7 +28,7 @@ impl World {
     /// assert!(world.despawn(entity).is_err());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn(&mut self, entity: Entity) -> Result<(), DespawnError> {
         let caller = DebugLocation::caller();
         self.despawn_with_caller(entity, caller)
@@ -55,14 +55,10 @@ impl World {
     /// assert!(!world.try_despawn(entity));
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn(&mut self, entity: Entity) -> bool {
         let caller = DebugLocation::caller();
-        self.entities.locate(entity).is_ok_and(|location| {
-            let e = despawn_internal(self, entity, location, caller);
-            self.allocator.free(e);
-            true
-        })
+        self.try_despawn_with_caller(entity, caller)
     }
 
     /// Despawns an entity and removes all of its components, and returns a new `Entity` handle.
@@ -96,7 +92,7 @@ impl World {
     /// assert!(world.despawn_no_free(old_entity).is_err());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_no_free(&mut self, entity: Entity) -> Result<Entity, DespawnError> {
         let location = self.entities.locate(entity)?;
         let caller = DebugLocation::caller();
@@ -127,11 +123,24 @@ impl World {
     /// assert!(world.try_despawn_no_free(entity).is_none());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn_no_free(&mut self, entity: Entity) -> Option<Entity> {
         let location = self.entities.locate(entity).ok()?;
         let caller = DebugLocation::caller();
         Some(despawn_internal(self, entity, location, caller))
+    }
+
+    #[inline]
+    pub(crate) fn try_despawn_with_caller(
+        &mut self,
+        entity: Entity,
+        caller: DebugLocation,
+    ) -> bool {
+        self.entities.locate(entity).is_ok_and(|location| {
+            let e = despawn_internal(self, entity, location, caller);
+            self.allocator.free(e);
+            true
+        })
     }
 
     #[inline]

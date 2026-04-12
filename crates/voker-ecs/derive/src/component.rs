@@ -103,19 +103,19 @@ impl Parse for RelationshipTarget {
     }
 }
 
-fn parse_related_field<'a>(fields: &'a syn::Fields, span: Span) -> syn::Result<&'a syn::Field> {
+fn parse_related_field(fields: &syn::Fields, span: Span) -> syn::Result<&syn::Field> {
     match fields {
         syn::Fields::Named(fields) => {
             let mut ret: Option<&syn::Field> = None;
 
             for field in fields.named.iter() {
-                if field.attrs.iter().any(|attr| attr.path().is_ident("relationship")) {
-                    if core::mem::replace(&mut ret, Some(field)).is_some() {
-                        return Err(syn::Error::new(
-                            span,
-                            "#[relationship] can only annotate in one field.",
-                        ));
-                    }
+                if field.attrs.iter().any(|attr| attr.path().is_ident("relationship"))
+                    && ret.replace(field).is_some()
+                {
+                    return Err(syn::Error::new(
+                        span,
+                        "#[relationship] can only annotate in one field.",
+                    ));
                 }
             }
 
@@ -279,9 +279,9 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                         ret.cloner = Cloner::Custom(value.parse::<syn::ExprPath>()?);
                         Ok(())
                     } else {
-                        return Err(meta.error(format!(
-                            "unsupported cloner syntax, expected `cloner = path::function`."
-                        )));
+                        Err(meta.error(
+                            "unsupported cloner syntax, expected `cloner = path::function`.",
+                        ))
                     }
                 } else if meta.path.is_ident("Clone") {
                     match &ret.cloner {
@@ -290,26 +290,18 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                             Ok(())
                         }
                         Cloner::Copy => {
-                            return Err(meta.error("Conflict cloner config `Clone` and `Copy`."));
+                            Err(meta.error("Conflict cloner config `Clone` and `Copy`."))
                         }
-                        Cloner::Clone => {
-                            return Err(meta.error("Duplicated cloner config `Clone`."));
-                        }
+                        Cloner::Clone => Err(meta.error("Duplicated cloner config `Clone`.")),
                         Cloner::Relationship => {
-                            return Err(meta.error(
-                                "Relationship has default cloner, cannot annotate `Clone`.",
-                            ));
+                            Err(meta
+                                .error("Relationship has default cloner, cannot annotate `Clone`."))
                         }
-                        Cloner::RelationshipTarget => {
-                            return Err(meta.error(
-                                "RelationshipTarget has default cloner, cannot annotate `Clone`.",
-                            ));
-                        }
-                        Cloner::Custom(_) => {
-                            return Err(meta.error(
-                                "Conflict cloner config `Clone` and `cloner = path::function.",
-                            ));
-                        }
+                        Cloner::RelationshipTarget => Err(meta.error(
+                            "RelationshipTarget has default cloner, cannot annotate `Clone`.",
+                        )),
+                        Cloner::Custom(_) => Err(meta
+                            .error("Conflict cloner config `Clone` and `cloner = path::function.")),
                     }
                 } else if meta.path.is_ident("Copy") {
                     match &ret.cloner {
@@ -317,27 +309,19 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                             ret.cloner = Cloner::Copy;
                             Ok(())
                         }
-                        Cloner::Copy => {
-                            return Err(meta.error("Duplicated cloner config `Copy`."));
-                        }
+                        Cloner::Copy => Err(meta.error("Duplicated cloner config `Copy`.")),
                         Cloner::Clone => {
-                            return Err(meta.error("Conflict cloner config `Clone` and `Copy`."));
+                            Err(meta.error("Conflict cloner config `Clone` and `Copy`."))
                         }
                         Cloner::Relationship => {
-                            return Err(meta.error(
-                                "Relationship has default cloner, cannot annotate `Copy`.",
-                            ));
+                            Err(meta
+                                .error("Relationship has default cloner, cannot annotate `Copy`."))
                         }
-                        Cloner::RelationshipTarget => {
-                            return Err(meta.error(
-                                "RelationshipTarget has default cloner, cannot annotate `Copy`.",
-                            ));
-                        }
-                        Cloner::Custom(_) => {
-                            return Err(meta.error(
-                                "Conflict cloner config `Copy` and `cloner = path::function.",
-                            ));
-                        }
+                        Cloner::RelationshipTarget => Err(meta.error(
+                            "RelationshipTarget has default cloner, cannot annotate `Copy`.",
+                        )),
+                        Cloner::Custom(_) => Err(meta
+                            .error("Conflict cloner config `Copy` and `cloner = path::function.")),
                     }
                 } else {
                     Err(meta.error("Unsupported attribute"))

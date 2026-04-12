@@ -1,5 +1,5 @@
 use crate::component::ComponentId;
-use crate::entity::Entity;
+use crate::entity::{Entity, StorageId};
 use crate::tick::Tick;
 
 /// A SIMD-optimized `contains` for `ComponentId`.
@@ -11,6 +11,18 @@ use crate::tick::Tick;
 pub(crate) fn contains_component(id: ComponentId, slice: &[ComponentId]) -> bool {
     let val = unsafe { core::mem::transmute::<ComponentId, u32>(id) };
     let arr = unsafe { core::mem::transmute::<&[ComponentId], &[u32]>(slice) };
+    arr.contains(&val)
+}
+
+/// A SIMD-optimized `contains` for `StorageId`.
+///
+/// See: https://godbolt.org/
+///
+/// With O3 optimization, it is faster than binary search when the number of elements is less than 100.
+#[inline(always)]
+pub(crate) fn contains_storage_id(id: StorageId, slice: &[StorageId]) -> bool {
+    let val = unsafe { core::mem::transmute::<StorageId, u32>(id) };
+    let arr = unsafe { core::mem::transmute::<&[StorageId], &[u32]>(slice) };
     arr.contains(&val)
 }
 

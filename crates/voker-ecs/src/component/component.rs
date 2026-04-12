@@ -10,14 +10,16 @@ use crate::utils::Dropper;
 // -----------------------------------------------------------------------------
 // Component
 
-/// The core trait for all components in the entity-component system.
+/// The core trait for all component types.
 ///
-/// This trait must be implemented for any type that can be used as a component.
-/// It provides essential metadata about the component's behavior, including
-/// mutability, storage strategy, cloning behavior, and required dependencies.
+/// Any type stored in ECS component storage must implement this trait.
 ///
-/// We currently require components to support [`Clone`]. For components that cannot
-/// be cloned, you can consider using the `on_clone` hook to handle the necessary operations.
+/// `Component` describes runtime metadata that drives how ECS stores and manages
+/// values of this type: storage layout, mutability, clone/drop behavior,
+/// dependency expansion, lifecycle hooks, and relationship registration.
+///
+/// Most users should not implement this trait manually. Prefer deriving it with
+/// [Component derive macro], which sets sensible defaults and validates options.
 ///
 /// # Derive Macro
 ///
@@ -47,57 +49,58 @@ use crate::utils::Dropper;
 ///
 /// [Component derive macro]: crate::derive::Component
 ///
-/// # Features
+/// # Associated Constants
 ///
-/// ## Storage
+/// These constants define component behavior at compile time.
 ///
-/// Two storage strategies are supported: `dense` and `sparse`, configured via
-/// [`Component::STORAGE`].
+/// - [`Component::CLONER`]
+///   Function pointer used by ECS clone paths (entity/world clone operations) to
+///   duplicate component values. By default, components are required to support cloning.
+///   See more information in [`ComponentCloner`](crate::clone::ComponentCloner).
 ///
-/// When using the derive macro, you can set storage with
-/// `#[component(storage = "dense/sparse")]`.
+/// - [`Component::STORAGE`]
+///   Storage strategy for this component. Use [`StorageMode::Dense`] for table
+///   columns or [`StorageMode::Sparse`] for sparse maps.
 ///
-/// See [`StorageMode`] for implementation details.
+/// - [`Component::MUTABLE`]
+///   Whether mutable access is allowed through ECS APIs.
+///   When `false`, mutable fetch/query operations fail for this component.
 ///
-/// ## Mutable
+/// - [`Component::NO_ENTITY`]
+///   Optimization flag indicating that [`Component::map_entities`] is a no-op.
+///   Set to `true` only when the component never stores any entity references.
 ///
-/// Components are mutable by default, but can be made immutable with
-/// [`Component::MUTABLE`].
+/// - [`Component::DROPPER`]
+///   Optional drop function pointer used by erased storage to destroy values.
+///   The default (`Dropper::of::<Self>()`) is correct for almost all cases.
 ///
-/// When using the derive macro, mutability can be configured via
-/// `#[component(mutable = true/false)]`.
+/// - [`Component::REQUIRED`]
+///   Optional dependency set for automatic required-component insertion.
+///   If component `A` requires `B`, inserting/spawning `A` also inserts `B`
+///   (via `Default`) when missing.
 ///
-/// If a component is immutable, APIs such as `get_mut` and `fetch` cannot return
-/// mutable references (they return `None`). A mutable `Query` access instead
-/// returns an error, which by default may lead to a panic.
+/// - Lifecycle hooks: [`Component::ON_ADD`], [`Component::ON_CLONE`],
+///   [`Component::ON_INSERT`], [`Component::ON_REMOVE`],
+///   [`Component::ON_DISCARD`], [`Component::ON_DESPAWN`]
+///   Optional callbacks invoked at specific lifecycle transitions.
 ///
-/// ## Required
+/// - [`Component::RELATIONSHIP_REGISTRAR`]
+///   Optional relationship metadata registrar for link/relationship components.
 ///
-/// Dependency components are configured via [`Component::REQUIRED`], which
-/// defaults to `None`.
+/// When using derive, these are configured with attributes such as
+/// `#[component(storage = "sparse")]`, `#[component(mutable = false)]`, and
+/// `#[component(required = Foo)]`.
 ///
-/// Required components act like dependencies. If component `A` requires `B`,
-/// then spawning or inserting `A` will automatically add `B` via [`Default`]
-/// when `B` is missing.
+/// ## Required Components
 ///
-/// Any component used as a required dependency must implement [`Default`].
+/// Any component used in [`Component::REQUIRED`] must implement [`Default`].
 ///
 /// Multiple required components are supported via tuples, for example:
 /// - `const REQUIRED: Option<Required> = Some((A, B, C, D));`
 ///
-/// With the derive macro, use `#[component(required = T)]`.
-///
-/// ## Dropper
-///
-/// [`Component::DROPPER`] stores the function pointer for [`Drop::drop`].
-///
-/// [`Dropper`] extracts this pointer at compile time, so users usually do not
-/// need to specify it manually.
-///
 /// ## Hooks
 ///
-/// The component supports lifecycle hooks, which are used to simulate constructs
-/// such as constructors and destructors in object-oriented languages.
+/// Lifecycle hooks allow components to react to ECS transitions.
 ///
 /// - Entity spawn: `on_add -> on_insert`
 /// - Entity despawn: `on_despawn -> on_discard -> on_remove`
@@ -112,60 +115,68 @@ use crate::utils::Dropper;
 ///
 /// # Safety
 ///
-/// Although this trait is not declared `unsafe`, incorrect implementations can
-/// still cause serious bugs, including:
-/// - Memory unsafety in component storage and access
-/// - Violation of thread safety guarantees
-/// - Incorrect component versioning and tick tracking
-/// - Undefined behavior in component cloning and mutation
-///
-/// The default provided configuration is safe.
+/// This trait is safe to implement, but incorrect metadata can break ECS
+/// invariants and lead to severe runtime bugs. Derive is strongly recommended.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a component",
     label = "invalid component",
     note = "Consider annotating `{Self}` with `#[derive(Component)]`."
 )]
 pub trait Component: Sized + Send + Sync + 'static {
-    /// The function pointer of [`Clone`] or [`Copy`].
+    /// Clone/copy callback used by ECS clone paths.
     const CLONER: ComponentCloner;
 
-    /// The storage type of component, default is `Dense`.
+    /// Storage mode for this component type.
+    ///
+    /// Defaults to [`StorageMode::Dense`].
     const STORAGE: StorageMode = StorageMode::Dense;
 
-    /// The mutability of the component, default is `true`.
+    /// Whether mutable access is allowed.
+    ///
+    /// Defaults to `true`.
     const MUTABLE: bool = true;
 
-    /// The function pointer of [`Drop`].
+    /// Whether [`Component::map_entities`] can be skipped.
+    ///
+    /// Set this to `true` only when the component contains no entity references.
+    /// Defaults to `false`.
+    const NO_ENTITY: bool = false;
+
+    /// Drop callback for values stored behind type-erased pointers.
+    ///
+    /// The default uses [`Dropper::of`] for this component type.
     const DROPPER: Option<Dropper> = Dropper::of::<Self>();
 
-    /// The required components, default is `None`.
+    /// Optional set of required components auto-inserted with this component.
+    ///
+    /// Defaults to `None`.
     const REQUIRED: Option<Required> = None;
 
-    /// Component Hook - OnAdd
+    /// Hook invoked when this component is added to an entity.
     const ON_ADD: Option<ComponentHook> = None;
 
-    /// Component Hook - OnClone
+    /// Hook invoked when this component is cloned as part of entity cloning.
     const ON_CLONE: Option<ComponentHook> = None;
 
-    /// Component Hook - OnInsert
+    /// Hook invoked after this component is inserted.
     const ON_INSERT: Option<ComponentHook> = None;
 
-    /// Component Hook - OnRemove
+    /// Hook invoked when this component is removed.
     const ON_REMOVE: Option<ComponentHook> = None;
 
-    /// Component Hook - OnDiscard
+    /// Hook invoked when this component value is replaced or discarded.
     const ON_DISCARD: Option<ComponentHook> = None;
 
-    /// Component Hook - OnDespawn
+    /// Hook invoked when the owner entity is despawned.
     const ON_DESPAWN: Option<ComponentHook> = None;
 
-    /// The runtime information of `Link`.
+    /// Optional relationship metadata registrar for link-like components.
     const RELATIONSHIP_REGISTRAR: Option<RelationshipRegistrar> = None;
-
-    /// If it's true, `map_entities` methods can be eliminate.
-    const NO_ENTITY: bool = false;
 
     #[inline(always)]
     #[expect(unused_variables, reason = "default implementation")]
+    /// Remaps embedded entity references after entity-ID migration.
+    ///
+    /// Override this when the component stores [`crate::entity::Entity`] values.
     fn map_entities<E: EntityMapper>(this: &mut Self, mapper: &mut E) {}
 }

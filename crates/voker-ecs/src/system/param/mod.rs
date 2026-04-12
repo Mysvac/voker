@@ -12,6 +12,7 @@
 // Modules
 
 mod local;
+mod marker;
 mod resource;
 mod tuples;
 mod world;
@@ -30,6 +31,12 @@ use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 /// Describes how a type is initialized and fetched as a system parameter.
+///
+/// A `SystemParam` implementation defines the full parameter lifecycle:
+/// 1. build persistent per-system [`State`](SystemParam::State),
+/// 2. register world access for conflict detection,
+/// 3. fetch the run-local [`Item`](SystemParam::Item) from world + state,
+/// 4. optionally flush deferred effects.
 ///
 /// # Available Parameters
 ///
@@ -54,6 +61,32 @@ use crate::world::{DeferredWorld, UnsafeWorld, World};
 /// Built-in implementations cover individual parameters, optional parameters, and
 /// tuples of parameters. Manual implementations are primarily for extending the
 /// ECS runtime with new parameter kinds.
+///
+/// # Derive
+///
+/// For struct composition, prefer `#[derive(SystemParam)]`.
+/// The derive combines field-level `SystemParam` implementations and enforces
+/// the `'w` / `'s` lifetime shape at compile time.
+///
+/// ```no_run
+/// use voker_ecs::borrow::Res;
+/// use voker_ecs::derive::{Resource, SystemParam};
+/// use voker_ecs::system::Local;
+///
+/// #[derive(Resource)]
+/// struct Counter(u32);
+///
+/// #[derive(SystemParam)]
+/// struct CounterParam<'w, 's> {
+///     counter: Res<'w, Counter>,
+///     local: Local<'s, u32>,
+/// }
+///
+/// fn tick_counter(mut param: CounterParam) {
+///     *param.local += 1;
+///     let _current = param.counter.0;
+/// }
+/// ```
 ///
 /// # Aliasing rules
 ///
@@ -95,14 +128,25 @@ use crate::world::{DeferredWorld, UnsafeWorld, World};
 ///
 /// In particular, an implementation must never declare read-only access while
 /// yielding mutable references (or equivalent write capability) in `build_param`.
+///
+/// Additional safety contract:
+/// - `build_param` must treat `state` as belonging to this exact compiled system.
+/// - references returned from `build_param` must not outlive the provided
+///   `'w` / `'s` lifetimes.
+/// - `defer` and `apply_deferred` must only operate on effects declared by
+///   `DEFERRED` and the parameter's own state.
 pub unsafe trait SystemParam: Sized {
     /// Persistent parameter state stored with the compiled system.
     type State: Send + Sync + 'static;
 
     /// Concrete parameter type produced for one system run.
+    ///
+    /// `'world` is tied to borrows coming from [`World`].
+    /// `'state` is tied to borrows from [`State`](SystemParam::State).
     type Item<'world, 'state>: SystemParam<State = Self::State>;
 
-    // Whether this parameter need to call `defer` and `apply`.
+    /// Whether this parameter has deferred work that requires `defer` and
+    /// `apply_deferred` to run.
     const DEFERRED: bool = false;
 
     /// Whether this parameter is thread-affine (`NonSend`).
@@ -111,10 +155,20 @@ pub unsafe trait SystemParam: Sized {
     /// Whether this parameter requires exclusive world access.
     const EXCLUSIVE: bool;
 
+    /// Initializes persistent state for this parameter when a system is built.
     fn init_state(world: &mut World) -> Self::State;
 
+    /// Declares world/resource access used by this parameter.
+    ///
+    /// Returns `true` if access can be registered without conflict.
     fn mark_access(table: &mut AccessTable, state: &Self::State) -> bool;
 
+    /// Fetches the per-run parameter value from world + state.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `mark_access` was used to validate conflicts for
+    /// this parameter configuration before invoking `build_param`.
     unsafe fn build_param<'w, 's>(
         world: UnsafeWorld<'w>,
         state: &'s mut Self::State,
@@ -122,21 +176,13 @@ pub unsafe trait SystemParam: Sized {
         this_run: Tick,
     ) -> Result<Self::Item<'w, 's>, SystemParamError>;
 
+    /// Queues deferred effects into a [`DeferredWorld`] view.
     #[inline]
     #[expect(unused_variables, reason = "default implementation")]
     fn defer(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
 
+    /// Applies previously queued deferred effects to the real world.
     #[inline]
     #[expect(unused_variables, reason = "default implementation")]
     fn apply_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {}
 }
-
-/// Marker trait for parameters that only perform shared reads.
-///
-/// Read-only parameters can participate in systems that run concurrently with
-/// other readers of the same data.
-///
-/// # Safety
-/// The implementer must guarantee that this parameter never performs mutable
-/// access to world data and never requires exclusive scheduling.
-pub unsafe trait ReadOnlySystemParam: SystemParam {}

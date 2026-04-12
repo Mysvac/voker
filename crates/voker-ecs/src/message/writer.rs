@@ -1,10 +1,11 @@
-use crate::{
-    borrow::ResMut,
-    message::{Message, MessageId, MessageIdIter, Messages},
-    system::{SystemParam, SystemParamError},
-};
+use crate::borrow::ResMut;
+use crate::message::{Message, MessageId, MessageIdIter, Messages};
+use crate::system::{SystemParam, SystemParamError};
 
 /// System parameter that appends messages of type `M`.
+///
+/// Messages are appended into the current write sequence of [`Messages<M>`]
+/// and become readable according to message lifecycle rotation.
 ///
 /// # Example
 ///
@@ -19,6 +20,11 @@ use crate::{
 ///
 /// fn detect_collisions(mut writer: MessageWriter<Collision>) {
 ///     writer.write(Collision { lhs: 1, rhs: 2 });
+///
+///     writer.write_batch([
+///         Collision { lhs: 10, rhs: 11 },
+///         Collision { lhs: 20, rhs: 21 },
+///     ]);
 /// }
 /// ```
 pub struct MessageWriter<'w, M: Message> {

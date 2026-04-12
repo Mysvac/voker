@@ -21,6 +21,8 @@ macro_rules! impl_tuple {
 
             fn build_state(_world: &mut World) -> Self::State {}
 
+            fn fetch_state(_world: &World) -> Option<Self::State> { Some(()) }
+
             unsafe fn build_cache<'w>(
                 _state: &Self::State,
                 _world: UnsafeWorld<'w>,
@@ -70,6 +72,10 @@ macro_rules! impl_tuple {
 
             fn build_state(world: &mut World) -> Self::State {
                 <$name>::build_state(world)
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                <$name>::fetch_state(world)
             }
 
             unsafe fn build_cache<'w>(
@@ -130,6 +136,10 @@ macro_rules! impl_tuple {
 
             fn build_state(world: &mut World) -> Self::State {
                 ( $( <$name>::build_state(world), )* )
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                Some(( $(<$name>::fetch_state(world)?,)* ))
             }
 
             unsafe fn build_cache<'w>(

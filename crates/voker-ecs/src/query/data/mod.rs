@@ -1,5 +1,4 @@
-mod comp_raw;
-mod comp_ref;
+mod comp;
 mod entity;
 mod tuples;
 
@@ -20,6 +19,41 @@ use crate::world::{UnsafeWorld, World};
 /// This trait defines how a query accesses data from entities. It is implemented
 /// for component references, tuples of components, and other data sources.
 ///
+/// # Derive macro usage
+///
+/// Prefer [`#[derive(QueryData)]`](crate::derive::QueryData) for custom query-data structs.
+///
+/// Rules enforced by the derive:
+/// - The struct may have no lifetime params, or exactly one lifetime named `'w`.
+/// - For mutable fields, use [`crate::borrow::Mut`] instead of `&'w mut T`.
+/// - Add `#[query_data(readonly)]` when the derived type is read-only and
+///   should also implement [`ReadOnlyQueryData`].
+///
+/// Example:
+///
+/// ```no_run
+/// use voker_ecs::borrow::Mut;
+/// use voker_ecs::derive::{Component, QueryData};
+///
+/// #[derive(Component, Clone)]
+/// struct Position { x: f32, y: f32 }
+///
+/// #[derive(Component, Clone)]
+/// struct Velocity { x: f32, y: f32 }
+///
+/// #[derive(QueryData)]
+/// #[query_data(readonly)]
+/// struct ReadVelocity<'w> {
+///     velocity: &'w Velocity,
+/// }
+///
+/// #[derive(QueryData)]
+/// struct MoveData<'w> {
+///     position: Mut<'w, Position>,
+///     velocity: &'w Velocity,
+/// }
+/// ```
+///
 /// # Available Params
 ///
 /// The following query data forms are supported:
@@ -27,6 +61,9 @@ use crate::world::{UnsafeWorld, World};
 /// - **Entity handles**: `Entity`, `EntityRef`, `EntityMut`
 /// - **Component references**: `&T`, `&mut T`, `Ref<T>`, `Mut<T>` where `T` is a component type
 /// - **Optional components**: `Option<&T>`, `Option<&mut T>`, `Option<Ref<T>>`, `Option<Mut<T>>`
+///
+/// For mutable component forms, `Item<'world>` is [`crate::borrow::Mut`] (or
+/// `Option<Mut<_>>`) rather than raw `&mut T`, so change ticks remain attached.
 ///
 /// Tuples composed from these forms are also valid, for example `(&Foo, &mut Bar)`.
 ///
@@ -48,16 +85,23 @@ use crate::world::{UnsafeWorld, World};
 /// Implementing this trait requires careful attention to memory safety and
 /// component access patterns. See trait methods for specific safety requirements.
 ///
+/// The `QueryData::Item` should not need `Drop`.
+///
 /// Implementations should treat `build_filter` and `build_access` as separate
 /// concerns:
 /// - filter describes which storages/entities are candidates,
 /// - access describes what data might be read or written for scheduler conflict checks.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a query data",
+    label = "invalid query data",
+    note = "Consider annotating `{Self}` with `#[derive(QueryData)]`."
+)]
 pub unsafe trait QueryData {
     /// Static data shared across all query instances.
     ///
     /// This is typically built once during query construction and contains
     /// information like component IDs that don't change over the query's lifetime.
-    type State: Send + Sync + 'static;
+    type State: Clone + Send + Sync + 'static;
 
     /// Per-query cached data for a specific world state.
     ///
@@ -66,6 +110,9 @@ pub unsafe trait QueryData {
     type Cache<'world>;
 
     /// The type returned when fetching data for a single entity.
+    ///
+    /// The data should be lightweight and not contain any content
+    /// that needs to be dropped.
     type Item<'world>;
 
     /// Indicates whether all components accessed by this filter use dense storage.
@@ -80,6 +127,9 @@ pub unsafe trait QueryData {
     /// shared across all query executions and contains metadata needed for
     /// future cache building and fetching.
     fn build_state(world: &mut World) -> Self::State;
+
+    /// Try get the static state from given world without mutable reference.
+    fn fetch_state(world: &World) -> Option<Self::State>;
 
     /// Builds a per-execution cache for this query data.
     ///
@@ -183,6 +233,9 @@ pub unsafe trait QueryData {
 }
 
 /// A trait that ensures the query is read-only.
+///
+/// Then the `Query` implemented `Copy`,
+/// and the `QueryState` can be used with immutable world reference.
 ///
 /// # Safety
 /// The implementer ensures it's read only.

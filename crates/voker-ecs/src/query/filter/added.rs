@@ -65,6 +65,10 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
         world.register_component::<T>()
     }
 
+    fn fetch_state(world: &World) -> Option<Self::State> {
+        world.get_component_id::<T>()
+    }
+
     unsafe fn build_cache<'w>(
         state: &Self::State,
         world: UnsafeWorld<'w>,

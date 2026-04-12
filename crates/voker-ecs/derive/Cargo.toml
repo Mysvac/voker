@@ -12,7 +12,7 @@ proc-macro = true
 [dependencies]
 voker-macro-utils = { path = "../../voker-macro-utils" }
 
-syn = { version = "2.0", features = ["visit", "full", "extra-traits"] }
+syn = { version = "2.0", features = ["visit", "visit-mut", "full", "extra-traits"] }
 quote = "1.0"
 proc-macro2 = "1.0"
 

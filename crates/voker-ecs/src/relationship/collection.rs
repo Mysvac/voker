@@ -9,6 +9,13 @@ use crate::entity::{Entity, EntityHashSet, EntityIndexSet};
 // -----------------------------------------------------------------------------
 // RelationshipSourceSet & OrderedRelationshipSourceSet
 
+/// Abstract source-entity collection used by [`RelationshipTarget`] caches.
+///
+/// Implementations define storage semantics for reverse links:
+/// - single-source sets (`Entity`, `Option<Entity`) for one-to-one links
+/// - multi-source sets (`Vec<Entity>`, sets, queues) for one-to-many links
+///
+/// [`RelationshipTarget`]: crate::relationship::RelationshipTarget
 pub trait RelationshipSourceSet {
     type SourceIter<'a>: Iterator<Item = Entity>
     where
@@ -68,6 +75,10 @@ pub trait RelationshipSourceSet {
     }
 }
 
+/// Extension trait for ordered source collections.
+///
+/// These APIs expose positional editing operations for queue/list-like
+/// relationship targets.
 pub trait OrderedRelationshipSourceSet: RelationshipSourceSet {
     /// Inserts the entity at a specific index.
     ///

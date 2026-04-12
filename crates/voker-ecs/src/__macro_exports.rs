@@ -8,4 +8,5 @@
 /// An internal module provided for proc-macro implementation.
 pub mod macro_utils {
     pub use ::alloc::boxed::Box;
+    pub use ::alloc::vec::Vec;
 }

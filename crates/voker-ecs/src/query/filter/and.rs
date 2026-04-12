@@ -42,10 +42,12 @@ macro_rules! impl_tuple {
             const COMPONENTS_ARE_DENSE: bool = <$name>::COMPONENTS_ARE_DENSE;
             const ENABLE_ENTITY_FILTER: bool = <$name>::ENABLE_ENTITY_FILTER;
 
-            fn build_state(
-                world: &mut World,
-            ) -> Self::State {
+            fn build_state(world: &mut World) -> Self::State {
                 <$name>::build_state(world)
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                <$name>::fetch_state(world)
             }
 
             unsafe fn build_cache<'w>(
@@ -118,10 +120,12 @@ macro_rules! impl_tuple {
             };
 
 
-            fn build_state(
-                world: &mut World,
-            ) -> Self::State {
+            fn build_state(world: &mut World) -> Self::State {
                 ( $( <$name>::build_state(world), )* )
+            }
+
+            fn fetch_state(world: &World) -> Option<Self::State> {
+                Some(( $( <$name>::fetch_state(world)?, )* ))
             }
 
             unsafe fn build_cache<'w>(

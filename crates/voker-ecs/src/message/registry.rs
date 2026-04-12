@@ -5,7 +5,6 @@ use core::fmt::Debug;
 use voker_utils::extra::TypeIdMap;
 
 use super::{Message, Messages};
-use crate::resource::Resource;
 use crate::utils::DebugName;
 use crate::world::World;
 
@@ -20,6 +19,10 @@ struct MessageMeta {
 /// This type keeps a compact list of registered message types and the function
 /// pointer needed to rotate each [`Messages<T>`] resource during
 /// [`Self::run_updates`].
+///
+/// In normal usage this is owned by [`crate::world::World`] and driven through
+/// [`crate::world::World::register_message`] and
+/// [`crate::world::World::update_messages`].
 pub struct MessageRegistry {
     messages: Vec<MessageMeta>,
     indices: TypeIdMap<usize>,
@@ -32,8 +35,6 @@ impl Debug for MessageRegistry {
             .finish()
     }
 }
-
-impl Resource for MessageRegistry {}
 
 fn update_messages<T: Message>(world: &mut World) {
     if let Some(mut messages) = world.get_resource_mut::<Messages<T>>() {
@@ -53,8 +54,11 @@ impl MessageRegistry {
     ///
     /// Registration is idempotent: registering the same type twice is a no-op.
     ///
-    /// - Return `true` if it's new message.
-    /// - Return `false` if it's already registered.
+    /// - Returns `true` if the message type is newly registered.
+    /// - Returns `false` if it was already registered.
+    ///
+    /// This function does not initialize the [`Messages<T>`] resource.
+    /// Prefer calling [`World::register_message`] from application code.
     pub fn register_message<T: Message>(&mut self) -> bool {
         let type_id = TypeId::of::<T>();
         if self.indices.contains(type_id) {
@@ -75,8 +79,10 @@ impl MessageRegistry {
 
     /// Deregisters a message type from global lifecycle updates.
     ///
-    /// - Return `true` if it's exist.
-    /// - Return `false` if it's not exist.
+    /// - Returns `true` if the message type existed.
+    /// - Returns `false` if the message type was not registered.
+    ///
+    /// This function does not remove the [`Messages<T>`] resource itself.
     pub fn unregister_message<T: Message>(&mut self) -> bool {
         let type_id = TypeId::of::<T>();
         if let Some(index) = self.indices.remove(type_id) {

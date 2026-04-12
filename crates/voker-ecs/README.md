@@ -121,7 +121,7 @@ struct Velocity { x: f32, y: f32 }
 
 // This system moves each entity with a Position and Velocity component
 fn movement(mut query: Query<(&mut Position, &Velocity)>) {
-    for (position, velocity) in query {
+    for (mut position, velocity) in query {
         position.x += velocity.x;
         position.y += velocity.y;
     }

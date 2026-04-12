@@ -17,6 +17,8 @@
 //!
 //! # Result Alias
 //! [`GameResult`] is the crate-local alias for `Result<T, GameError>`.
+//!
+//! [`GameError`]: struct@GameError`
 
 mod context;
 mod game_error;
@@ -25,6 +27,7 @@ mod handler;
 pub use context::*;
 pub use game_error::*;
 pub use handler::*;
+pub use voker_ecs_derive::GameError;
 
-/// Convenience alias for fallible ECS APIs returning [`GameError`].
+/// Convenience alias for fallible ECS APIs returning `GameError`.
 pub type GameResult<T> = Result<T, GameError>;

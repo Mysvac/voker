@@ -244,6 +244,7 @@ impl ResData {
     ///
     /// # Safety
     /// - If the data is `NonSend`, the function must be called on the correct thread.
+    /// - Caller becomes responsible for later restoring or deallocating returned data.
     #[must_use]
     pub unsafe fn leak(&mut self) -> Option<(NonNull<u8>, Tick, Tick)> {
         let ptr = self.data;
@@ -254,7 +255,7 @@ impl ResData {
     /// Clear the old value and inserts a new resource value from pointer.
     ///
     /// # Safety
-    /// - `ptr` must matche the resource's layout
+    /// - `ptr` must match the resource's layout
     /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn from_raw(&mut self, ptr: NonNull<u8>, added: Tick, changed: Tick) {
         unsafe {
@@ -268,7 +269,7 @@ impl ResData {
     /// Removes the resource and returns ownership of its data.
     ///
     /// # Safety
-    /// - `T` must matche the resource's layout
+    /// - `T` must match the resource's layout
     /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn remove<T: Resource>(&mut self) -> Option<T> {
         if self.data.is_null() {
@@ -288,7 +289,7 @@ impl ResData {
     /// Inserts a new resource value.
     ///
     /// # Safety
-    /// - `value` must matche the resource's layout
+    /// - `value` must match the resource's layout
     /// - `tick` must be a valid system tick
     /// - If the data is `NonSend`, the function must be called on the correct thread.
     pub unsafe fn insert<T: Resource>(&mut self, value: T, tick: Tick) {

@@ -8,7 +8,7 @@ use crate::entity::{Entity, EntityId, EntityTag};
 use crate::storage::{TableId, TableRow};
 
 // -----------------------------------------------------------------------------
-// EntityToken
+// EntityLocation
 
 /// Represents the precise storage location of an entity within the ECS world.
 ///
@@ -117,11 +117,11 @@ impl Entities {
         Entity::new(id, info.tag)
     }
 
-    /// Try retrieves the location of a spawned entity.
+    /// Tries to retrieve the location of a spawned entity.
     ///
     /// # Returns
     /// - `Ok(Some(EntityLocation))` - The entity's current storage location
-    /// - `Ok(None)` - The entity is not spawned but the tag is matched.
+    /// - `Ok(None)` - The entity is not spawned but the tag matches.
     /// - `Err(FetchError)` - Tag mismatches.
     ///
     /// # Errors
@@ -180,8 +180,7 @@ impl Entities {
     /// This advances the tag counter, making the slot available for
     /// new entities. Any future references to the old tag will fail.
     ///
-    /// Useually, we will call this function after despawn a entity, then we
-    /// can recycle it.
+    /// Usually this is called after despawning an entity so the slot can be recycled.
     ///
     /// # Safety
     /// Caller must ensure:
@@ -213,7 +212,7 @@ impl Entities {
     ///
     /// # Returns
     /// - `Ok(())` - Entity can be spawned
-    /// - `Err(SpawnError::SpawnError)` - If spawning is not possible
+    /// - `Err(SpawnError)` - If spawning is not possible
     pub fn can_spawn(&self, entity: Entity) -> Result<(), SpawnError> {
         let info = self.infos.get(entity.index()).unwrap_or(&DEFAULT_INFO);
 
@@ -233,7 +232,7 @@ impl Entities {
     ///
     /// # Safety
     /// Caller must ensure:
-    /// * The entity was checked with `can_spawned` first
+    /// * The entity was checked with [`Entities::can_spawn`] first
     /// * The location is valid and properly initialized
     ///
     /// # Parameters
@@ -242,7 +241,7 @@ impl Entities {
     ///
     /// # Returns
     /// * `Ok(())` - Successfully recorded spawn
-    /// * `Err(SpawnError::SpawnError)` - If entity state is invalid
+    /// * `Err(SpawnError)` - If entity state is invalid
     pub unsafe fn set_spawned(
         &mut self,
         entity: Entity,
@@ -359,11 +358,11 @@ impl Entities {
         Ok(())
     }
 
-    /// Returns an iterator over spawned entitied.
+    /// Returns an iterator over spawned entities.
     pub fn iter(&self) -> impl FusedIterator<Item = (Entity, EntityLocation)> {
         self.infos.iter().enumerate().filter_map(|(idx, info)| {
             if let Some(location) = info.location {
-                // faster then without_provenance
+                // Faster than `without_provenance` in this hot path.
                 let temp = Entity::from_bits(idx as u64);
                 let entity = Entity::new(temp.id(), info.tag);
                 Some((entity, location))

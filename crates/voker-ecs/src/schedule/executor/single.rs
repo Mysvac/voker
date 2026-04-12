@@ -77,7 +77,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
-                            handler(e, ctx);
+                            handler(e.into(), ctx);
                         })
                     });
 
@@ -108,7 +108,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
-                            handler(e, ctx);
+                            handler(e.into(), ctx);
                             false
                         })
                     });

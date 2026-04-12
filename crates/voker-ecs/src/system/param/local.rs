@@ -1,6 +1,6 @@
 use core::ops::{Deref, DerefMut};
 
-use super::{ReadOnlySystemParam, SystemParam};
+use super::SystemParam;
 use crate::system::{AccessTable, SystemParamError};
 use crate::tick::Tick;
 use crate::world::{FromWorld, UnsafeWorld, World};
@@ -37,8 +37,6 @@ impl<'s, T: FromWorld + Send + Sync + 'static> DerefMut for Local<'s, T> {
         self.0
     }
 }
-
-unsafe impl<T: FromWorld + Send + Sync + 'static> ReadOnlySystemParam for Local<'_, T> {}
 
 unsafe impl<T: FromWorld + Send + Sync + 'static> SystemParam for Local<'_, T> {
     type State = T;

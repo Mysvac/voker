@@ -3,8 +3,7 @@
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use crate::error::GameError;
-use crate::system::{AccessTable, SystemFlags, SystemId};
+use crate::system::{AccessTable, SystemError, SystemFlags, SystemId};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
 
@@ -131,7 +130,7 @@ pub trait System: Send + Sync + 'static {
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
-    ) -> Result<Self::Output, GameError>;
+    ) -> Result<Self::Output, SystemError>;
 
     fn defer(&mut self, world: DeferredWorld);
 
@@ -318,7 +317,7 @@ where
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
-    ) -> Result<Self::Output, GameError> {
+    ) -> Result<Self::Output, SystemError> {
         let data = unsafe { self.a.run(input, world)? };
         unsafe { self.b.run(data, world) }
     }
@@ -406,7 +405,7 @@ where
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
-    ) -> Result<Self::Output, GameError> {
+    ) -> Result<Self::Output, SystemError> {
         let data = unsafe { self.s.run(input, world)? };
         Ok((self.f)(data))
     }
@@ -497,7 +496,7 @@ where
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
-    ) -> Result<Self::Output, GameError> {
+    ) -> Result<Self::Output, SystemError> {
         unsafe { self.s.run(input, world) }
     }
 

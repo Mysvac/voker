@@ -1,12 +1,10 @@
-use super::{ReadOnlySystemParam, SystemParam, SystemParamError};
+use super::{SystemParam, SystemParamError};
 use crate::system::{AccessTable, SystemMeta};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 macro_rules! impl_tuple {
     (0: []) => {
-        unsafe impl ReadOnlySystemParam for () {}
-
         unsafe impl SystemParam for () {
             type State = ();
             type Item<'world, 'state> = ();
@@ -29,10 +27,6 @@ macro_rules! impl_tuple {
         }
     };
     (1 : [ $index:tt : $name:ident ]) => {
-        #[cfg_attr(docsrs, doc(fake_variadic))]
-        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
-        unsafe impl<$name: ReadOnlySystemParam> ReadOnlySystemParam for ($name,) {}
-
         #[cfg_attr(docsrs, doc(fake_variadic))]
         #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
         unsafe impl<$name: SystemParam> SystemParam for ($name,) {
@@ -75,9 +69,6 @@ macro_rules! impl_tuple {
         }
     };
     ($num:literal : [$($index:tt : $name:ident),*]) => {
-        #[cfg_attr(docsrs, doc(hidden))]
-        unsafe impl<$($name: ReadOnlySystemParam),*> ReadOnlySystemParam for ($($name),*) {}
-
         #[cfg_attr(docsrs, doc(hidden))]
         unsafe impl<$($name: SystemParam),*> SystemParam for ($($name),*) {
             type State = ( $( <$name>::State ),* );

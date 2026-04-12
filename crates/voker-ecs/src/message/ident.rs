@@ -10,11 +10,16 @@ use crate::utils::DebugName;
 
 /// Marker trait for ECS message payload types.
 ///
-/// Message values are stored inside [`Messages<T>`]. To participate in automatic
-/// lifecycle rotation, register the type with  [`World::register_message`] and run
-/// [`World::update_messages`] each update.
+/// A `Message` type is a short-lived payload sent between systems through
+/// [`Messages<T>`]. The trait has no methods: it only encodes bounds required
+/// by message storage and cross-system usage.
 ///
-/// # Example
+/// For user code, the recommended path is `#[derive(Message)]`.
+///
+/// To participate in automatic lifecycle rotation, register the type with
+/// [`World::register_message`] and run [`World::update_messages`] each update.
+///
+/// # Using Messages In World
 ///
 /// ```rust
 /// use voker_ecs::prelude::*;
@@ -30,7 +35,45 @@ use crate::utils::DebugName;
 /// world.update_messages();
 /// ```
 ///
+/// # Using Messages In Systems
+///
+/// `Message` is consumed through system parameters in three roles:
+/// - [`MessageWriter<T>`]: append new messages.
+/// - [`MessageReader<T>`]: read unread messages immutably.
+/// - [`MessageMutator<T>`]: read unread messages mutably.
+///
+/// `MessageReader` and `MessageMutator` each keep an independent local cursor,
+/// so one system reading messages does not consume them for another system.
+///
+/// ```rust
+/// use voker_ecs::prelude::*;
+///
+/// #[derive(Message)]
+/// struct Damage {
+///     amount: u32,
+/// }
+///
+/// fn emit(mut writer: MessageWriter<Damage>) {
+///     writer.write(Damage { amount: 120 });
+/// }
+///
+/// fn clamp(mut mutator: MessageMutator<Damage>) {
+///     for msg in mutator.read() {
+///         msg.amount = msg.amount.min(100);
+///     }
+/// }
+///
+/// fn log(mut reader: MessageReader<Damage>) {
+///     for msg in reader.read() {
+///         let _ = msg.amount;
+///     }
+/// }
+/// ```
+///
 /// [`Messages<T>`]: crate::message::Messages
+/// [`MessageWriter<T>`]: crate::message::MessageWriter
+/// [`MessageReader<T>`]: crate::message::MessageReader
+/// [`MessageMutator<T>`]: crate::message::MessageMutator
 /// [`World::register_message`]: crate::world::World::register_message
 /// [`World::update_messages`]: crate::world::World::update_messages
 #[diagnostic::on_unimplemented(
@@ -43,12 +86,14 @@ pub trait Message: Send + Sync + 'static {}
 // -----------------------------------------------------------------------------
 // MessageId
 
-/// A type used to represent a message index.
+/// Identifier for one message in a `Messages<M>` stream.
 ///
-/// The internal value is allowed to wrap around, and users
-/// should not store it for an excessively long time.
+/// `MessageId` is backed by a wrapping `usize` counter. It is stable for
+/// correlation within the stream (for example, tracking ids returned by
+/// `write_batch`), but callers should avoid treating it as a globally monotonic
+/// timestamp across very long runtimes.
 ///
-/// Although `usize` usually does not overflow wrap.
+/// Ordering is wrap-aware and designed for stream-local comparisons.
 #[repr(transparent)]
 pub struct MessageId<M: Message> {
     id: usize,
@@ -73,7 +118,7 @@ impl<M: Message> MessageId<M> {
         }
     }
 
-    /// Returns the archetype index as a usize.
+    /// Returns the raw message index as `usize`.
     #[inline(always)]
     pub const fn index(self) -> usize {
         self.id

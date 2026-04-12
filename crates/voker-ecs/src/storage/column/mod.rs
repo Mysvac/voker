@@ -28,6 +28,10 @@ use crate::utils::Dropper;
 /// - `data`: The actual component values
 /// - `added`: Tick when each component was added
 /// - `changed`: Tick when each component was last modified
+///
+/// `Column` is the low-level untyped primitive used by both dense tables and
+/// sparse maps. Higher-level storage layers are responsible for ensuring row
+/// validity and aliasing discipline before calling these methods.
 #[derive(Debug)]
 pub struct Column {
     data: BlobArray,
@@ -110,7 +114,7 @@ impl Column {
         }
     }
 
-    /// Returns a pointer to the component data at `index`.
+    /// Returns a shared untyped pointer to component data at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)
@@ -120,7 +124,7 @@ impl Column {
         unsafe { self.data.get(index) }
     }
 
-    /// Returns a pointer to the component data at `index`.
+    /// Returns a mutable untyped pointer to component data at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)
@@ -130,7 +134,7 @@ impl Column {
         unsafe { self.data.get_mut(index) }
     }
 
-    /// Returns the added tick at `index`.
+    /// Returns the `added` tick at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)
@@ -140,7 +144,7 @@ impl Column {
         unsafe { self.added.get(index) }
     }
 
-    /// Returns the changed tick at `index`.
+    /// Returns the `changed` tick at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)
@@ -150,7 +154,7 @@ impl Column {
         unsafe { self.changed.get(index) }
     }
 
-    /// Returns the added tick at `index`.
+    /// Returns a mutable reference to the `added` tick at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)
@@ -160,7 +164,7 @@ impl Column {
         unsafe { self.added.get_mut(index) }
     }
 
-    /// Returns the changed tick at `index`.
+    /// Returns a mutable reference to the `changed` tick at `index`.
     ///
     /// # Safety
     /// - `index` must be within bounds (0..capacity)

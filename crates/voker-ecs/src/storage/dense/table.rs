@@ -116,16 +116,21 @@ impl RefUnwindSafe for Table {}
 // Basic
 
 impl Table {
+    /// Returns this table's identifier.
     #[inline(always)]
     pub fn id(&self) -> TableId {
         self.id
     }
 
+    /// Returns the component schema of this table.
+    ///
+    /// All rows in this table contain exactly this component set.
     #[inline(always)]
     pub fn components(&self) -> &[ComponentId] {
         self.compnents
     }
 
+    /// Returns the entities currently stored in row order.
     #[inline(always)]
     pub fn entities(&self) -> &[Entity] {
         &self.entities
@@ -223,7 +228,7 @@ impl Table {
     /// O(n) where n is the number of entities
     ///
     /// Note: This is inefficient and should be avoided. Store the `TableRow`
-    /// returned by `allocate()` instead.
+    /// returned by `alloc_row()` instead.
     #[inline]
     pub fn get_table_row(&self, key: Entity) -> Option<TableRow> {
         let index = self.entities.iter().position(|it| *it == key)?;
@@ -234,6 +239,7 @@ impl Table {
     ///
     /// # Safety
     /// - `index` must be a valid column index obtained from `get_table_col()`
+    /// - Returned reference must not outlive the table borrow
     #[inline(always)]
     pub unsafe fn get_column(&self, index: TableCol) -> &Column {
         debug_assert!((index.0 as usize) < self.columns.len());
@@ -349,7 +355,7 @@ impl Table {
         let len = self.entity_count();
         unsafe {
             let col = self.get_column(table_col);
-            col.get_changed_slice().deref(len)
+            col.get_added_slice().deref(len)
         }
     }
 
