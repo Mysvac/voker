@@ -156,12 +156,15 @@ impl World {
 
     /// Runs periodic tick-age validation across component/resource storages.
     ///
+    /// Validation runs at most once per [`CHECK_CYCLE`] ticks, measured from
+    /// the previous validation point (`last_check`).
+    ///
     /// Returns the [`CheckTicks`] event payload used for this pass.
     pub fn check_ticks(&mut self) -> Option<CheckTicks> {
         let this_run = *self.this_run.get_mut();
-        let last_run = self.last_run.get();
+        let last_check = self.last_check.get();
 
-        if this_run.wrapping_sub(last_run) >= CHECK_CYCLE {
+        if this_run.wrapping_sub(last_check) >= CHECK_CYCLE {
             voker_utils::cold_path();
             let this_run = Tick::new(this_run);
             let checker = CheckTicks::new(this_run);
@@ -193,7 +196,7 @@ impl World {
         self.resources.len()
     }
 
-    /// Returns the number of resource types.
+    /// Returns the number of schedules stored in this world.
     pub fn schedule_count(&self) -> usize {
         self.schedules.len()
     }

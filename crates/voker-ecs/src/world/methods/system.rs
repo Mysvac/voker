@@ -89,6 +89,9 @@ impl World {
     }
 
     /// Registers a system into the world cache if absent.
+    ///
+    /// The system is keyed by its [`SystemId`]. If an initialized entry already
+    /// exists for the same input/output signature, this is a no-op.
     pub fn register_system<I, O, M>(&mut self, system: impl IntoSystem<I, O, M> + 'static)
     where
         I: SystemInput + 'static,
@@ -103,7 +106,7 @@ impl World {
         res.mapper.insert(id, Some(Box::new(IntoSystem::into_system(system))));
     }
 
-    /// Removes a registered system from cache and returns ownership of it.
+    /// Removes a registered system from cache.
     ///
     /// Returns `None` when the typed cache or entry does not exist.
     pub fn unregister_system<I, O, M>(&mut self, system: impl IntoSystem<I, O, M> + 'static)

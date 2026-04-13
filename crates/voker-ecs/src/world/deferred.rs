@@ -1,7 +1,6 @@
 use core::ops::Deref;
 
-use crate::archetype::Archetype;
-use crate::borrow::{NonSendMut, ResMut, UntypedMut};
+use crate::borrow::{NonSendMut, ResMut};
 use crate::command::Commands;
 use crate::component::HookContext;
 use crate::entity::{Entity, FetchError};
@@ -94,6 +93,10 @@ impl<'w> DeferredWorld<'w> {
         Commands::new(world, queue)
     }
 
+    /// Returns change-aware mutable component access for a single entity.
+    ///
+    /// Returns `None` when the entity is not spawned or the requested
+    /// component pattern is unavailable.
     #[inline]
     pub fn get_mut<C: GetComponents>(&mut self, entity: Entity) -> Option<C::Mut<'_>> {
         self.world_mut().get_mut::<C>(entity)
@@ -177,11 +180,17 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().write_message_batch(messages)
     }
 
+    /// Creates a query with default filter from deferred world context.
+    ///
+    /// Returns `None` when query state cannot be initialized or accessed.
     #[inline]
     pub fn try_query<D: QueryData + 'static>(&mut self) -> Option<Query<'_, '_, D>> {
         self.world_mut().try_query::<D>()
     }
 
+    /// Creates a query with explicit filter from deferred world context.
+    ///
+    /// Returns `None` when query state cannot be initialized or accessed.
     #[inline]
     pub fn try_query_with<D, F>(&mut self) -> Option<Query<'_, '_, D, F>>
     where
@@ -205,6 +214,19 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().run_system_by_id::<I, O>(id, input)
     }
 
+    /// Mutates component `T` on `entity` while preserving hook semantics.
+    ///
+    /// This mirrors [`World::modify_component`] for deferred execution paths.
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn modify_component<T: Component, R>(
+        &mut self,
+        entity: Entity,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Result<Option<R>, FetchError> {
+        let caller = DebugLocation::caller();
+        self.world_mut().modify_component_with_caller(entity, caller, f)
+    }
+
     #[inline]
     pub(crate) fn modify_component_with_caller<T: Component, R>(
         &mut self,
@@ -212,58 +234,7 @@ impl<'w> DeferredWorld<'w> {
         caller: DebugLocation,
         f: impl FnOnce(&mut T) -> R,
     ) -> Result<Option<R>, FetchError> {
-        // If the component is not registered, then it doesn't exist on this entity, so no action required.
-        let Some(component_id) = self.get_component_id::<T>() else {
-            return Ok(None);
-        };
-
-        self.modify_component_by_id_with_caller(entity, component_id, caller, move |component| {
-            // SAFETY: component matches the component_id collected in the above line
-            let mut component = unsafe { component.with_type::<T>() };
-
-            f(&mut component)
-        })
-    }
-
-    pub(crate) fn modify_component_by_id_with_caller<R>(
-        &mut self,
-        entity: Entity,
-        component_id: ComponentId,
-        caller: DebugLocation,
-        f: impl for<'a> FnOnce(UntypedMut<'a>) -> R,
-    ) -> Result<Option<R>, FetchError> {
-        let entity_mut = self.get_entity_mut(entity)?;
-        let arche = entity_mut.archetype();
-
-        if !arche.contains_component(component_id) {
-            return Ok(None);
-        }
-
-        let arche: *const Archetype = &raw const *arche;
-        unsafe {
-            let arche = &*arche;
-            if !arche.on_discard_hooks().is_empty() {
-                self.trigger_on_discard(entity, Some(component_id).into_iter(), caller);
-            }
-        }
-
-        let mut entity_mut = self.get_entity_mut(entity).expect("entity access confirmed above");
-
-        // SAFETY: we will run the required hooks to simulate removal/replacement.
-        let mut component = entity_mut
-            .get_mut_by_id(component_id)
-            .expect("component access confirmed above");
-
-        let result = f(component.reborrow());
-
-        unsafe {
-            let arche = &*arche;
-            if !arche.on_insert_hooks().is_empty() {
-                self.trigger_on_insert(entity, Some(component_id).into_iter(), caller);
-            }
-        }
-
-        Ok(Some(result))
+        self.world_mut().modify_component_with_caller(entity, caller, f)
     }
 }
 

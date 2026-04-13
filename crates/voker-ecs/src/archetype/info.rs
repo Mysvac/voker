@@ -421,7 +421,6 @@ impl Archetype {
 
     /// Triggers all `on_add` hooks in this archetype for the given entity.
     #[inline]
-    #[track_caller]
     pub(crate) fn trigger_on_add(
         &self,
         entity: Entity,
@@ -435,7 +434,6 @@ impl Archetype {
 
     /// Triggers all `on_clone` hooks in this archetype for the given entity.
     #[inline]
-    #[track_caller]
     pub(crate) fn trigger_on_clone(
         &self,
         entity: Entity,
@@ -449,7 +447,6 @@ impl Archetype {
 
     /// Triggers all `on_insert` hooks in this archetype for the given entity.
     #[inline]
-    #[track_caller]
     pub(crate) fn trigger_on_insert(
         &self,
         entity: Entity,
@@ -463,7 +460,6 @@ impl Archetype {
 
     /// Triggers all `on_remove` hooks in this archetype for the given entity.
     #[inline]
-    #[track_caller]
     pub(crate) fn trigger_on_remove(
         &self,
         entity: Entity,

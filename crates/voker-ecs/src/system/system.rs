@@ -87,6 +87,23 @@ use super::SystemInput;
 /// pushed into the world's deferred command queue, which is thread-safe.
 /// Therefore, `Commands` does not count as direct component/resource access and
 /// does not reduce system parallelism.
+///
+/// # Access Declaration Contract
+///
+/// A system must follow this contract:
+/// 1. [`initialize`](System::initialize) returns an [`AccessTable`] that fully
+///    describes all accesses the system may perform,
+/// 2. [`run`](System::run) must not perform accesses outside that declaration.
+///
+/// Violating this contract can cause unsound parallel execution.
+///
+/// # Debugging Missing Parallelism
+///
+/// If two systems unexpectedly serialize, check in order:
+/// 1. whether either system is `EXCLUSIVE` (`&mut World`),
+/// 2. whether a shared resource is written by one side (`ResMut` / `NonSendMut`),
+/// 3. whether query filters are actually disjoint,
+/// 4. whether explicit schedule ordering edges force sequencing.
 #[diagnostic::on_unimplemented(message = "`{Self}` is not a system", label = "invalid system")]
 pub trait System: Send + Sync + 'static {
     /// The system's input.
@@ -239,6 +256,7 @@ impl<T: System> IntoSystem<T::Input, T::Output, ()> for T {
 
 pub struct PipeSystemMarker;
 
+#[derive(Clone, Copy)]
 pub struct IntoPipeSystem<A, B> {
     a: A,
     b: B,
@@ -338,6 +356,7 @@ where
 
 pub struct MapSystemMarker;
 
+#[derive(Clone, Copy)]
 pub struct IntoMapSystem<S, F> {
     s: S,
     f: F,
@@ -423,6 +442,17 @@ where
 // IntoMarkSystem
 
 pub struct MarkSystemMarker;
+
+impl<S: Clone, M> Clone for IntoMarkSystem<S, M> {
+    fn clone(&self) -> Self {
+        Self {
+            s: self.s.clone(),
+            _marker: self._marker,
+        }
+    }
+}
+
+impl<S: Copy, M> Copy for IntoMarkSystem<S, M> {}
 
 pub struct IntoMarkSystem<S, M> {
     s: S,

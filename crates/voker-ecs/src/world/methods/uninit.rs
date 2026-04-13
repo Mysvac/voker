@@ -4,7 +4,7 @@ use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{EntityMut, World};
 
 impl World {
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub unsafe fn spawn_uninit(&mut self, arche_id: ArcheId) -> EntityMut<'_> {
         let caller = DebugLocation::caller();
         unsafe { self.spawn_uninit_with_caller(arche_id, caller) }

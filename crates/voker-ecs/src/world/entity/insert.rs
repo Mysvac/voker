@@ -45,7 +45,7 @@ impl EntityOwned<'_> {
     /// assert!(entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn insert<B: Bundle>(&mut self, bundle: B) -> &mut Self {
         self.insert_with_caller(bundle, DebugLocation::caller());
         self
@@ -63,7 +63,7 @@ impl EntityOwned<'_> {
     /// To avoid accidental overwrites, **it is strongly recommended that `Bundle` contains only
     /// a single component type**, which eliminates the risk of false-positive overwrites.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn insert_if_new<B: Bundle>(&mut self, f: impl FnOnce() -> B) -> &mut Self {
         self.insert_if_new_with_caller(f, DebugLocation::caller());
         self

@@ -7,7 +7,7 @@ impl EntityOwned<'_> {
     ///
     /// If `self.location` is none, this function is no-op.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn(self) {
         self.despawn_with_caller(DebugLocation::caller());
     }
@@ -24,7 +24,7 @@ impl EntityOwned<'_> {
     /// assume that nothing else has taken responsibility of this [`Entity`]. If you are
     /// not careful, this could cause a double free.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_no_free(mut self) -> Entity {
         self.despawn_no_free_with_caller(DebugLocation::caller());
         self.entity

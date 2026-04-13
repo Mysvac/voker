@@ -95,7 +95,7 @@ unsafe impl SystemParam for Commands<'_, '_> {
     const NON_SEND: bool = false;
     const EXCLUSIVE: bool = false;
 
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn init_state(_world: &mut World) -> Self::State {
         CommandQueue::new()
     }

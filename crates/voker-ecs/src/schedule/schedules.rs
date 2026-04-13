@@ -3,10 +3,8 @@ use core::fmt::Debug;
 use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel};
-use crate::{
-    schedule::{ActionSystem, ConditionSystem},
-    system::{IntoSystem, SystemId},
-};
+use crate::schedule::{ActionSystem, ConditionSystem};
+use crate::system::{IntoSystem, SystemId};
 
 // -----------------------------------------------------------------------------
 // Schedules

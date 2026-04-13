@@ -71,6 +71,7 @@ impl World {
     ///
     /// If the resource is not registered, the function will return `None`.
     /// When you already have `&mut World`, consider use [`World::register_resource`] instead.
+    #[inline]
     pub fn get_resource_id<T: Resource>(&self) -> Option<ResourceId> {
         self.resources.get_id(TypeId::of::<T>())
     }
@@ -224,6 +225,10 @@ impl World {
     /// If the target `BundleInfo` already exists, returns it directly.
     ///
     /// This function can be used for runtime dynamic operation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any provided component id is not registered in this world.
     pub fn register_dynamic_bundle(&mut self, idents: &[ComponentId]) -> BundleId {
         #[cold]
         #[inline(never)]

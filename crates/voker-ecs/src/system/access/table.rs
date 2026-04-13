@@ -6,7 +6,29 @@ use voker_utils::hash::NoOpHashMap;
 use super::{AccessParam, FilterParam};
 use crate::resource::ResourceId;
 
-/// Tracks access patterns for system execution and conflict detection.
+/// Full per-system access declaration used by scheduler conflict checks.
+///
+/// # Design pattern
+///
+/// `AccessTable` combines three access domains:
+/// 1. world-level access (`&World` / `&mut World`),
+/// 2. resource-level read/write sets,
+/// 3. query-level component access grouped by [`FilterParam`].
+///
+/// Grouping query access by filter keys enables a stricter but less pessimistic
+/// conflict test: mutable access to the same component may still be parallel if
+/// filter constraints prove disjoint entity sets.
+///
+/// # Rule matrix (same table)
+///
+/// - world mut vs anything: conflict
+/// - world ref vs world ref: compatible
+/// - world ref vs resource/query write: conflict
+/// - resource read vs resource read: compatible
+/// - resource read vs resource write: conflict
+/// - resource write vs resource write: conflict
+/// - query access: compatible only when each overlapping filter bucket has
+///   [`AccessParam::parallelizable`] access sets.
 #[derive(Default)]
 pub struct AccessTable {
     world_mut: bool,          // holding `&mut world`
@@ -67,6 +89,10 @@ impl AccessTable {
         }
     }
 
+    /// Returns whether exclusive world access can be declared.
+    ///
+    /// Exclusive world access requires no previously declared world/resource/
+    /// query access.
     pub fn can_world_mut(&self) -> bool {
         !self.world_mut
             && !self.world_ref
@@ -75,6 +101,10 @@ impl AccessTable {
             && self.filter.is_empty()
     }
 
+    /// Returns whether shared world access can be declared.
+    ///
+    /// Shared world access is read-only over the world and therefore conflicts
+    /// with any write-capable resource or query access.
     pub fn can_world_ref(&self) -> bool {
         self.world_ref
             || (!self.world_mut
@@ -82,6 +112,7 @@ impl AccessTable {
                 && self.filter.values().all(AccessParam::is_read_only))
     }
 
+    /// Declares exclusive world access.
     pub fn set_world_mut(&mut self) -> bool {
         if self.can_world_mut() {
             *self = const { Self::new() };
@@ -93,6 +124,7 @@ impl AccessTable {
         }
     }
 
+    /// Declares shared world access.
     pub fn set_world_ref(&mut self) -> bool {
         if self.can_world_ref() {
             if !self.world_ref {
@@ -106,14 +138,17 @@ impl AccessTable {
         }
     }
 
+    /// Returns whether read access to a resource id can be declared.
     pub fn can_reading_res(&self, id: ResourceId) -> bool {
         self.world_ref || (!self.world_mut && !self.res_writing.contains(id.index()))
     }
 
+    /// Returns whether write access to a resource id can be declared.
     pub fn can_writing_res(&self, id: ResourceId) -> bool {
         !self.world_ref && !self.world_mut && !self.res_reading.contains(id.index())
     }
 
+    /// Declares read access to a resource id.
     pub fn set_reading_res(&mut self, id: ResourceId) -> bool {
         if self.can_reading_res(id) {
             if !self.world_ref {
@@ -126,6 +161,7 @@ impl AccessTable {
         }
     }
 
+    /// Declares write access to a resource id.
     pub fn set_writing_res(&mut self, id: ResourceId) -> bool {
         if self.can_writing_res(id) {
             let index = id.index();
@@ -138,6 +174,10 @@ impl AccessTable {
         }
     }
 
+    /// Returns whether query access can be registered for all filter buckets.
+    ///
+    /// Query conflicts are checked per filter bucket. If two filters are
+    /// disjoint, the corresponding access sets do not need to be compared.
     pub fn can_query(&self, data: &AccessParam, params: &[FilterParam]) -> bool {
         if self.world_mut {
             return false;
@@ -156,6 +196,10 @@ impl AccessTable {
         })
     }
 
+    /// Registers query access into all provided filter buckets.
+    ///
+    /// Existing buckets are merged to support multiple parameters mapping to
+    /// the same logical filter key.
     pub fn set_query(&mut self, data: &AccessParam, params: &[FilterParam]) -> bool {
         if self.can_query(data, params) {
             if !self.world_ref {
@@ -173,6 +217,10 @@ impl AccessTable {
         }
     }
 
+    /// Returns whether two full system access tables are parallel-compatible.
+    ///
+    /// This method is the scheduler-facing predicate used to build conflict
+    /// graphs between systems.
     pub fn parallelizable(&self, other: &Self) -> bool {
         if self.world_mut || other.world_mut {
             return false;
@@ -196,6 +244,10 @@ impl AccessTable {
         })
     }
 
+    /// Merges two access tables conservatively.
+    ///
+    /// Used when composing systems (for example pipe/map combinators) into one
+    /// executable unit with a single access declaration.
     pub fn merge(mut self, other: Self) -> Self {
         self.world_mut |= other.world_mut;
         self.world_ref &= other.world_ref;

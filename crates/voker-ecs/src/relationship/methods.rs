@@ -15,7 +15,7 @@ impl<'w> EntityOwned<'w> {
     /// Spawns one source entity linked to `self` through relationship `R`.
     ///
     /// The spawned entity receives `bundle` and `R::from_target(self.entity())`.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn with_related<R: Relationship>(&mut self, bundle: impl Bundle) -> &mut Self {
         let this = self.entity();
         let caller = DebugLocation::caller();
@@ -28,7 +28,7 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Adds one existing source entity to this target through `R`.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
         self.insert_related::<R>(&[entity])
     }
@@ -36,7 +36,7 @@ impl<'w> EntityOwned<'w> {
     /// Adds multiple existing source entities to this target through `R`.
     ///
     /// Existing `R` components are retargeted in place when possible.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let this = self.entity();
         let caller = DebugLocation::caller();
@@ -51,7 +51,7 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Removes `R` links from the provided source entities if they point to `self`.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let this = self.entity();
         let caller = DebugLocation::caller();
@@ -69,7 +69,7 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Detaches all source entities tracked by target cache `R` from this entity.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn detach_related<R: RelationshipTarget>(&mut self) -> &mut Self {
         let caller = DebugLocation::caller();
         self.remove_explicit_with_caller::<R>(caller);
@@ -80,7 +80,7 @@ impl<'w> EntityOwned<'w> {
     ///
     /// Source entity IDs are collected first so hooks/observers can still read
     /// the relationship cache consistently during command processing.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_related<R: RelationshipTarget>(&mut self) -> &mut Self {
         let caller = DebugLocation::caller();
         if let Some(sources) = self.get::<R>() {
@@ -97,13 +97,13 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Detaches all sources linked through relationship `L`.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn detach_all_related<L: Relationship>(&mut self) -> &mut Self {
         self.detach_related::<L::RelationshipTarget>()
     }
 
     /// Despawns all sources linked through relationship `L`.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_all_related<L: Relationship>(&mut self) -> &mut Self {
         self.despawn_related::<L::RelationshipTarget>()
     }

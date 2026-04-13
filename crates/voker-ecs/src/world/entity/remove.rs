@@ -39,7 +39,7 @@ impl EntityOwned<'_> {
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove<B: Bundle>(&mut self) -> &mut Self {
         self.remove_explicit_with_caller::<B>(DebugLocation::caller());
         self
@@ -77,7 +77,7 @@ impl EntityOwned<'_> {
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_explicit<B: Bundle>(&mut self) -> &mut Self {
         self.remove_explicit_with_caller::<B>(DebugLocation::caller());
         self
@@ -116,7 +116,7 @@ impl EntityOwned<'_> {
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_required<B: Bundle>(&mut self) -> &mut Self {
         self.remove_required_with_caller::<B>(DebugLocation::caller());
         self
@@ -159,7 +159,7 @@ impl EntityOwned<'_> {
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_dynamic(&mut self, bundle_id: BundleId) -> &mut Self {
         self.remove_dynamic_with_caller(bundle_id, DebugLocation::caller());
         self

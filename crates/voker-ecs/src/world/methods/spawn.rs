@@ -154,7 +154,7 @@ impl World {
     /// In well-structured codebases, the [`EntityOwned::is_spawned`] check is
     /// often unnecessary.
     #[inline] // We enable inlining to avoid copying data
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityOwned<'_> {
         self.spawn_with_caller(bundle, DebugLocation::caller())
     }
@@ -236,7 +236,7 @@ impl World {
     /// In well-structured codebases, the [`EntityOwned::is_spawned`] check is
     /// often unnecessary.
     #[inline] // We enable inlining to avoid copying data
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_at<B: Bundle>(
         &mut self,
         bundle: B,
@@ -356,7 +356,7 @@ impl World {
     /// let entities: Vec<Entity> = spawner.collect();
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_batch<I, B>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
         B: Bundle,

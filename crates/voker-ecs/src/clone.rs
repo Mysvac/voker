@@ -519,10 +519,11 @@ impl<'w> EntityCloner<'w> {
     /// assert_eq!(world.entity_ref(cloned[1]).get::<Health>().unwrap().0, 2);
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_clone_batch(&mut self, entities: &[Entity], linked_clone: bool) -> Vec<Entity> {
+        let caller = DebugLocation::caller();
         self.wait.extend(entities);
-        self.run(linked_clone).into_vec()
+        self.run(linked_clone, caller).into_vec()
     }
 
     /// Clones one entity and returns the cloned target entity id.
@@ -546,16 +547,15 @@ impl<'w> EntityCloner<'w> {
     /// assert_eq!(world.entity_ref(target).get::<NameTag>().unwrap().0, "source");
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_clone(&mut self, entity: Entity, linked_clone: bool) -> Entity {
+        let caller = DebugLocation::caller();
         self.wait.push_back(entity);
-        self.run(linked_clone)[0]
+        self.run(linked_clone, caller)[0]
     }
 
-    #[track_caller]
     #[inline(never)]
-    fn run(&mut self, linked_clone: bool) -> SmallVec<Entity, 2> {
-        let caller = DebugLocation::caller();
+    fn run(&mut self, linked_clone: bool, caller: DebugLocation) -> SmallVec<Entity, 2> {
         let mut context = CloneContext::new(linked_clone);
 
         // Store entities that are explicitly cloned.
@@ -579,7 +579,6 @@ impl<'w> EntityCloner<'w> {
 
         impl Drop for ForgetGuard<'_> {
             #[cold]
-            #[track_caller]
             #[inline(never)]
             fn drop(&mut self) {
                 let world = unsafe { self.world.full_mut() };

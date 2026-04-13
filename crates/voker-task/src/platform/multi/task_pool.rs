@@ -195,7 +195,7 @@ std::thread_local! {
 /// The `spawn` family requires `'static` tasks, while `scope` supports non‑`'static` tasks.
 ///
 /// Specifically:
-/// - `spawn_scope` accepts non‑`Send` tasks.
+/// - `spawn_local` accepts non‑`Send` tasks.
 /// - `scope_with` allows sending tasks to a specific target thread.
 ///
 /// ## `spawn` APIs
@@ -203,12 +203,12 @@ std::thread_local! {
 /// `spawn` is the most commonly used API. Tasks submitted via `spawn` are automatically
 /// distributed across available worker threads with work-stealing load balancing.
 ///
-/// `spawn_scope` is designed for thread-local tasks (e.g., ECS plugin initialization).
+/// `spawn_local` is designed for thread-local tasks (e.g., ECS plugin initialization).
 /// - When called from the main thread, spawned tasks are **not** automatically polled
 ///   and require explicit driving via [`TaskPool::local_ticker`].
 /// - When called from a worker thread, spawned tasks are automatically executed.
 ///
-/// Both `spawn` and `spawn_scope` return [`Task`] handles, which are futures themselves.
+/// Both `spawn` and `spawn_local` return [`Task`] handles, which are futures themselves.
 /// They can be awaited with [`block_on`] or composed with other async utilities.
 ///
 /// ## `scope` APIs
@@ -271,7 +271,7 @@ std::thread_local! {
 /// **Worker threads**: The `ThreadExecutor` on worker threads runs automatically
 /// without explicit ticking.
 ///
-/// **Main thread**: Without active scopes, tasks submitted via `spawn_scope` are **not**
+/// **Main thread**: Without active scopes, tasks submitted via `spawn_local` are **not**
 /// automatically polled and require explicit ticking via [`TaskPool::local_ticker`].
 /// However, when using [`TaskPool::scope`] (or similar), the executor is automatically driven.
 ///
@@ -456,7 +456,7 @@ impl TaskPool {
     /// let value = Rc::new(Cell::new(0));
     /// let value_for_task = Rc::clone(&value);
     ///
-    /// let task = pool.spawn_scope(async move {
+    /// let task = pool.spawn_local(async move {
     ///     value_for_task.set(7);
     ///     value_for_task.get()
     /// });

@@ -10,7 +10,16 @@ use crate::component::ComponentId;
 // -----------------------------------------------------------------------------
 // FilterParam
 
-/// Builder for constructing query filter parameters.
+/// Builder for canonical query filter descriptors used by access analysis.
+///
+/// `FilterParamBuilder` normalizes user query filter constraints into a stable
+/// representation so identical logical filters map to the same scheduler key.
+///
+/// # Invariants
+///
+/// - `with` and `without` sets are individually ordered (`BTreeSet`).
+/// - A valid build requires `with ∩ without = empty`.
+/// - Built output is deterministic for equivalent filter expressions.
 #[derive(Debug, Default, Clone)]
 pub struct FilterParamBuilder {
     // We use BTreeSet to ensure it's ordering.
@@ -26,14 +35,21 @@ impl FilterParamBuilder {
         }
     }
 
+    /// Adds a required component to the positive filter set.
     pub fn with(&mut self, id: ComponentId) {
         self.with.insert(id);
     }
 
+    /// Adds a forbidden component to the negative filter set.
     pub fn without(&mut self, id: ComponentId) {
         self.without.insert(id);
     }
 
+    /// Merges two filter builders when constraints are logically compatible.
+    ///
+    /// Returns `None` when constraints are contradictory, for example:
+    /// - left requires `A` while right forbids `A`, or
+    /// - right requires `B` while left forbids `B`.
     pub fn merge(&self, other: &Self) -> Option<FilterParamBuilder> {
         if self.with.is_disjoint(&other.without) && other.with.is_disjoint(&self.without) {
             let mut with = self.with.clone();
@@ -46,6 +62,9 @@ impl FilterParamBuilder {
         }
     }
 
+    /// Builds an immutable, hash-stable [`FilterParam`].
+    ///
+    /// Returns `None` when contradictory constraints exist in one builder.
     pub fn build(self) -> Option<FilterParam> {
         use crate::utils::SlicePool;
 
@@ -77,7 +96,11 @@ impl FilterParamBuilder {
     }
 }
 
-/// A compact, hashable representation of component filter requirements.
+/// Canonical, hashable representation of component filter requirements.
+///
+/// A `FilterParam` is used as a bucketing key in [`AccessTable`](super::AccessTable).
+/// Systems only need component-level conflict checks when their filter keys are
+/// not provably disjoint.
 #[derive(Clone, PartialEq, Eq)]
 pub struct FilterParam {
     hash: u64,
@@ -86,14 +109,21 @@ pub struct FilterParam {
 }
 
 impl FilterParam {
+    /// Components that must be present.
     pub fn with(&self) -> &[ComponentId] {
         &self.params[..self.with_len]
     }
 
+    /// Components that must be absent.
     pub fn without(&self) -> &[ComponentId] {
         &self.params[self.with_len..]
     }
 
+    /// Returns whether two filters describe disjoint entity sets.
+    ///
+    /// If this returns `true`, scheduler-level access checks may treat matching
+    /// query branches as non-overlapping even when they access the same
+    /// component ids mutably.
     pub fn is_disjoint(&self, other: &Self) -> bool {
         use core::mem::transmute;
         // `SliceContains` has SIMD optimization for u32

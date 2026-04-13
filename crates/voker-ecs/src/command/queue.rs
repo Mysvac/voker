@@ -238,7 +238,7 @@ impl Drop for CommandQueue {
 }
 
 impl Default for CommandQueue {
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn default() -> Self {
         Self {
             bytes: Vec::new(),
@@ -262,7 +262,7 @@ impl CommandQueue {
 
     /// Creates a new empty command queue.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub const fn new() -> Self {
         Self {
             bytes: Vec::new(),

@@ -1,3 +1,8 @@
+//! Entity view and fetch helpers used by world-facing APIs.
+//!
+//! This module provides typed and type-erased access helpers for spawned
+//! entities, including mutable/read-only entity views and tuple-based fetching.
+
 // -----------------------------------------------------------------------------
 // Modules
 
@@ -358,7 +363,7 @@ impl Drop for RelocateGuard<'_, '_> {
 
 impl<'a> EntityOwned<'a> {
     #[cold]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     #[inline(never)]
     fn panic_despawned(&self) -> ! {
         let world = unsafe { self.world.read_only() };
@@ -405,7 +410,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// Panics if `self` is despawned.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn into_readonly(self) -> EntityRef<'a> {
         EntityRef::from(self)
     }
@@ -416,7 +421,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// Panics if `self` is despawned.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn into_mutable(self) -> EntityMut<'a> {
         EntityMut::from(self)
     }
@@ -426,7 +431,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// Panics if `self` is despawned.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn as_readonly(&self) -> EntityRef<'_> {
         EntityRef {
             location: self.location.unwrap_or_else(|| self.panic_despawned()),
@@ -442,7 +447,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// Panics if `self` is despawned.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn as_mutable(&mut self) -> EntityMut<'_> {
         EntityMut {
             location: self.location.unwrap_or_else(|| self.panic_despawned()),
@@ -665,7 +670,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// If the entity has been despawned while this `EntityWorldMut` is still alive.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn location(&self) -> EntityLocation {
         match self.location {
             Some(a) => a,
@@ -681,7 +686,7 @@ impl<'a> EntityOwned<'a> {
     /// # Panics
     /// If the entity has been despawned while this `EntityWorldMut` is still alive.
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn archetype(&self) -> &Archetype {
         match self.location {
             None => self.panic_despawned(),

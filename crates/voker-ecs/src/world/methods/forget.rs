@@ -3,7 +3,7 @@ use crate::utils::DebugLocation;
 use crate::world::World;
 
 impl World {
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub unsafe fn forget(&mut self, entity: Entity) {
         self.forget_with_caller(entity, DebugLocation::caller());
     }

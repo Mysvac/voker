@@ -234,6 +234,11 @@ pub struct FunctionSystem<M, F: SystemFunction<M>> {
 }
 
 impl<M, F: SystemFunction<M>> FunctionSystem<M, F> {
+    /// Builds a runtime system wrapper from a function-like implementation.
+    ///
+    /// The wrapper derives scheduling flags (`DEFERRED`, `EXCLUSIVE`,
+    /// `NON_SEND`) from the parameter type and stores per-system runtime state
+    /// after initialization.
     pub fn new(func: F) -> Self {
         let mut meta = SystemMeta::new::<F>();
         debug_assert_eq!(meta.id(), SystemId::of::<F>());
@@ -276,6 +281,9 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         self.meta.set_last_run(last_run)
     }
 
+    /// Initializes parameter state and registers access declarations.
+    ///
+    /// The returned table is consumed by schedule conflict analysis.
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         let mut table = AccessTable::new();
         let state = self.state.get_or_insert_with(|| FunctionState {
@@ -289,6 +297,11 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         table
     }
 
+    /// Fetches parameter values and executes the wrapped function once.
+    ///
+    /// # Safety
+    ///
+    /// Caller must uphold scheduler conflict guarantees for `world`.
     unsafe fn run(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
@@ -323,6 +336,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         Ok(output)
     }
 
+    /// Queues deferred parameter effects, when enabled by parameter metadata.
     fn defer(&mut self, world: DeferredWorld) {
         if <F::Param as SystemParam>::DEFERRED {
             let Some(state) = &mut self.state else {
@@ -333,6 +347,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         }
     }
 
+    /// Flushes deferred parameter effects into the real world.
     fn apply_deferred(&mut self, world: &mut World) {
         if <F::Param as SystemParam>::DEFERRED {
             let Some(state) = &mut self.state else {

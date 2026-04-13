@@ -4,7 +4,22 @@ use voker_utils::hash::SparseHashSet;
 
 use crate::component::ComponentId;
 
-/// Tracks access patterns during query construction to detect conflicts.
+/// Component-level access summary for one logical query path.
+///
+/// # Design role
+///
+/// `AccessParam` models read/write access against component ids and entity
+/// handles (`EntityRef` / `EntityMut`) before values are merged into a full
+/// [`AccessTable`](super::AccessTable).
+///
+/// # Rule model
+///
+/// - shared entity access (`entity_ref`) is incompatible with component writes,
+/// - exclusive entity access (`entity_mut`) is incompatible with any other
+///   component or entity access,
+/// - component writes imply component reads for conflict checks.
+///
+/// These rules are enforced by `can_*` + `set_*` pairs.
 #[derive(Default, Clone)]
 pub struct AccessParam {
     entity_mut: bool, // holding `EntityMut`
@@ -30,6 +45,7 @@ impl Debug for AccessParam {
 }
 
 impl AccessParam {
+    /// Creates an empty access summary.
     pub const fn new() -> Self {
         Self {
             entity_mut: false,
@@ -39,22 +55,32 @@ impl AccessParam {
         }
     }
 
+    /// Returns whether shared-entity access can be added.
+    ///
+    /// Shared entity access is allowed only when no exclusive-entity access and
+    /// no component writes have been declared.
     pub fn can_entity_ref(&self) -> bool {
         !self.entity_mut && self.writing.is_empty()
     }
 
+    /// Returns whether exclusive-entity access can be added.
+    ///
+    /// This requires a fully empty access state.
     pub fn can_entity_mut(&self) -> bool {
         !self.entity_mut && !self.entity_ref && self.reading.is_empty() && self.writing.is_empty()
     }
 
+    /// Returns whether component read access can be added for `id`.
     pub fn can_reading(&self, id: ComponentId) -> bool {
         self.entity_ref || (!self.entity_mut && !self.writing.contains(&id))
     }
 
+    /// Returns whether component write access can be added for `id`.
     pub fn can_writing(&self, id: ComponentId) -> bool {
         !self.entity_mut && !self.entity_ref && !self.reading.contains(&id)
     }
 
+    /// Declares shared-entity access.
     #[must_use]
     pub fn set_entity_ref(&mut self) -> bool {
         if self.can_entity_ref() {
@@ -67,6 +93,7 @@ impl AccessParam {
         }
     }
 
+    /// Declares exclusive-entity access.
     #[must_use]
     pub fn set_entity_mut(&mut self) -> bool {
         if self.can_entity_mut() {
@@ -80,6 +107,7 @@ impl AccessParam {
         }
     }
 
+    /// Declares component read access.
     #[must_use]
     pub fn set_reading(&mut self, id: ComponentId) -> bool {
         if self.can_reading(id) {
@@ -93,6 +121,10 @@ impl AccessParam {
         }
     }
 
+    /// Declares component write access.
+    ///
+    /// Writes are also inserted into `reading` so later checks can use simple
+    /// read/write-set disjointness rules.
     #[must_use]
     pub fn set_writing(&mut self, id: ComponentId) -> bool {
         if self.can_writing(id) {
@@ -105,11 +137,13 @@ impl AccessParam {
         }
     }
 
+    /// Returns whether this access summary is read-only.
     #[must_use]
     pub fn is_read_only(&self) -> bool {
         self.entity_ref || (!self.entity_mut && self.writing.is_empty())
     }
 
+    /// Returns whether this access can run in parallel with `other`.
     #[must_use]
     pub fn parallelizable(&self, other: &Self) -> bool {
         if self.entity_mut || other.entity_mut {
@@ -124,26 +158,27 @@ impl AccessParam {
         self.writing.is_disjoint(&other.reading) && other.writing.is_disjoint(&self.reading)
     }
 
-    /// Query 有两个参数：QueryData 和 QueryFilter
-    /// 同时包含两个访问参数：AccessParam 和 AccessFilter。
+    /// Adds filter-required read access without normal mutability checks.
     ///
-    /// - 对于 AccessFilter，先通过 QueryFilter 初始化，后通过 QueryData 初始化。
-    /// - 对于 AccessParam ，先通过 QueryData 初始化，后通过 QueryFilter 初始化。
+    /// This is used by read-only query filters (for example change-detection
+    /// style filters) that need metadata reads not explicitly present in query
+    /// data fields.
     ///
-    /// AccessFilter 是好理解的，QueryFilter 是显式参数，而 QueryData 需要访问的目标是隐式参数。
+    /// Ordering requirement:
+    /// - regular query-data access should be registered first,
+    /// - `force_reading` should be applied afterward for filter-side metadata.
     ///
-    /// 对于 AccessParam 最初设想是只需要通过 QueryData 初始化，与 QueryFilter 无关。
-    /// 但我们发现对于 Added、Changed 等特殊过滤器，需要访问组件的附加数据，逻辑上是需要“读”的。
-    /// 但是过滤器的读数据发生在数据获取时，与用户操作不会冲突，因此我们需要直接“强制设置”，且
-    /// 保证 QueryFilter 的这些强制操作发生在 QueryData 的设置之后。
-    ///
-    /// 注意我们要求 QueryFilter 是只读，因此只有 force_reading ，没有 force_writing。
+    /// This method intentionally has no `force_writing` counterpart.
     pub fn force_reading(&mut self, id: ComponentId) {
         if !self.entity_mut && !self.entity_ref {
             self.reading.insert(id);
         }
     }
 
+    /// Merges `other` access into `self`.
+    ///
+    /// This is used when multiple parameters are composed into one system-level
+    /// query bucket.
     pub fn merge_with(&mut self, other: &Self) {
         self.entity_mut |= other.entity_mut;
         self.entity_ref &= other.entity_ref;

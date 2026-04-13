@@ -2,6 +2,15 @@ use crate::component::{Component, ComponentHooks};
 use crate::world::World;
 
 impl World {
+    /// Returns mutable lifecycle hooks for component `C`.
+    ///
+    /// Hooks must be configured before `C` appears in any archetype so all
+    /// entities using `C` observe a consistent hook set.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `C` is already present in at least one archetype.
+    #[track_caller]
     pub fn register_component_hook<C: Component>(&mut self) -> &mut ComponentHooks {
         let id = self.components.register::<C>();
 

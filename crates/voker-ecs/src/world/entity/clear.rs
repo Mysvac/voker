@@ -33,7 +33,7 @@ impl EntityOwned<'_> {
     /// assert!(!entity.contains::<Bar>());
     /// ```
     #[inline]
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clear(&mut self) -> &mut Self {
         self.clear_with_caller(DebugLocation::caller());
         self

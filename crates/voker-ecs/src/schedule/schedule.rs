@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use fixedbitset::FixedBitSet;
 use slotmap::{SecondaryMap, SlotMap};
 use voker_utils::extra::PagePool;
-use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, SparseHashMap};
+use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMap};
 
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
@@ -94,6 +94,7 @@ pub struct Schedule {
     ordering: OrderingGraph,
     conflict: ConflictGraph,
     schedule: SystemSchedule,
+    set_anchors: NoOpHashSet<SystemId>,
     executor: Box<dyn SystemExecutor>,
     executor_initialized: bool,
     is_changed: bool,
@@ -670,6 +671,7 @@ impl Schedule {
             ordering: Default::default(),
             conflict: Default::default(),
             schedule: Default::default(),
+            set_anchors: Default::default(),
         }
     }
 
@@ -771,6 +773,7 @@ impl Schedule {
         self.buffer.remove(key);
         self.ordering.remove_node(key);
         self.conflict.remove(key);
+        self.set_anchors.remove(&name);
 
         true
     }

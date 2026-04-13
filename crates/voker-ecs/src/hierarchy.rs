@@ -116,7 +116,7 @@ impl Deref for Children {
 
 impl<'w> EntityOwned<'w> {
     /// Spawns a child entity related to this entity with [`ChildOf`].
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn with_child(&mut self, bundle: impl Bundle) -> &mut Self {
         self.with_related::<ChildOf>(bundle)
     }
@@ -135,25 +135,25 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Adds one child to this entity via [`ChildOf`].
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_child(&mut self, child: Entity) -> &mut Self {
         self.add_related::<ChildOf>(child)
     }
 
     /// Adds many children to this entity via [`ChildOf`].
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
         self.insert_related::<ChildOf>(children)
     }
 
     /// Removes one child relationship from this entity.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_child(&mut self, child: Entity) -> &mut Self {
         self.remove_related::<ChildOf>(&[child])
     }
 
     /// Removes specific child relationships from this entity.
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_children(&mut self, children: &[Entity]) -> &mut Self {
         self.remove_related::<ChildOf>(children)
     }
@@ -161,8 +161,8 @@ impl<'w> EntityOwned<'w> {
     /// Removes all child relationships from this entity.
     ///
     /// This detaches children but does not despawn child entities.
-    #[track_caller]
-    pub fn detach_all_children(&mut self) -> &mut Self {
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn detach_children(&mut self) -> &mut Self {
         self.detach_related::<Children>()
     }
 
@@ -170,7 +170,7 @@ impl<'w> EntityOwned<'w> {
     ///
     /// This removes child entities entirely (and recursively, because
     /// `Children` enables linked lifecycle).
-    #[track_caller]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_children(&mut self) -> &mut Self {
         self.despawn_related::<Children>()
     }
