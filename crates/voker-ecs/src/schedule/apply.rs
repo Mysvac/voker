@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use crate::system::{AccessTable, System, SystemError};
 use crate::system::{SystemFlags, SystemId, SystemInput};
 use crate::tick::Tick;
-use crate::world::{DeferredWorld, UnsafeWorld, World};
+use crate::world::{UnsafeWorld, World};
 
 /// A schedule synchronization system used to apply deferred world mutations.
 ///
@@ -39,7 +39,15 @@ impl<S> Clone for ApplyDeferred<S> {
 /// The input parameter is only used at the type level. It allows choosing a
 /// marker type `S` so each `ApplyDeferred<S>` can have its own system identity.
 #[inline(always)]
-pub fn apply_deferred<S: 'static>(_: S) -> ApplyDeferred<S> {
+pub fn apply_deferred<S: 'static>() -> ApplyDeferred<S> {
+    ApplyDeferred {
+        tick: Tick::new(0),
+        _marker: PhantomData,
+    }
+}
+
+#[inline(always)]
+pub fn apply_deferred_of_val<S: 'static>(_: S) -> ApplyDeferred<S> {
     ApplyDeferred {
         tick: Tick::new(0),
         _marker: PhantomData,
@@ -55,7 +63,9 @@ impl<S: 'static> System for ApplyDeferred<S> {
     }
 
     fn flags(&self) -> SystemFlags {
-        SystemFlags::EXCLUSIVE.union(SystemFlags::NON_SEND)
+        SystemFlags::NO_OP
+            .union(SystemFlags::NON_SEND)
+            .union(SystemFlags::EXCLUSIVE)
     }
 
     fn last_run(&self) -> Tick {
@@ -70,7 +80,7 @@ impl<S: 'static> System for ApplyDeferred<S> {
         AccessTable::new()
     }
 
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         _input: <Self::Input as SystemInput>::Data<'_>,
         _world: UnsafeWorld<'_>,
@@ -78,7 +88,16 @@ impl<S: 'static> System for ApplyDeferred<S> {
         Ok(())
     }
 
+    fn is_no_op(&self) -> bool {
+        // NO_OP，Then we can optimize duplicated
+        // `apply_deferred<T>` systems in executor.
+        true
+    }
+
     fn is_deferred(&self) -> bool {
+        // As an exclusive target, the executor will
+        // apply_defered for systems before this system run.
+        // but this system does not need apply deferred.
         false
     }
 
@@ -89,8 +108,6 @@ impl<S: 'static> System for ApplyDeferred<S> {
     fn is_exclusive(&self) -> bool {
         true
     }
-
-    fn defer(&mut self, _world: DeferredWorld) {}
 
     fn apply_deferred(&mut self, _world: &mut World) {}
 }

@@ -1,9 +1,9 @@
 use core::any::TypeId;
 
-use crate::derive::Reflect;
-use crate::prelude::TypeMeta;
-use crate::registry::{GetTypeMeta, TypeRegistry};
 use voker_inventory as inv;
+
+use crate::derive::Reflect;
+use crate::registry::{GetTypeMeta, TypeMeta, TypeRegistry};
 
 /// Internal type used to implement automatic registration
 /// by collecting registration function pointers.

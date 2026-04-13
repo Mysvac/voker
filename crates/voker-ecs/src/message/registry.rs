@@ -102,6 +102,9 @@ impl MessageRegistry {
     ///
     /// Call this once per update (for example after running schedules) so all
     /// message storages rotate in sync.
+    ///
+    /// Generally, users should not use this function. We sealed this function
+    /// to `MainSchedulePlugin`, it will be called automatically.
     pub fn run_updates(world: &mut World) {
         let unsafe_world = world.unsafe_world();
         let registry = unsafe { &unsafe_world.data_mut().message_registry };

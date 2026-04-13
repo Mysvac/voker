@@ -1,7 +1,7 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
 use crate::system::{IntoSystem, SystemError, SystemId, UninitializedSystemError};
 use crate::tick::Tick;
-use crate::world::{DeferredWorld, World, WorldId};
+use crate::world::{World, WorldId};
 
 use super::{SystemInput, SystemParam};
 
@@ -302,7 +302,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
     /// # Safety
     ///
     /// Caller must uphold scheduler conflict guarantees for `world`.
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: crate::world::UnsafeWorld<'_>,
@@ -334,17 +334,6 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         self.meta.set_last_run(this_run);
 
         Ok(output)
-    }
-
-    /// Queues deferred parameter effects, when enabled by parameter metadata.
-    fn defer(&mut self, world: DeferredWorld) {
-        if <F::Param as SystemParam>::DEFERRED {
-            let Some(state) = &mut self.state else {
-                uninitialized_system(SystemId::of::<F>());
-            };
-
-            <F::Param as SystemParam>::defer(&mut state.param, &self.meta, world);
-        }
     }
 
     /// Flushes deferred parameter effects into the real world.

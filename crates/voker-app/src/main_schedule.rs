@@ -1,15 +1,20 @@
 use alloc::vec::Vec;
 
 use voker_ecs::borrow::ResMut;
-use voker_ecs::prelude::{Resource, ScheduleLabel};
-use voker_ecs::schedule::InternedScheduleLabel;
+use voker_ecs::derive::Message;
+use voker_ecs::prelude::{IntoSystemConfig, MessageReader, MessageWriter};
+use voker_ecs::resource::Resource;
+use voker_ecs::schedule::{InternedScheduleLabel, SingleThreadedExecutor};
+use voker_ecs::schedule::{Schedule, ScheduleLabel};
 use voker_ecs::system::Local;
 use voker_ecs::world::World;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+use crate::{App, Plugin};
+
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Main;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedMain;
 
 #[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -53,6 +58,12 @@ pub struct FixedPostUpdate;
 
 #[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedLast;
+
+#[derive(Message, Debug, Default, Clone, Copy)]
+pub struct MainBegin;
+
+#[derive(Message, Debug, Default, Clone, Copy)]
+pub struct FixedMainBegin;
 
 #[derive(Resource, Debug)]
 pub struct MainScheduleOrder {
@@ -201,6 +212,89 @@ impl FixedMain {
             for &label in &order.labels {
                 world.run_schedule(label);
             }
+        });
+    }
+}
+
+pub struct MainSchedulePlugin;
+
+impl Plugin for MainSchedulePlugin {
+    fn build(&self, app: &mut App) {
+        let sub = app.main_mut();
+
+        sub.init_schedule(PreStartup)
+            .init_schedule(Startup)
+            .init_schedule(PostStartup)
+            .init_schedule(SpawnScene)
+            .init_schedule(First)
+            .init_schedule(PreUpdate)
+            .init_schedule(Update)
+            .init_schedule(PostUpdate)
+            .init_schedule(Last)
+            .init_schedule(FixedFirst)
+            .init_schedule(FixedPreUpdate)
+            .init_schedule(FixedUpdate)
+            .init_schedule(FixedPostUpdate)
+            .init_schedule(FixedLast);
+
+        sub.insert_schedule(Schedule::with_executor(Main, SingleThreadedExecutor::new()));
+        sub.insert_schedule(Schedule::with_executor(
+            FixedMain,
+            SingleThreadedExecutor::new(),
+        ));
+
+        sub.init_resource::<MainScheduleOrder>();
+        sub.init_resource::<FixedMainScheduleOrder>();
+
+        sub.add_message::<MainBegin>();
+        sub.add_message::<FixedMainBegin>();
+
+        fn main_begin(mut writer: MessageWriter<MainBegin>) {
+            writer.write_default();
+        }
+
+        fn fixed_main_begin(mut writer: MessageWriter<FixedMainBegin>) {
+            writer.write_default();
+        }
+
+        sub.edit_schedule(Main, |sched| {
+            sched.add_systems(Main::run_main.after(main_begin));
+        });
+
+        sub.edit_schedule(FixedMain, |sched| {
+            sched.add_systems(FixedMain::run_fixed_main.after(fixed_main_begin));
+        });
+
+        fn update_messages(world: &mut World) {
+            voker_ecs::message::MessageRegistry::run_updates(world);
+        }
+
+        fn can_update_messages(
+            mut main_reader: MessageReader<MainBegin>,
+            mut fixed_main_reader: MessageReader<FixedMainBegin>,
+            mut main_ran: Local<bool>,
+            mut fixed_main_ran: Local<bool>,
+        ) -> bool {
+            if !main_reader.is_empty() {
+                *main_ran = true;
+                main_reader.clear();
+            }
+            if !fixed_main_reader.is_empty() {
+                *fixed_main_ran = true;
+                fixed_main_reader.clear();
+            }
+
+            if *main_ran && *fixed_main_ran {
+                *main_ran = false;
+                *fixed_main_ran = false;
+                true
+            } else {
+                false
+            }
+        }
+
+        sub.edit_schedule(First, |sched| {
+            sched.add_systems(update_messages.run_if(can_update_messages));
         });
     }
 }

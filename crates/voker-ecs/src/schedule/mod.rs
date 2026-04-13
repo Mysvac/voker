@@ -14,7 +14,7 @@
 // Modules
 
 mod apply;
-mod config;
+
 mod executor;
 mod graph;
 mod label;
@@ -22,11 +22,14 @@ mod schedule;
 mod schedules;
 mod system;
 
+pub mod config;
+
 // -----------------------------------------------------------------------------
 // Alias
 
 use crate::system::System;
 use alloc::boxed::Box;
+use config::SystemNode;
 
 // -----------------------------------------------------------------------------
 // Exports
@@ -43,7 +46,8 @@ pub use schedules::Schedules;
 
 pub use system::{SystemKey, SystemObject};
 
-pub use apply::{ApplyDeferred, apply_deferred};
+pub use apply::{ApplyDeferred, apply_deferred, apply_deferred_of_val};
+pub use config::{IntoSystemConfig, SystemConfig};
 
 pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;
 pub type ActionSystem = Box<dyn System<Input = (), Output = ()>>;

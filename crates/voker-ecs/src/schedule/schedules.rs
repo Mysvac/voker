@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel};
-use crate::schedule::{ActionSystem, ConditionSystem};
+use crate::schedule::{ActionSystem, ConditionSystem, IntoSystemConfig};
 use crate::system::{IntoSystem, SystemId};
 
 // -----------------------------------------------------------------------------
@@ -204,87 +204,23 @@ impl Schedules {
         self
     }
 
-    pub fn add_order<X, Y, M1, M2>(
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn add_systems<M>(
         &mut self,
         label: impl ScheduleLabel,
-        before: X,
-        after: Y,
-    ) -> &mut Self
-    where
-        X: IntoSystem<(), (), M1>,
-        Y: IntoSystem<(), (), M2>,
-    {
-        self.entry(label).add_order(before, after);
+        systems: impl IntoSystemConfig<M>,
+    ) -> &mut Self {
+        self.entry(label).config(systems);
         self
     }
 
-    pub fn del_order<X, Y, M1, M2>(
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn config<M>(
         &mut self,
         label: impl ScheduleLabel,
-        before: X,
-        after: Y,
-    ) -> &mut Self
-    where
-        X: IntoSystem<(), (), M1>,
-        Y: IntoSystem<(), (), M2>,
-    {
-        self.entry(label).del_order(before, after);
-        self
-    }
-
-    pub fn add_run_if<S, C, M1, M2>(
-        &mut self,
-        label: impl ScheduleLabel,
-        system: S,
-        condition: C,
-    ) -> &mut Self
-    where
-        S: IntoSystem<(), (), M1>,
-        C: IntoSystem<(), bool, M2>,
-    {
-        self.entry(label).add_run_if(system, condition);
-        self
-    }
-
-    pub fn del_run_if<S, C, M1, M2>(
-        &mut self,
-        label: impl ScheduleLabel,
-        system: S,
-        condition: C,
-    ) -> &mut Self
-    where
-        S: IntoSystem<(), (), M1>,
-        C: IntoSystem<(), bool, M2>,
-    {
-        self.entry(label).del_run_if(system, condition);
-        self
-    }
-
-    pub fn add_run_if_run<S, C, M1, M2>(
-        &mut self,
-        label: impl ScheduleLabel,
-        system: S,
-        condition: C,
-    ) -> &mut Self
-    where
-        S: IntoSystem<(), (), M1>,
-        C: IntoSystem<(), (), M2>,
-    {
-        self.entry(label).add_run_if_run(system, condition);
-        self
-    }
-
-    pub fn del_run_if_run<S, C, M1, M2>(
-        &mut self,
-        label: impl ScheduleLabel,
-        system: S,
-        condition: C,
-    ) -> &mut Self
-    where
-        S: IntoSystem<(), (), M1>,
-        C: IntoSystem<(), (), M2>,
-    {
-        self.entry(label).del_run_if_run(system, condition);
+        systems: impl IntoSystemConfig<M>,
+    ) -> &mut Self {
+        self.entry(label).config(systems);
         self
     }
 }

@@ -170,14 +170,14 @@ pub struct MessageWithIdIterator<'a, M: Message> {
 impl<'a, M: Message> MessageWithIdIterator<'a, M> {
     fn new(cursor: &'a mut MessageCursor<M>, messages: &'a Messages<M>) -> Self {
         let unread = cursor.len(messages);
+        cursor.last_index = messages.counter.wrapping_sub(unread);
+
         let a_index = cursor.last_index.wrapping_sub(messages.messages_a.start_id);
         let b_index = cursor.last_index.wrapping_sub(messages.messages_b.start_id);
 
         let a = messages.messages_a.get(a_index..).unwrap_or_default();
         let b = messages.messages_b.get(b_index..).unwrap_or_default();
         debug_assert_eq!(unread, a.len() + b.len());
-
-        cursor.last_index = messages.counter.wrapping_sub(unread);
 
         Self {
             cursor,

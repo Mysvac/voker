@@ -3,11 +3,12 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::panic::AssertUnwindSafe;
+use fixedbitset::FixedBitSet;
 
 use voker_os::sync::{Mutex, PoisonError, SyncUnsafeCell};
-use voker_os::utils::SegQueue;
+use voker_os::utils::{SegQueue, SpinLock};
 use voker_task::{ComputeTaskPool, Scope, TaskPool};
-use voker_utils::hash::SparseHashSet;
+use voker_utils::vec::FastVec;
 
 use super::{MainThreadExecutor, SystemExecutor};
 
@@ -20,14 +21,27 @@ use crate::world::{UnsafeWorld, World};
 // -----------------------------------------------------------------------------
 // State
 
+/// Mutable scheduling state reused between runs.
+///
+/// This stores runtime counters and queues derived from `SystemSchedule`.
+/// Buffers are pre-allocated in `init` and refreshed in `reset`.
 struct ExecutorState {
+    /// Remaining dependency counts for each system.
     incoming: Vec<u32>,
+    /// Remaining condition dependencies for each system.
     condition_incoming: Vec<u32>,
+    /// Runnable systems whose dependencies are currently satisfied.
     ready_systems: VecDeque<u32>,
-    running_systems: SparseHashSet<u32>,
+    /// Systems currently executing.
+    running_systems: FixedBitSet,
+    /// Deferred systems that have run and still need `apply_deferred`.
     deferred_systems: Vec<u32>,
 }
 
+/// Completion event emitted by system tasks.
+///
+/// `meet_condition` is used both for real condition systems and for normal
+/// systems, where `true` means execution succeeded.
 struct CompletedSignal {
     index: u32,
     deferred: bool,
@@ -44,7 +58,7 @@ struct CompletedSignal {
 pub struct MultiThreadedExecutor {
     state: Mutex<ExecutorState>,
     completed: SegQueue<CompletedSignal>,
-    panic_payload: Mutex<Option<Box<dyn Any + Send>>>,
+    panic_payload: SpinLock<Option<Box<dyn Any + Send>>>,
 }
 
 #[derive(Copy, Clone)]
@@ -68,19 +82,19 @@ impl ExecutorState {
             incoming: Vec::new(),
             condition_incoming: Vec::new(),
             ready_systems: VecDeque::new(),
-            running_systems: SparseHashSet::new(),
+            running_systems: FixedBitSet::new(),
             deferred_systems: Vec::new(),
         }
     }
 
     fn init(&mut self, schedule: &SystemSchedule) {
-        let systen_count = schedule.keys().len();
-        let full_size_hint = systen_count + (systen_count >> 3);
-        let half_size_hint = systen_count + (systen_count >> 2);
+        let system_count = schedule.keys().len();
+        let full_size_hint = system_count + (system_count >> 3);
+        let half_size_hint = system_count >> 3;
 
         self.incoming = Vec::with_capacity(full_size_hint);
         self.condition_incoming = Vec::with_capacity(full_size_hint);
-        self.running_systems = SparseHashSet::with_capacity(half_size_hint);
+        self.running_systems = FixedBitSet::with_capacity(full_size_hint);
         self.ready_systems = VecDeque::with_capacity(half_size_hint);
         self.deferred_systems = Vec::with_capacity(half_size_hint);
     }
@@ -99,6 +113,7 @@ impl ExecutorState {
         self.running_systems.clear();
         self.deferred_systems.clear();
 
+        self.running_systems.grow(system_count);
         self.incoming.extend_from_slice(schedule.incoming());
         self.condition_incoming
             .extend_from_slice(schedule.condition_incoming());
@@ -128,7 +143,7 @@ impl MultiThreadedExecutor {
         Self {
             state: Mutex::new(ExecutorState::new()),
             completed: SegQueue::new(),
-            panic_payload: Mutex::new(None),
+            panic_payload: SpinLock::new(None),
         }
     }
 }
@@ -164,11 +179,12 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         }
     }
 
+    /// Pushes a completion signal and opportunistically advances the scheduler.
     fn push_completed_system(
         &self,
         ident: SystemId,
         system_index: u32,
-        deferred: bool,
+        mut deferred: bool,
         result: Result<bool, Box<dyn Any + Send>>,
     ) {
         let meet = result.unwrap_or_else(|payload| {
@@ -176,7 +192,8 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
             log::error!("Encountered a panic in system `{}`!", ident);
             #[cfg(feature = "std")]
             ::std::eprintln!("Encountered a panic in system `{}`!", ident);
-            *self.executor.panic_payload.lock().unwrap() = Some(payload);
+            *self.executor.panic_payload.lock() = Some(payload);
+            deferred = false;
             false
         });
 
@@ -191,43 +208,118 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         self.tick();
     }
 
+    /// Consumes completion events and propagates dependency updates.
     fn handle_completed_system(&self, state: &mut ExecutorState, signal: CompletedSignal) {
-        let index = signal.index;
-        let deferred = signal.deferred;
-        let meet_condition = signal.meet_condition;
+        // Use an explicit stack to avoid deep recursion on long skip chains.
+        let mut buffer: FastVec<CompletedSignal, 5> = FastVec::new();
 
-        if deferred {
-            state.deferred_systems.push(index);
-        }
+        let pending = buffer.data();
+        // SAFETY: Inlined capacity > 0.
+        unsafe { pending.push_unchecked(signal) };
 
-        if meet_condition {
-            self.condition_outgoing[index as usize].iter().for_each(|&to| {
-                state.condition_incoming[to as usize] -= 1;
+        while let Some(signal) = pending.pop() {
+            let index = signal.index;
+            let deferred = signal.deferred;
+            let meet_condition = signal.meet_condition;
+
+            // SAFETY: `ExecutorState::reset` grows `running_systems` to
+            // `system_count`, and schedule indices are in range.
+            unsafe {
+                state.running_systems.remove_unchecked(index as usize);
+            }
+
+            if deferred {
+                state.deferred_systems.push(index);
+            }
+
+            if meet_condition {
+                self.condition_outgoing[index as usize].iter().for_each(|&to| {
+                    state.condition_incoming[to as usize] -= 1;
+                });
+            }
+
+            self.outgoing[index as usize].iter().for_each(|&to| {
+                let target = &mut state.incoming[to as usize];
+                *target -= 1;
+
+                if *target == 0 {
+                    if state.condition_incoming[to as usize] == 0 {
+                        // push_front: prioritize newly unblocked tasks.
+                        state.ready_systems.push_front(to);
+                    } else {
+                        // Skip systems whose conditions are unresolved/failed,
+                        // but continue propagating completion to dependents.
+                        pending.push(CompletedSignal {
+                            index: to,
+                            meet_condition: false,
+                            deferred: false,
+                        });
+                    }
+                }
             });
         }
-
-        self.outgoing[index as usize].iter().for_each(|&to| {
-            let target = &mut state.incoming[to as usize];
-            *target -= 1;
-
-            if *target == 0 {
-                if state.condition_incoming[to as usize] == 0 {
-                    // push_front: Prioritize new tasks to avoid repetitive checks.
-                    state.ready_systems.push_front(to);
-                } else {
-                    // The target system can not be executed.
-                    // But we need to allow its subsequent system to run.
-                    let signal = CompletedSignal {
-                        index: to,
-                        meet_condition: false,
-                        deferred: false,
-                    };
-                    self.handle_completed_system(state, signal);
-                }
-            }
-        });
     }
 
+    /// Resolves ready no-op systems immediately and propagates their completion.
+    fn handle_no_op_systems(&self, state: &mut ExecutorState) {
+        // Collect indices first, then remove from back to front to keep them valid.
+        let mut buffer: FastVec<usize, 5> = FastVec::new();
+        let no_op_systems = buffer.data();
+
+        for (index, &id) in state.ready_systems.iter().enumerate() {
+            let obj = unsafe { &*self.systems[id as usize].get() };
+            if obj.is_no_op() {
+                no_op_systems.push(index);
+            }
+        }
+
+        while let Some(back) = no_op_systems.pop() {
+            let signal = CompletedSignal {
+                index: state.ready_systems.swap_remove_back(back).unwrap(),
+                meet_condition: true,
+                deferred: false,
+            };
+            self.handle_completed_system(state, signal);
+        }
+    }
+
+    fn handle_deferred_systems(
+        &self,
+        state: &mut ExecutorState,
+    ) -> Box<dyn FnOnce() + Send + 'scope> {
+        let world = self.world;
+        let systems = self.systems;
+        let panic_payload = &self.executor.panic_payload;
+
+        // Drain without reallocating by reusing the existing buffer capacity.
+        let mut deferred: Vec<u32> = Vec::new();
+        deferred.append(&mut state.deferred_systems);
+
+        Box::new(move || {
+            let world = unsafe { world.full_mut() };
+            world.flush();
+
+            for index in deferred {
+                let func = AssertUnwindSafe(|| {
+                    let system = unsafe { &mut *systems[index as usize].get() };
+                    system.apply_deferred(world);
+                });
+
+                #[cfg(feature = "std")]
+                if let Err(e) = ::std::panic::catch_unwind(func) {
+                    voker_utils::cold_path();
+                    *panic_payload.lock() = Some(e);
+                }
+
+                #[cfg(not(feature = "std"))]
+                (func)();
+            }
+
+            world.flush();
+        })
+    }
+
+    /// Tries to spawn all currently ready systems that do not conflict.
     fn spawn_ready_tasks(&self, state: &mut ExecutorState) {
         let len = state.ready_systems.len();
         for _ in 0..len {
@@ -237,8 +329,8 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
             let is_conflict = state
                 .running_systems
-                .iter()
-                .any(|&running| unsafe { self.conflict_table.is_conflict(index, running) });
+                .ones()
+                .any(|running| unsafe { self.conflict_table.is_conflict(index, running as u32) });
 
             if !is_conflict {
                 self.spawn_system_task(state, index);
@@ -246,18 +338,19 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 state.ready_systems.push_back(index);
 
                 if !self.executor.completed.is_empty() {
-                    return; // Prioritize handle new signale to reduce access conflicts.
+                    return; // Prioritize handling fresh completion signals.
                 }
             }
         }
     }
 
+    /// Spawns one runnable system task and updates running/deferred bookkeeping.
     fn spawn_system_task(&self, state: &mut ExecutorState, index: u32) {
         let obj = unsafe { &mut *self.systems[index as usize].get() };
 
         let ident = obj.id();
         let flags = obj.flags();
-        // call `flags + contains` is faster then `System::is_xxx`
+        // Reading raw flags avoids repeated virtual method calls.
         let deferred = flags.contains(SystemFlags::DEFERRED);
         let non_send = flags.contains(SystemFlags::NON_SEND);
         let exclusive = flags.contains(SystemFlags::EXCLUSIVE);
@@ -265,33 +358,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         let need_apply_deferred = exclusive && !state.deferred_systems.is_empty();
 
         let apply_deferred: Option<Box<dyn FnOnce() + Send>> = if need_apply_deferred {
-            let world = self.world;
-            let systems = self.systems;
-            let panic_payload = &self.executor.panic_payload;
-            // ↓ We do not take deferred_systems, avoid memory reallocation.
-            let mut deferred: Vec<u32> = Vec::new();
-            deferred.append(&mut state.deferred_systems);
-
-            Some(Box::new(move || {
-                let world = unsafe { world.full_mut() };
-                for index in deferred {
-                    let func = AssertUnwindSafe(|| {
-                        let system = unsafe { &mut *systems[index as usize].get() };
-                        system.defer(world.deferred());
-                        system.apply_deferred(world);
-                        world.flush();
-                    });
-
-                    #[cfg(feature = "std")]
-                    if let Err(e) = ::std::panic::catch_unwind(func) {
-                        voker_utils::cold_path();
-                        *panic_payload.lock().unwrap() = Some(e);
-                    }
-
-                    #[cfg(not(feature = "std"))]
-                    (func)();
-                }
-            }))
+            Some(self.handle_deferred_systems(state))
         } else {
             None
         };
@@ -306,7 +373,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     }
 
                     let func = AssertUnwindSafe(|| unsafe {
-                        if let Err(e) = system.run((), context.world) {
+                        if let Err(e) = system.run_raw((), context.world) {
                             voker_utils::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
@@ -326,6 +393,12 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     context.push_completed_system(ident, index, deferred, result);
                 };
 
+                // SAFETY: `ExecutorState::reset` grows `running_systems` to
+                // `system_count`, and schedule indices are in range.
+                unsafe {
+                    state.running_systems.insert_unchecked(index as usize);
+                }
+
                 if non_send {
                     voker_utils::cold_path();
                     self.scope.spawn_remote(task);
@@ -342,7 +415,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     }
 
                     let func = AssertUnwindSafe(|| unsafe {
-                        system.run((), context.world).unwrap_or_else(|e| {
+                        system.run_raw((), context.world).unwrap_or_else(|e| {
                             voker_utils::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
@@ -361,6 +434,12 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                     context.push_completed_system(ident, index, deferred, result);
                 };
 
+                // SAFETY: `ExecutorState::reset` grows `running_systems` to
+                // `system_count`, and schedule indices are in range.
+                unsafe {
+                    state.running_systems.insert_unchecked(index as usize);
+                }
+
                 if non_send {
                     voker_utils::cold_path();
                     self.scope.spawn_remote(task);
@@ -369,8 +448,14 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 }
             }
         }
+
+        // Handle no-op systems after spawning to keep worker execution flowing.
+        if exclusive && !state.ready_systems.is_empty() {
+            self.handle_no_op_systems(state);
+        }
     }
 
+    /// Drains completion events, then schedules newly-unblocked tasks.
     fn tick_internal(&self, state: &mut ExecutorState) {
         let completed_queue = &self.executor.completed;
 
@@ -381,19 +466,20 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         self.spawn_ready_tasks(state);
     }
 
+    /// Progresses scheduling work until no fresh completion event is observed.
     fn tick(&self) {
         loop {
             let Ok(mut guard) = self.executor.state.try_lock() else {
-                // try_lock failed, there are already other threads doing this.
+                // Another thread is already advancing scheduling state.
                 return;
             };
             self.tick_internal(&mut guard);
             // Make sure we drop the guard before checking
             // completed.is_empty(), or we could lose events.
             drop(guard);
-            // We cannot check `is_empty` before `tick_internal`
-            // because the initial tasks without dependencies are
-            // in a ready state and not in the queue.
+            // We cannot check `is_empty` before `tick_internal` because
+            // initial dependency-free systems start in `ready_systems`,
+            // not in `completed`.
             if self.executor.completed.is_empty() {
                 return;
             }
@@ -422,7 +508,13 @@ impl SystemExecutor for MultiThreadedExecutor {
 
     /// Executes the schedule using task-based parallel dispatch.
     ///
-    /// Systems are launched when all incoming dependencies are resolved.
+    /// Systems are launched when all incoming dependencies are resolved and
+    /// access-conflict checks pass.
+    ///
+    /// Deferred systems are tracked during execution and applied at sync points:
+    /// - before spawning an exclusive system when needed,
+    /// - and once after the worker scope drains.
+    ///
     /// Reported system errors are forwarded to `handler`.
     ///
     /// If any task panics, the panic payload is captured and rethrown after the
@@ -442,7 +534,8 @@ impl SystemExecutor for MultiThreadedExecutor {
             .unwrap_or_else(PoisonError::into_inner)
             .reset(schedule);
 
-        self.state.clear_poison(); // optional
+        // The executor handles panics explicitly; clear stale poison state.
+        self.state.clear_poison();
 
         let main_thread_ex = world.get_resource::<MainThreadExecutor>().map(|e| e.0.clone());
         let remote_ex = main_thread_ex.as_deref();
@@ -455,27 +548,25 @@ impl SystemExecutor for MultiThreadedExecutor {
 
         self.state
             .get_mut()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .deferred_systems
             .iter()
             .for_each(|&index| {
                 let func = AssertUnwindSafe(|| {
-                    let system = &mut schedule.systems_mut()[index as usize];
-                    system.defer(world.deferred());
-                    system.apply_deferred(world);
+                    schedule.systems_mut()[index as usize].apply_deferred(world);
                 });
 
                 #[cfg(feature = "std")]
                 if let Err(e) = ::std::panic::catch_unwind(func) {
-                    *self.panic_payload.get_mut().unwrap() = Some(e);
+                    *self.panic_payload.get_mut() = Some(e);
                 }
 
                 #[cfg(not(feature = "std"))]
                 (func)();
             });
 
-        // check to see if there was a panic
-        let payload = self.panic_payload.get_mut().unwrap().take();
+        // Re-throw captured panic after scheduler cleanup.
+        let payload = self.panic_payload.get_mut().take();
 
         world.flush();
 

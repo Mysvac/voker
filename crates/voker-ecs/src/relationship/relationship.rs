@@ -3,9 +3,8 @@
 use core::ops::DerefMut;
 
 use super::RelationshipSourceSet;
-use crate::component::Component;
+use crate::component::{Component, HookContext};
 use crate::entity::Entity;
-use crate::prelude::HookContext;
 use crate::utils::DebugName;
 use crate::world::{DeferredWorld, EntityOwned};
 

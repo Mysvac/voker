@@ -1,6 +1,5 @@
 use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
-use crate::prelude::ReflectDefault;
-use crate::registry::{FromType, GetTypeMeta, TypeMeta};
+use crate::registry::{FromType, GetTypeMeta, ReflectDefault, TypeMeta};
 use crate::registry::{ReflectFromPtr, ReflectFromReflect, ReflectSerialize};
 use crate::{FromReflect, Reflect};
 

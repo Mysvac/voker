@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 
 use crate::system::{AccessTable, SystemError, SystemFlags, SystemId};
 use crate::tick::Tick;
-use crate::world::{DeferredWorld, UnsafeWorld, World};
+use crate::world::{UnsafeWorld, World};
 
 use super::SystemInput;
 
@@ -132,7 +132,7 @@ pub trait System: Send + Sync + 'static {
     /// The implementer must allow for repeated initialization.
     fn initialize(&mut self, world: &mut World) -> AccessTable;
 
-    /// Executes the system's logic against the provided world.
+    /// Executes the system's logic against the provided world, without apply_deferred.
     ///
     /// # Safety
     ///
@@ -143,20 +143,40 @@ pub trait System: Send + Sync + 'static {
     /// - For `NON_SEND` systems, the caller must ensure execution occurs on the
     ///   same thread where the system was created.
     /// - For `EXCLUSIVE` systems, the caller must ensure exclusive world access.
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError>;
 
-    fn defer(&mut self, world: DeferredWorld);
+    fn run(
+        &mut self,
+        input: <Self::Input as SystemInput>::Data<'_>,
+        world: &mut World,
+    ) -> Result<Self::Output, SystemError> {
+        let result = unsafe { self.run_raw(input, world.into())? };
+        self.apply_deferred(world);
+        Ok(result)
+    }
 
+    /// Applies queued deferred mutations to `World`.
+    ///
+    /// The scheduler calls this only when [`System::is_deferred`] is `true`.
     fn apply_deferred(&mut self, world: &mut World);
 
-    /// Returns `true` if this system is marked as `NON_SEND`.
+    /// Returns `true` if this system is no-op.
+    ///
+    /// This is currently only used for `apply_defered`.
+    /// It does not perform any additional operations and can be optimized when repeated.
+    #[inline]
+    fn is_no_op(&self) -> bool {
+        self.flags().intersects(SystemFlags::NO_OP)
+    }
+
+    /// Returns `true` if this system is marked as `DEFERRED`.
     #[inline]
     fn is_deferred(&self) -> bool {
-        self.flags().intersects(SystemFlags::NON_SEND)
+        self.flags().intersects(SystemFlags::DEFERRED)
     }
 
     /// Returns `true` if this system is marked as `NON_SEND`.
@@ -212,6 +232,13 @@ pub trait IntoSystem<I: SystemInput, O, M>: Sized + 'static {
         SystemId::of::<Self>()
     }
 
+    fn with_input(self, input: I::Data<'static>) -> IntoWithInputSystem<Self, I>
+    where
+        I::Data<'static>: Clone,
+    {
+        IntoWithInputSystem { s: self, i: input }
+    }
+
     fn pipe<B, BI, BO, MB>(self, other: B) -> IntoPipeSystem<Self, B>
     where
         O: 'static,
@@ -252,6 +279,89 @@ impl<T: System> IntoSystem<T::Input, T::Output, ()> for T {
 }
 
 // -----------------------------------------------------------------------------
+// IntoWithInputSystem
+
+pub struct WithInputSystemMarker;
+
+pub struct IntoWithInputSystem<S, I: SystemInput> {
+    s: S,
+    i: I::Data<'static>,
+}
+
+pub struct WithInputSystem<S, I: SystemInput> {
+    id: SystemId,
+    s: S,
+    i: I::Data<'static>,
+}
+
+#[rustfmt::skip]
+impl<I, O, S, M> IntoSystem<(), O, (WithInputSystemMarker, (M, fn(I) -> O))>
+    for IntoWithInputSystem<S, I>
+where
+    I: SystemInput + 'static,
+    I::Data<'static>: Clone + Send + Sync,
+    S: IntoSystem<I, O, M>,
+    M: 'static,
+{
+    type System = WithInputSystem<S::System, I>;
+
+    fn into_system(this: Self) -> Self::System {
+        WithInputSystem {
+            id: Self::system_id(&this),
+            s: IntoSystem::into_system(this.s),
+            i: this.i,
+        }
+    }
+
+    fn system_id(&self) -> SystemId {
+        struct WithInput<T>(PhantomData<T>);
+        SystemId::of::<(WithInput<I>, S)>()
+    }
+}
+
+impl<I, O, S> System for WithInputSystem<S, I>
+where
+    I: SystemInput + 'static,
+    I::Data<'static>: Clone + Send + Sync,
+    S: System<Input = I, Output = O>,
+{
+    type Input = ();
+    type Output = O;
+
+    fn id(&self) -> SystemId {
+        self.id
+    }
+
+    fn flags(&self) -> SystemFlags {
+        self.s.flags()
+    }
+
+    fn last_run(&self) -> Tick {
+        self.s.last_run()
+    }
+
+    fn set_last_run(&mut self, last_run: Tick) {
+        self.s.set_last_run(last_run);
+    }
+
+    fn initialize(&mut self, world: &mut World) -> AccessTable {
+        self.s.initialize(world)
+    }
+
+    unsafe fn run_raw(
+        &mut self,
+        _input: (),
+        world: UnsafeWorld<'_>,
+    ) -> Result<Self::Output, SystemError> {
+        unsafe { self.s.run_raw(self.i.clone(), world) }
+    }
+
+    fn apply_deferred(&mut self, world: &mut World) {
+        self.s.apply_deferred(world);
+    }
+}
+
+// -----------------------------------------------------------------------------
 // IntoPipeSystem
 
 pub struct PipeSystemMarker;
@@ -268,16 +378,10 @@ pub struct PipeSystem<A, B> {
     b: B,
 }
 
+#[rustfmt::skip]
 impl<AI, AO, BI, BO, A, B, MA, MB>
-    IntoSystem<
-        AI,
-        BO,
-        (
-            PipeSystemMarker,
-            (MA, MB, fn(AI) -> AO, fn(BI) -> BO),
-            (A, B),
-        ),
-    > for IntoPipeSystem<A, B>
+    IntoSystem<AI, BO, (PipeSystemMarker, (MA, MB, fn(AI) -> AO, fn(BI) -> BO), (A, B))>
+    for IntoPipeSystem<A, B>
 where
     AI: SystemInput,
     for<'a> BI: SystemInput<Data<'a> = AO>,
@@ -331,18 +435,13 @@ where
         self.a.initialize(world).merge(self.b.initialize(world))
     }
 
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError> {
-        let data = unsafe { self.a.run(input, world)? };
-        unsafe { self.b.run(data, world) }
-    }
-
-    fn defer(&mut self, mut world: DeferredWorld) {
-        self.a.defer(world.reborrow());
-        self.b.defer(world.reborrow());
+        let data = unsafe { self.a.run_raw(input, world)? };
+        unsafe { self.b.run_raw(data, world) }
     }
 
     fn apply_deferred(&mut self, world: &mut World) {
@@ -368,7 +467,9 @@ pub struct MapSystem<S, F> {
     f: F,
 }
 
-impl<I, O, FO, S, F, M> IntoSystem<I, FO, (MapSystemMarker, (M, fn(I) -> O, fn(O) -> FO), (S, F))>
+#[rustfmt::skip]
+impl<I, O, FO, S, F, M>
+    IntoSystem<I, FO, (MapSystemMarker, (M, fn(I) -> O, fn(O) -> FO), (S, F))>
     for IntoMapSystem<S, F>
 where
     I: SystemInput,
@@ -420,17 +521,13 @@ where
         self.s.initialize(world)
     }
 
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError> {
-        let data = unsafe { self.s.run(input, world)? };
+        let data = unsafe { self.s.run_raw(input, world)? };
         Ok((self.f)(data))
-    }
-
-    fn defer(&mut self, world: DeferredWorld) {
-        self.s.defer(world);
     }
 
     fn apply_deferred(&mut self, world: &mut World) {
@@ -470,7 +567,9 @@ unsafe impl<S: Send, M> Send for MarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for IntoMarkSystem<S, M> {}
 unsafe impl<S: Sync, M> Sync for MarkSystem<S, M> {}
 
-impl<I, O, S, M1, M2> IntoSystem<I, O, (MarkSystemMarker, (M2, M1, fn(I) -> O), (S, M2))>
+#[rustfmt::skip]
+impl<I, O, S, M1, M2>
+    IntoSystem<I, O, (MarkSystemMarker, (M2, M1, fn(I) -> O), (S, M2))>
     for IntoMarkSystem<S, M2>
 where
     I: SystemInput,
@@ -522,16 +621,12 @@ where
         self.s.initialize(world)
     }
 
-    unsafe fn run(
+    unsafe fn run_raw(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError> {
-        unsafe { self.s.run(input, world) }
-    }
-
-    fn defer(&mut self, world: DeferredWorld) {
-        self.s.defer(world);
+        unsafe { self.s.run_raw(input, world) }
     }
 
     fn apply_deferred(&mut self, world: &mut World) {

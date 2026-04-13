@@ -1,15 +1,8 @@
-use crate::message::{Message, MessageId, MessageIdIter, MessageRegistry, Messages};
+use crate::message::{Message, MessageId, MessageIdIter, Messages};
 use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
-    /// Runs one global message-update pass for all message types in the registry.
-    ///
-    /// This function should be called once per frame.
-    pub fn update_messages(&mut self) {
-        MessageRegistry::run_updates(self);
-    }
-
     /// Registers a message type in the global message registry.
     pub fn register_message<T: Message>(&mut self) {
         self.message_registry.register_message::<T>();

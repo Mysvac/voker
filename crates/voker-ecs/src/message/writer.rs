@@ -32,6 +32,15 @@ pub struct MessageWriter<'w, M: Message> {
 }
 
 impl<'w, M: Message> MessageWriter<'w, M> {
+    /// Writes one message through it's default value and returns its generated id.
+    #[inline]
+    pub fn write_default(&mut self) -> MessageId<M>
+    where
+        M: Default,
+    {
+        self.messages.write(M::default())
+    }
+
     /// Writes one message and returns its generated id.
     #[inline]
     pub fn write(&mut self, message: M) -> MessageId<M> {

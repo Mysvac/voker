@@ -58,8 +58,8 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            fn defer(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
-                <$name>::defer(state, system_meta, world);
+            fn queue_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+                <$name>::queue_deferred(state, system_meta, world);
             }
 
             #[inline]
@@ -96,8 +96,8 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            fn defer(state: &mut Self::State, system_meta: &SystemMeta, mut world: DeferredWorld) {
-                $( <$name>::defer(&mut state.$index, system_meta, world.reborrow()); )*
+            fn queue_deferred(state: &mut Self::State, system_meta: &SystemMeta, mut world: DeferredWorld) {
+                $( <$name>::queue_deferred(&mut state.$index, system_meta, world.reborrow()); )*
             }
 
             #[inline]

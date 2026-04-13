@@ -175,6 +175,13 @@ impl World {
 
         None
     }
+
+    /// Updates internal component trackers.
+    ///
+    /// Typically called once per frame.
+    pub fn clear_tracker(&mut self) {
+        self.reset_last_run();
+    }
 }
 
 // -----------------------------------------------------------------------------

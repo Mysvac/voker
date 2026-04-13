@@ -47,7 +47,7 @@ impl World {
     {
         // SAFETY: the registered system is executed against the current world
         // following the same contracts as schedule-driven execution.
-        let ret = unsafe { system.run(input, self.unsafe_world()) };
+        let ret = system.run(input, self);
         let id = system.id();
 
         // Put the system back to preserve registration for future runs.

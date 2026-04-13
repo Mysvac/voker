@@ -7,7 +7,6 @@ use crate::entity::{Entity, FetchError};
 use crate::message::{Message, MessageId, MessageIdIter};
 use crate::prelude::{Component, ComponentId, Resource};
 use crate::query::{Query, QueryData, QueryFilter};
-use crate::system::{SystemError, SystemId, SystemInput};
 use crate::utils::DebugLocation;
 use crate::world::{EntityFetcher, FetchEntities, GetComponents, UnsafeWorld, World};
 
@@ -198,20 +197,6 @@ impl<'w> DeferredWorld<'w> {
         F: QueryFilter + 'static,
     {
         self.world_mut().try_query_with::<D, F>()
-    }
-
-    /// Runs a registered system by id and returns the input back on cache miss.
-    #[inline]
-    pub fn run_system_by_id<'a, I, O>(
-        &mut self,
-        id: SystemId,
-        input: I::Data<'a>,
-    ) -> Result<O, SystemError>
-    where
-        I: SystemInput + 'static,
-        O: 'static,
-    {
-        self.world_mut().run_system_by_id::<I, O>(id, input)
     }
 
     /// Mutates component `T` on `entity` while preserving hook semantics.

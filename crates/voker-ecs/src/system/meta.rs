@@ -10,11 +10,13 @@ bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     pub struct SystemFlags: u8 {
         /// Set if system need to apply deferred commands.
-        const DEFERRED = 1 << 0;
+        const NO_OP = 1 << 0;
+        /// Set if system need to apply deferred commands.
+        const DEFERRED = 1 << 1;
         /// Set if system cannot be sent across threads
-        const NON_SEND = 1 << 1;
+        const NON_SEND = 1 << 2;
         /// Set if system requires exclusive World access
-        const EXCLUSIVE = 1 << 2;
+        const EXCLUSIVE = 1 << 3;
     }
 }
 
@@ -69,6 +71,11 @@ impl SystemMeta {
     }
 
     #[inline]
+    pub const fn is_no_op(&self) -> bool {
+        self.flags.intersects(SystemFlags::NO_OP)
+    }
+
+    #[inline]
     pub const fn is_deferred(&self) -> bool {
         self.flags.intersects(SystemFlags::DEFERRED)
     }
@@ -81,6 +88,11 @@ impl SystemMeta {
     #[inline]
     pub const fn is_exclusive(&self) -> bool {
         self.flags.intersects(SystemFlags::EXCLUSIVE)
+    }
+
+    #[inline]
+    pub const fn set_no_op(&mut self) {
+        self.flags = self.flags.union(SystemFlags::NO_OP);
     }
 
     #[inline]

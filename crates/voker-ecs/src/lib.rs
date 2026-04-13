@@ -86,7 +86,7 @@ pub mod prelude {
     pub use crate::relationship::{RelatedSpawner, RelatedSpawnerCommands};
     pub use crate::relationship::{Relationship, RelationshipTarget};
     pub use crate::resource::{Resource, ResourceId};
-    pub use crate::schedule::{Schedule, ScheduleLabel};
+    pub use crate::schedule::{IntoSystemConfig, Schedule, ScheduleLabel};
     pub use crate::system::{IntoSystem, Local, System, SystemError, SystemId};
     pub use crate::tick::{DetectChanges, Tick};
     pub use crate::world::{DeferredWorld, EntityMut, EntityOwned, EntityRef, World};

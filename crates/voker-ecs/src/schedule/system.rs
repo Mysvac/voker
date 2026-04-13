@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use super::{Direction, GraphNode};
 use crate::system::{AccessTable, SystemFlags, SystemId};
-use crate::world::{DeferredWorld, World};
+use crate::world::World;
 
 // -----------------------------------------------------------------------------
 // SystemKey
@@ -76,6 +76,15 @@ impl SystemObject {
 
     /// Returns `true` if the underlying system has deferred operations.
     #[inline]
+    pub fn is_no_op(&self) -> bool {
+        match self {
+            SystemObject::Action { system, .. } => system.is_no_op(),
+            SystemObject::Condition { system, .. } => system.is_no_op(),
+        }
+    }
+
+    /// Returns `true` if the underlying system has deferred operations.
+    #[inline]
     pub fn is_deferred(&self) -> bool {
         match self {
             SystemObject::Action { system, .. } => system.is_deferred(),
@@ -98,15 +107,6 @@ impl SystemObject {
         match self {
             SystemObject::Action { system, .. } => system.is_non_send(),
             SystemObject::Condition { system, .. } => system.is_non_send(),
-        }
-    }
-
-    /// Defers the execution of the underlying system using the given `DeferredWorld`.
-    #[inline]
-    pub fn defer(&mut self, world: DeferredWorld) {
-        match self {
-            SystemObject::Action { system, .. } => system.defer(world),
-            SystemObject::Condition { system, .. } => system.defer(world),
         }
     }
 

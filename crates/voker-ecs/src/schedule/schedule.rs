@@ -13,7 +13,8 @@ use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMa
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
-use crate::schedule::AnonymousSchedule;
+use crate::schedule::{AnonymousSchedule, ToposortError};
+use crate::schedule::{IntoSystemConfig, SystemConfig, SystemNode};
 use crate::system::{IntoSystem, SystemId};
 use crate::utils::DebugCheckedUnwrap;
 use crate::world::World;
@@ -436,6 +437,8 @@ impl Schedule {
 
         let uninit = core::mem::take(&mut buffer.uninit);
 
+        // ---------------------------------------------------------------
+        // Initialize systems
         uninit.iter().for_each(|&key| {
             if let Some(obj) = buffer.get_system_mut(key) {
                 match obj {
@@ -455,6 +458,8 @@ impl Schedule {
             }
         });
 
+        // ---------------------------------------------------------------
+        // Update conflict graph
         uninit.iter().for_each(|&a| {
             let obj = unsafe { buffer.get_system(a).debug_checked_unwrap() };
 
@@ -494,6 +499,7 @@ impl Schedule {
     fn recycle_schedule(&mut self) {
         let schedule = &mut self.schedule;
         let buffer = &mut self.buffer;
+
         schedule.conflict.lines = 0;
         schedule.conflict.table.clear();
         schedule.incoming.clear();
@@ -501,6 +507,7 @@ impl Schedule {
         schedule.condition_incoming.clear();
         schedule.condition_outgoing.clear();
         schedule.pool = PagePool::new();
+
         schedule
             .keys
             .drain(..)
@@ -519,20 +526,27 @@ impl Schedule {
         assert!(schedule.outgoing.is_empty() && schedule.incoming.is_empty());
         assert!(schedule.condition_incoming.is_empty() && schedule.condition_outgoing.is_empty());
 
+        // ---------------------------------------------------------------
         // mix dependency and condition order
         let mut dag = ordering.dependency.clone();
         ordering.condition.all_edges().for_each(|(a, b)| {
             dag.insert_edge(a, b);
         });
 
+        // ---------------------------------------------------------------
         // toposort
-        schedule.keys.extend(dag.toposort().unwrap());
+        match dag.toposort() {
+            Ok(keys) => schedule.keys.extend_from_slice(keys),
+            Err(err) => self.handle_toposort_error(err),
+        }
+
         let topo: &[SystemKey] = &schedule.keys;
         schedule
             .systems
             .extend(topo.iter().map(|&key| buffer.take_system(key)));
         debug_assert_eq!(schedule.keys.len(), schedule.systems.len());
 
+        // ---------------------------------------------------------------
         // map key to index
         let mut indices: SparseHashMap<SystemKey, usize> = SparseHashMap::new();
         indices.reserve(topo.len() + (topo.len() >> 1));
@@ -541,6 +555,7 @@ impl Schedule {
             indices.insert(key, idx);
         });
 
+        // ---------------------------------------------------------------
         // calculate incoming and outgoing
         schedule.incoming.resize(topo.len(), 0);
         schedule.outgoing.resize(topo.len(), &[]);
@@ -552,6 +567,7 @@ impl Schedule {
         outgoing.resize_with(topo.len(), Vec::<u32>::new);
         condition_outgoing.resize_with(topo.len(), Vec::<u32>::new);
 
+        // explicit and implicit dependencies
         topo.iter().enumerate().for_each(|(idx, &key)| {
             dag.neighbors(key).for_each(|to| {
                 let neighbor_index = indices[&to];
@@ -561,6 +577,7 @@ impl Schedule {
         });
         ::core::mem::drop(dag);
 
+        // condition order
         topo.iter().enumerate().for_each(|(idx, &key)| {
             ordering.condition.neighbors(key).for_each(|to| {
                 let neighbor_index = indices[&to];
@@ -570,7 +587,8 @@ impl Schedule {
         });
         ::core::mem::drop(indices);
 
-        // move data to pool
+        // ---------------------------------------------------------------
+        // move data to pool, for compact data allocation.
         schedule.pool = PagePool::new();
 
         outgoing.iter().enumerate().for_each(|(idx, slice)| {
@@ -586,6 +604,7 @@ impl Schedule {
         });
         ::core::mem::drop(condition_outgoing);
 
+        // ---------------------------------------------------------------
         // build fixed conflict table
         let mut conflict_table = ConflictTable::new(topo.len());
 
@@ -601,8 +620,6 @@ impl Schedule {
                 if conflict.is_conflict(key_a, key_b) {
                     unsafe {
                         conflict_table.set_conflict(idx_a as u32, idx_b as u32);
-                    }
-                    unsafe {
                         conflict_table.set_conflict(idx_b as u32, idx_a as u32);
                     }
                 }
@@ -610,6 +627,26 @@ impl Schedule {
         });
 
         schedule.conflict = conflict_table;
+    }
+
+    #[cold]
+    #[inline(never)]
+    #[rustfmt::skip] // More compact.
+    fn handle_toposort_error(&mut self, err: ToposortError<SystemKey>) -> ! {
+        match err {
+            ToposortError::Loop(item) => {
+                let name = self.get_id(item).unwrap_or_else(|| {
+                    panic!("Update schedule `{:?}` faild: {}.", self.label, ToposortError::Loop(item))
+                });
+                panic!("Update schedule `{:?}` faild, self-loop detected at node `{name:?}`", self.label);
+            },
+            ToposortError::Cycle(items) => {
+                let names: Vec<Vec<SystemId>> = items.iter().map(|item| {
+                    item.iter().filter_map(|key| self.get_id(*key)).collect::<Vec<SystemId>>()
+                }).collect();
+                panic!("Update schedule `{:?}` faild, cycles detected: `{names:?}`", self.label);
+            },
+        }
     }
 
     /// Rebuilds the executable schedule if structure or systems changed.
@@ -672,6 +709,25 @@ impl Schedule {
             conflict: Default::default(),
             schedule: Default::default(),
             set_anchors: Default::default(),
+        }
+    }
+
+    /// Creates a new schedule with the given label and given executor.
+    pub fn with_executor(
+        label: impl ScheduleLabel,
+        executor: impl SystemExecutor + 'static,
+    ) -> Self {
+        Self {
+            label: label.intern(),
+            allocator: Default::default(),
+            buffer: Default::default(),
+            ordering: Default::default(),
+            conflict: Default::default(),
+            schedule: Default::default(),
+            set_anchors: Default::default(),
+            executor: Box::new(executor),
+            executor_initialized: false,
+            is_changed: Default::default(),
         }
     }
 
@@ -871,6 +927,7 @@ impl Schedule {
 }
 
 impl Schedule {
+    /// Adds a single action system.
     pub fn add_system<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
@@ -879,6 +936,7 @@ impl Schedule {
         self
     }
 
+    /// Removes a single action system.
     pub fn del_system<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
@@ -887,6 +945,7 @@ impl Schedule {
         self
     }
 
+    /// Adds a single condition system.
     pub fn add_condition<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), bool, M>,
@@ -895,6 +954,7 @@ impl Schedule {
         self
     }
 
+    /// Removes a single condition system.
     pub fn del_condition<S, M>(&mut self, system: S) -> &mut Self
     where
         S: IntoSystem<(), bool, M>,
@@ -903,57 +963,91 @@ impl Schedule {
         self
     }
 
-    pub fn add_order<X, Y, M1, M2>(&mut self, before: X, after: Y) -> &mut Self
-    where
-        X: IntoSystem<(), (), M1>,
-        Y: IntoSystem<(), (), M2>,
-    {
-        self.insert_order(before.system_id(), after.system_id());
-        self
+    /// Adds one or many systems through [`IntoSystemConfig`].
+    ///
+    /// This is equivalent to calling [`Schedule::config`]. It accepts a
+    /// single system, a condition, a tuple of systems/configs, or an already
+    /// built [`SystemConfig`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_ecs::schedule::{IntoSystemConfig, Schedule};
+    ///
+    /// fn startup() {}
+    /// fn gameplay() {}
+    /// fn can_run() -> bool { true }
+    ///
+    /// let mut schedule = Schedule::default();
+    ///
+    /// schedule.add_systems((startup, gameplay).chain().run_if(can_run));
+    /// ```
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn add_systems<M>(&mut self, config: impl IntoSystemConfig<M>) -> &mut Self {
+        self.config(config)
     }
 
-    pub fn del_order<X, Y, M1, M2>(&mut self, before: X, after: Y) -> &mut Self
-    where
-        X: IntoSystem<(), (), M1>,
-        Y: IntoSystem<(), (), M2>,
-    {
-        self.remove_order(before.system_id(), after.system_id());
-        self
-    }
+    /// Applies a [`SystemConfig`] into this schedule.
+    ///
+    /// The provided configuration may insert:
+    /// - action and condition systems,
+    /// - deferred apply helper systems,
+    /// - explicit dependency edges,
+    /// - run-condition edges.
+    ///
+    /// Existing systems with the same `SystemId` are kept and not overwritten.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_ecs::schedule::{IntoSystemConfig, Schedule};
+    ///
+    /// fn a() {}
+    /// fn b() {}
+    ///
+    /// let config = a.before(b);
+    ///
+    /// let mut schedule = Schedule::default();
+    /// schedule.config(config);
+    /// ```
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn config<M>(&mut self, config: impl IntoSystemConfig<M>) -> &mut Self {
+        let SystemConfig {
+            systems,
+            deferred,
+            dependency,
+            condition,
+            ..
+        } = config.into_config();
 
-    pub fn add_run_if<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
-    where
-        S: IntoSystem<(), (), M2>,
-        C: IntoSystem<(), bool, M1>,
-    {
-        self.insert_run_if(system.system_id(), condition.system_id());
-        self
-    }
+        for (id, node) in systems {
+            if !self.contains(id) {
+                match node {
+                    SystemNode::Action(system) => {
+                        self.insert_action(system);
+                    }
+                    SystemNode::Condition(system) => {
+                        self.insert_condition(system);
+                    }
+                }
+            }
+        }
 
-    pub fn del_run_if<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
-    where
-        S: IntoSystem<(), (), M2>,
-        C: IntoSystem<(), bool, M1>,
-    {
-        self.remove_run_if(system.system_id(), condition.system_id());
-        self
-    }
+        for (id, apply_deferred) in deferred {
+            if !self.contains(id) {
+                self.insert_action(apply_deferred);
+            }
+        }
 
-    pub fn add_run_if_run<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
-    where
-        S: IntoSystem<(), (), M2>,
-        C: IntoSystem<(), (), M1>,
-    {
-        self.insert_run_if(system.system_id(), condition.system_id());
-        self
-    }
+        for (before, after) in dependency {
+            self.insert_order(before, after);
+        }
 
-    pub fn del_run_if_run<S, C, M1, M2>(&mut self, system: S, condition: C) -> &mut Self
-    where
-        S: IntoSystem<(), (), M2>,
-        C: IntoSystem<(), (), M1>,
-    {
-        self.remove_run_if(system.system_id(), condition.system_id());
+        for (condition, runnable) in condition {
+            self.insert_run_if(runnable, condition);
+        }
+
         self
     }
 }

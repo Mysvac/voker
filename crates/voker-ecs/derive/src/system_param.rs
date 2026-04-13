@@ -158,8 +158,8 @@ pub(crate) fn impl_derive_system_param(mut ast: DeriveInput) -> TokenStream {
                     Ok(#fetch_init)
                 }
 
-                fn defer(state: &mut Self::State, system_meta: &#system_meta_, mut world: #deferred_world_) {
-                    #( <#static_field_types as #system_param_>::defer(&mut state.#idx, system_meta, world.reborrow()); )*
+                fn queue_deferred(state: &mut Self::State, system_meta: &#system_meta_, mut world: #deferred_world_) {
+                    #( <#static_field_types as #system_param_>::queue_deferred(&mut state.#idx, system_meta, world.reborrow()); )*
                 }
 
                 fn apply_deferred(state: &mut Self::State, system_meta: &#system_meta_, world: &mut #world_) {

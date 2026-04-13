@@ -27,10 +27,11 @@ pub use exit::AppExit;
 pub use label::{AppLabel, InternedAppLabel};
 
 pub mod app;
+pub mod main_schedule;
 pub mod plugin;
-pub mod schedule;
 pub mod sub_app;
 
-pub use app::App;
-pub use plugin::{Plugin, PluginsState};
+pub use app::{App, SubApps};
+pub use main_schedule::MainSchedulePlugin;
+pub use plugin::{Plugin, Plugins, PluginsState};
 pub use sub_app::SubApp;

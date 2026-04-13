@@ -72,7 +72,7 @@ impl SystemExecutor for SingleThreadedExecutor {
             match obj {
                 SystemObject::Action { system, .. } => {
                     let func = AssertUnwindSafe(|| unsafe {
-                        system.run((), world.unsafe_world()).unwrap_or_else(|e| {
+                        system.run_raw((), world.unsafe_world()).unwrap_or_else(|e| {
                             voker_utils::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
@@ -93,7 +93,6 @@ impl SystemExecutor for SingleThreadedExecutor {
                     (func)();
 
                     if system.is_deferred() {
-                        system.defer(unsafe { world.unsafe_world().deferred() });
                         system.apply_deferred(unsafe { world.unsafe_world().full_mut() });
                     }
 
@@ -103,7 +102,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                 }
                 SystemObject::Condition { system, .. } => {
                     let func = AssertUnwindSafe(|| unsafe {
-                        system.run((), world.unsafe_world()).unwrap_or_else(|e| {
+                        system.run_raw((), world.unsafe_world()).unwrap_or_else(|e| {
                             voker_utils::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
@@ -125,7 +124,6 @@ impl SystemExecutor for SingleThreadedExecutor {
                     let condition = (func)();
 
                     if system.is_deferred() {
-                        system.defer(unsafe { world.unsafe_world().deferred() });
                         system.apply_deferred(unsafe { world.unsafe_world().full_mut() });
                     }
 

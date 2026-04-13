@@ -179,7 +179,7 @@ pub unsafe trait SystemParam: Sized {
     /// Queues deferred effects into a [`DeferredWorld`] view.
     #[inline]
     #[expect(unused_variables, reason = "default implementation")]
-    fn defer(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
+    fn queue_deferred(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
 
     /// Applies previously queued deferred effects to the real world.
     #[inline]
