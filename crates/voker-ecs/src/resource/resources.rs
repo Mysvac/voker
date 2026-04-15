@@ -83,7 +83,7 @@ impl Resources {
         // thereby improving the execution speed of the hot path.
         #[cold]
         #[inline(never)]
-        fn register_internal(this: &mut Resources, func: fn() -> ResourceDescriptor) -> ResourceId {
+        fn register_cold(this: &mut Resources, func: fn() -> ResourceDescriptor) -> ResourceId {
             let id = ResourceId::new(this.infos.len() as u32);
             let descriptor = func();
             let type_id = descriptor.type_id;
@@ -97,7 +97,7 @@ impl Resources {
         if let Some(id) = self.get_id(TypeId::of::<T>()) {
             id
         } else {
-            register_internal(self, ResourceDescriptor::new::<T>)
+            register_cold(self, ResourceDescriptor::new::<T>)
         }
     }
 }

@@ -18,3 +18,5 @@ mod info;
 pub use arches::Archetypes;
 pub use ident::{ArcheId, ArcheRow};
 pub use info::Archetype;
+
+pub(crate) use info::ObserverFlags;

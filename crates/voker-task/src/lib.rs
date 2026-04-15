@@ -31,6 +31,7 @@ extern crate alloc;
 
 mod cond_send;
 mod macro_utils;
+mod slice;
 
 pub mod futures;
 mod platform;
@@ -39,6 +40,7 @@ mod platform;
 // Exports
 
 pub use cond_send::{BoxedFuture, CondSendFuture};
+pub use slice::ParallelSlice;
 
 pub use platform::block_on;
 pub use platform::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};

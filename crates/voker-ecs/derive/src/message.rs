@@ -9,7 +9,7 @@ pub(crate) fn impl_derive_message(ast: DeriveInput) -> TokenStream {
 
     let type_ident = ast.ident;
 
-    let mut generics = ast.generics.clone();
+    let mut generics = ast.generics;
     if generics.type_params().next().is_some() {
         generics
             .make_where_clause()

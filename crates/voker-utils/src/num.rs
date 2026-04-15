@@ -61,6 +61,7 @@ macro_rules! impl_non_max {
         ///
         /// We guarantee the stability of the underlying implementation, therefore:
         /// - `transmute::<NonMax<T>, T>(nonmax) ^ T::MAX == nonmax.get()`.
+        #[derive(PartialEq, Eq)] // Use derive to support constant operation.
         #[repr(transparent)]
         pub struct $NonMax(NonZero<$Int>);
 
@@ -120,18 +121,6 @@ macro_rules! impl_non_max {
                 unsafe { mem::transmute::<$NonMax, $Int>(self) ^ <$Int>::MAX }
             }
         }
-
-        impl PartialEq for $NonMax {
-            #[inline(always)]
-            fn eq(&self, other: &Self) -> bool {
-                unsafe {
-                    mem::transmute_copy::<Self, $Int>(self)
-                        == mem::transmute_copy::<Self, $Int>(other)
-                }
-            }
-        }
-
-        impl Eq for $NonMax {}
 
         impl PartialOrd for $NonMax {
             #[inline]

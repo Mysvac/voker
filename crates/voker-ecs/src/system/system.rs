@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 
 use crate::system::{AccessTable, SystemError, SystemFlags, SystemId};
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 use super::SystemInput;
 
@@ -158,6 +158,11 @@ pub trait System: Send + Sync + 'static {
         self.apply_deferred(world);
         Ok(result)
     }
+
+    /// Transfer the tasks of the deferred queue to the target world.
+    ///
+    /// The scheduler calls this only when [`System::is_deferred`] is `true`.
+    fn queue_deferred(&mut self, world: DeferredWorld);
 
     /// Applies queued deferred mutations to `World`.
     ///
@@ -356,6 +361,10 @@ where
         unsafe { self.s.run_raw(self.i.clone(), world) }
     }
 
+    fn queue_deferred(&mut self, world: DeferredWorld) {
+        self.s.queue_deferred(world);
+    }
+
     fn apply_deferred(&mut self, world: &mut World) {
         self.s.apply_deferred(world);
     }
@@ -444,6 +453,11 @@ where
         unsafe { self.b.run_raw(data, world) }
     }
 
+    fn queue_deferred(&mut self, mut world: DeferredWorld) {
+        self.a.queue_deferred(world.reborrow());
+        self.b.queue_deferred(world.reborrow());
+    }
+
     fn apply_deferred(&mut self, world: &mut World) {
         self.a.apply_deferred(world);
         self.b.apply_deferred(world);
@@ -528,6 +542,10 @@ where
     ) -> Result<Self::Output, SystemError> {
         let data = unsafe { self.s.run_raw(input, world)? };
         Ok((self.f)(data))
+    }
+
+    fn queue_deferred(&mut self, world: DeferredWorld) {
+        self.s.queue_deferred(world);
     }
 
     fn apply_deferred(&mut self, world: &mut World) {
@@ -627,6 +645,10 @@ where
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError> {
         unsafe { self.s.run_raw(input, world) }
+    }
+
+    fn queue_deferred(&mut self, world: DeferredWorld) {
+        self.s.queue_deferred(world);
     }
 
     fn apply_deferred(&mut self, world: &mut World) {

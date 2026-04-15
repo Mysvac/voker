@@ -72,6 +72,7 @@ impl Manifest {
         #[inline(always)]
         const fn cold_path() {}
 
+        // Obtain the file path and modification time.
         fn manifest_meta() -> (PathBuf, SystemTime) {
             let mut path = env::var_os("CARGO_MANIFEST_DIR")
                 .map(PathBuf::from)
@@ -87,6 +88,7 @@ impl Manifest {
             (path, modified_time)
         }
 
+        // Read `cargo.toml`
         fn read_manifest(path: &Path) -> Document<Box<str>> {
             std::fs::read_to_string(path)
                 .map(String::into_boxed_str)
@@ -105,6 +107,8 @@ impl Manifest {
             return func(manifest);
         }
 
+        // We assume that the content of files
+        // usually does not become invalid.
         cold_path();
         drop(manifests);
 

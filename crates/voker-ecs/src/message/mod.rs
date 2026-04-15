@@ -1,59 +1,90 @@
 //! Message passing primitives for ECS systems.
 //!
-//! This module provides a buffered message pipeline.
+//! This module implements a compact, double-buffered message pipeline used to
+//! decouple producers and consumers inside the scheduler. Messages are stored in
+//! `MessageQueue<T>` resources and rotated by the `Messages` registry so that
+//! writers and readers observe a stable view without unbounded buffering.
 //!
-//! # Important Types
+//! # Key Types
 //!
-//! - [`Message`]: marker trait for payload types.
-//! - [`Messages<M>`]: double-buffered resource storage for one message type.
-//! - [`MessageReader<M>`]: read unread messages in systems.
-//! - [`MessageMutator<M>`]: mutate unread messages in systems.
-//! - [`MessageWriter<M>`]: append messages in systems.
-//! - [`MessageId<M>`]: stable id value for correlation in one message stream.
-//! - [`MessageCursor<M>`]: per-system read position used by reader/mutator params.
-//! - [`MessageRegistry`]: global registry that rotates all message resources in sync.
+//! - [`Message`]: marker trait for payload types derived by `Message` proc-macro.
+//! - [`MessageQueue<M>`]: the double-buffered resource storing messages for `M`.
+//! - [`MessageWriter<M>`]: system parameter for appending messages to the write buffer.
+//! - [`MessageReader<M>`]: system parameter for reading unread messages from the read buffer.
+//! - [`MessageMutator<M>`]: system parameter for mutating unread messages in place.
+//! - [`MessageId`]: compact identifier assigned to each registered message type.
+//! - [`Messages`]: global registry holding metadata for all registered message types
+//!   and rotating their queues in sync.
 //!
-//! # Lifecycle
+//! # Registration & Lifecycle
 //!
-//! Each [`Messages<M>`] resource uses two internal sequences:
-//! - an older sequence (`messages_a`),
-//! - a newer sequence (`messages_b`).
+//! To use a message type `T` you must register it with the world (usually at
+//! startup) via `World::register_message::<T>()`. Registration ensures the
+//! underlying `MessageQueue<T>` resource exists and records a `MessageId` in the
+//! `Messages` registry.
 //!
-//! Writers append into the newer sequence. When [`MessageRegistry::run_updates`] (or
-//! [`World::update_messages`]) runs, the sequences are swapped and the new write
-//! sequence is cleared. This gives readers one additional update to observe recent
-//! messages while still keeping memory bounded.
+//! Writers append new messages to the write buffer. After a frame/update, call
+//! `World::update_messages()` (or allow the schedule plugin to do it) to rotate
+//! every registered `MessageQueue<T>`: the write buffer becomes the new read
+//! buffer and the old read buffer is cleared. This guarantees that messages
+//! written during one update are visible to readers in the following update,
+//! while keeping memory usage bounded.
 //!
 //! # Typical Flow
 //!
-//! 1. Register message type with [`World::register_message`].
-//! 2. Write messages through [`MessageWriter`] or [`World::write_message`].
-//! 3. Consume unread messages through [`MessageReader`] or [`MessageMutator`].
-//! 4. Call [`World::update_messages`] once per update to rotate buffers.
+//! 1. `world.register_message::<T>()` to create the `MessageQueue<T>` resource.
+//! 2. In producer systems use `MessageWriter<T>` to append messages.
+//! 3. In consumer systems use `MessageReader<T>` / `MessageMutator<T>` to consume.
+//! 4. Call `world.update_messages()` once per update to rotate buffers.
 //!
-//! [`World::write_message`]: crate::world::World::write_message
-//! [`World::update_messages`]: crate::world::World::update_messages
-//! [`World::register_message`]: crate::world::World::register_message
+//! # Examples
+//!
+//! See the crate README for high-level examples. A minimal usage pattern:
+//!
+//! ```no_run
+//! use voker_ecs::prelude::*;
+//! use voker_ecs_derive::Message;
+//!
+//! #[derive(Message)]
+//! struct EventA { value: u32 }
+//!
+//! fn producer(mut writer: MessageWriter<EventA>) {
+//!     writer.write(EventA { value: 100 });
+//! }
+//!
+//! fn consumer(mut reader: MessageReader<EventA>) {
+//!     for m in reader.read() {
+//!         let _ = m.value;
+//!     }
+//! }
+//!
+//! // At startup:
+//! // world.register_message::<EventA>();
+//! // After running systems each frame: world.update_messages();
+//! ```
 
 // -----------------------------------------------------------------------------
 // Modules
 
 mod ident;
 mod iterators;
+mod message;
 mod messages;
 mod mutator;
+mod queue;
 mod reader;
-mod registry;
 mod writer;
+
+pub use ident::{MessageId, MessageKey};
+pub use message::Message;
+pub use messages::{MessageMeta, Messages};
 
 pub use voker_ecs_derive::Message;
 
-pub use ident::{Message, MessageId};
-pub use iterators::{MessageCursor, MessageIdIter};
-pub use iterators::{MessageIterator, MessageWithIdIterator};
-pub use iterators::{MessageMutIterator, MessageMutWithIdIterator};
-pub use messages::Messages;
+pub use iterators::{MessageCursor, MessageKeyIter};
+pub use iterators::{MessageIterator, MessageWithKeyIter};
+pub use iterators::{MessageMutIterator, MessageMutWithKeyIter};
 pub use mutator::MessageMutator;
+pub use queue::MessageQueue;
 pub use reader::MessageReader;
-pub use registry::MessageRegistry;
 pub use writer::MessageWriter;

@@ -10,6 +10,8 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod bundle;
 mod component;
+mod entity_event;
+mod event;
 mod game_error;
 mod message;
 mod path;
@@ -167,8 +169,11 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// ## Field Attributes For Entity Mapping
 ///
 /// - `#[entities]` on fields: include that field in generated `map_entities`.
-/// - `#[relationship]` on one struct field: marks the relationship payload field.
-#[proc_macro_derive(Component, attributes(component, relationship, relationship_target))]
+/// - `#[related]` on one struct field: marks the relationship payload field.
+#[proc_macro_derive(
+    Component,
+    attributes(component, relationship, relationship_target, related)
+)]
 pub fn derive_component(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     component::impl_derive_component(ast)
@@ -485,4 +490,64 @@ pub fn derive_query_data(input: TokenStream) -> TokenStream {
 pub fn derive_system_param(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     system_param::impl_derive_system_param(ast)
+}
+
+/// Derives the `Event` trait implementation.
+///
+/// ```ignore
+/// use voker_ecs::derive::Event;
+///
+/// /// Defaults to GlobalTrigger.
+/// #[derive(Event)]
+/// struct A;
+///
+/// /// Custom trigger.
+/// #[derive(Event)]
+/// #[event(trigger = CustomTrigger)]
+/// struct B;
+///
+/// /// Custom trigger with lifetime.
+/// #[derive(Event)]
+/// #[event(trigger = TriggerWithLifetime<'a>)]
+/// struct C;
+/// ```
+#[proc_macro_derive(Event, attributes(event))]
+pub fn derive_event(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    event::impl_derive_event(ast)
+}
+
+/// Derives the `EntityEvent` trait implementation.
+///
+/// ```ignore
+/// use voker_ecs::derive::Event;
+///
+/// #[derive(EntityEvent)]
+/// struct A(Entity);
+///
+/// #[derive(EntityEvent)]
+/// struct B {
+///     /// Explicitly specify entity field.
+///     #[event_target]
+///     target: Entity,
+/// }
+///
+/// /// Custom entity trigger.
+/// #[derive(EntityEvent)]
+/// #[entity_event(trigger = CustomTrigger)]
+/// struct A(Entity);
+///
+/// #[derive(EntityEvent)]
+/// /// Enable propagation, which defaults to using the ChildOf component
+/// #[entity_event(propagate)]
+/// /// Enable propagation using the given Traversal implementation
+/// #[entity_event(propagate = &'static ChildOf)]
+/// /// Always propagate
+/// #[entity_event(auto_propagate)]
+/// struct A(Entity);
+/// ```
+#[proc_macro_derive(EntityEvent, attributes(entity_event, event_target))]
+pub fn derive_entity_event(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    entity_event::impl_derive_entity_event(ast)
 }

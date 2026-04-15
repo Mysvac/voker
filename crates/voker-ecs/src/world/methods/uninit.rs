@@ -4,13 +4,21 @@ use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{EntityMut, World};
 
 impl World {
+    /// Spawn a new entity with uninitialized component data.
+    ///
+    /// # Safety
+    /// The spawned entity's component data is uninitialized.
+    /// Accessing component data before initialization is undefined behavior.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub unsafe fn spawn_uninit(&mut self, arche_id: ArcheId) -> EntityMut<'_> {
         let caller = DebugLocation::caller();
         unsafe { self.spawn_uninit_with_caller(arche_id, caller) }
     }
 
-    pub unsafe fn spawn_uninit_with_caller(
+    /// # Safety
+    /// The spawned entity's component data is uninitialized.
+    /// Accessing component data before initialization is undefined behavior.
+    pub(crate) unsafe fn spawn_uninit_with_caller(
         &mut self,
         arche_id: ArcheId,
         caller: DebugLocation,

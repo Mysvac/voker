@@ -47,7 +47,8 @@ impl World {
 
         if old.is_some() {
             log::warn!(
-                "Schedule `{label:?}` was inserted during a call to `World::schedule_scope`: its value has been overwritten"
+                "Schedule `{label:?}` was inserted during a call to\
+                `World::schedule_scope`: its value has been overwritten"
             );
         }
 

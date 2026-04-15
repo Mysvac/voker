@@ -206,8 +206,11 @@ impl RawCommandQueue {
     /// - The internal pointers must be valid.
     #[inline]
     pub unsafe fn append(&mut self, other: &mut Self) {
-        unsafe {
-            self.bytes.as_mut().append(other.bytes.as_mut());
+        if self.bytes != other.bytes {
+            unsafe {
+                self.bytes.as_mut().append(other.bytes.as_mut());
+                *other.cursor.as_mut() = 0;
+            }
         }
     }
 }

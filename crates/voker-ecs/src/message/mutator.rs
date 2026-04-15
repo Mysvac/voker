@@ -1,6 +1,6 @@
 use crate::borrow::ResMut;
-use crate::message::{Message, MessageCursor, Messages};
-use crate::message::{MessageMutIterator, MessageMutWithIdIterator};
+use crate::message::{Message, MessageCursor, MessageQueue};
+use crate::message::{MessageMutIterator, MessageMutWithKeyIter};
 use crate::system::{AccessTable, Local, SystemParam, SystemParamError};
 
 /// Mutable reader parameter for consuming and editing unread messages of type `M`.
@@ -29,7 +29,7 @@ use crate::system::{AccessTable, Local, SystemParam, SystemParamError};
 /// ```
 pub struct MessageMutator<'w, 's, M: Message> {
     cursor: Local<'s, MessageCursor<M>>,
-    messages: ResMut<'w, Messages<M>>,
+    messages: ResMut<'w, MessageQueue<M>>,
 }
 
 impl<'w, 's, M: Message> MessageMutator<'w, 's, M> {
@@ -41,7 +41,7 @@ impl<'w, 's, M: Message> MessageMutator<'w, 's, M> {
     }
 
     /// Returns mutable unread messages together with their ids.
-    pub fn read_with_id(&mut self) -> MessageMutWithIdIterator<'_, M> {
+    pub fn read_with_id(&mut self) -> MessageMutWithKeyIter<'_, M> {
         self.cursor.read_mut_with_id(&mut self.messages)
     }
 
@@ -63,7 +63,7 @@ impl<'w, 's, M: Message> MessageMutator<'w, 's, M> {
 
 type InternalParam<M> = (
     Local<'static, MessageCursor<M>>,
-    ResMut<'static, Messages<M>>,
+    ResMut<'static, MessageQueue<M>>,
 );
 
 // SAFETY: Delegates state, access declaration, and value fetching to tuple param impl.

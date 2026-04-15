@@ -3,7 +3,9 @@
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
 use crate::error::{ErrorContext, ErrorHandler, GameError, IntoGameError, Severity};
-use crate::message::{Message, Messages};
+use crate::event::Event;
+use crate::message::{Message, MessageQueue};
+use crate::observer::{IntoEntityObserver, IntoObserver};
 use crate::prelude::ScheduleLabel;
 use crate::resource::Resource;
 use crate::system::{IntoSystem, SystemId, SystemInput};
@@ -179,6 +181,24 @@ where
 // -----------------------------------------------------------------------------
 // pre-defined Command
 
+/// A [`Command`] that spawns a empty entity.
+#[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+pub fn spawn_empty() -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| {
+        world.spawn_empty_with_caller(caller);
+    }
+}
+
+/// A [`Command`] that spawns a empty entity.
+#[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+pub fn spawn_empty_at(entity: Entity) -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| world.spawn_empty_at_with_caller(entity, caller).err()
+}
+
 /// A [`Command`] that spawns a new entity from a [`Bundle`].
 #[inline]
 #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
@@ -348,7 +368,43 @@ pub fn run_schedule(label: impl ScheduleLabel) -> impl Command {
 #[inline]
 pub fn write_message<M: Message>(message: M) -> impl Command {
     move |world: &mut World| {
-        world.resource_mut::<Messages<M>>().write(message);
+        world.resource_mut::<MessageQueue<M>>().write(message);
+    }
+}
+
+/// Triggers the given [`Event`], which will run any [`Observer`]s watching for it.
+///
+/// [`Observer`]: crate::observer::Observer
+#[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+pub fn trigger<'a, E: Event<Trigger<'a>: Default>>(mut event: E) -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| {
+        let mut trigger = <E::Trigger<'_> as Default>::default();
+        world.trigger_with_caller(&mut event, &mut trigger, caller);
+    }
+}
+
+/// Triggers the given [`Event`] using the given [`Trigger`], which will run any [`Observer`]s watching for it.
+///
+/// [`Trigger`]: crate::event::Trigger
+/// [`Observer`]: crate::observer::Observer
+#[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+pub fn trigger_with<E: Event<Trigger<'static>: Send + Sync>>(
+    mut event: E,
+    mut trigger: E::Trigger<'static>,
+) -> impl Command {
+    let caller = DebugLocation::caller();
+    move |world: &mut World| {
+        world.trigger_with_caller(&mut event, &mut trigger, caller);
+    }
+}
+
+#[inline]
+pub fn add_observer<M>(observer: impl IntoObserver<M>) -> impl Command {
+    move |world: &mut World| {
+        world.add_observer(observer);
     }
 }
 
@@ -412,5 +468,22 @@ pub fn clear() -> impl EntityCommand {
     let caller = DebugLocation::caller();
     move |mut entity: EntityOwned| {
         entity.clear_with_caller(caller);
+    }
+}
+
+/// An [`EntityCommand`] that clears all components from an entity.
+#[inline]
+#[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+pub fn clone(linked_clone: bool) -> impl EntityCommand {
+    let caller = DebugLocation::caller();
+    move |mut entity: EntityOwned| {
+        entity.clone_with_caller(linked_clone, caller);
+    }
+}
+
+#[inline]
+pub fn observe<M>(observer: impl IntoEntityObserver<M>) -> impl EntityCommand {
+    move |mut entity: EntityOwned| {
+        entity.observe(observer);
     }
 }

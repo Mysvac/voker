@@ -7,13 +7,14 @@ use super::{Command, CommandQueue, EntityCommand};
 use crate::bundle::Bundle;
 use crate::entity::{Entity, FetchError};
 use crate::error::ErrorHandler;
+use crate::event::Event;
 use crate::message::Message;
+use crate::observer::{IntoEntityObserver, IntoObserver};
 use crate::prelude::{Resource, ScheduleLabel};
 use crate::system::{AccessTable, SystemParam, SystemParamError};
 use crate::system::{IntoSystem, SystemId, SystemInput, SystemMeta};
 use crate::tick::Tick;
-use crate::utils::DebugLocation;
-use crate::world::{FromWorld, UnsafeWorld, World, WorldId};
+use crate::world::{DeferredWorld, FromWorld, UnsafeWorld, World, WorldId};
 
 // -----------------------------------------------------------------------------
 // Commands
@@ -111,6 +112,13 @@ unsafe impl SystemParam for Commands<'_, '_> {
         _this_run: Tick,
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         Ok(Commands::new(unsafe { world.read_only() }, state))
+    }
+
+    fn queue_deferred(state: &mut Self::State, _: &SystemMeta, mut world: DeferredWorld) {
+        let mut commands = world.commands();
+        unsafe {
+            commands.queue.append(&mut state.raw());
+        }
     }
 
     fn apply_deferred(state: &mut Self::State, _: &SystemMeta, world: &mut World) {
@@ -237,6 +245,19 @@ impl<'w, 's> Commands<'w, 's> {
         }
     }
 
+    /// Spawn a empty entity.
+    ///
+    /// This command is faster then `spawn(())`.`
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
+        let entity = self.world.alloc_entity();
+
+        self.push(super::spawn_empty_at(entity));
+
+        self.with_entity(entity)
+    }
+
     /// Enqueues a spawn operation and returns the corresponding [`EntityCommands`].
     ///
     /// To spawn many entities with the same combination of components,
@@ -244,12 +265,9 @@ impl<'w, 's> Commands<'w, 's> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
-        let caller = DebugLocation::caller();
         let entity = self.world.alloc_entity();
 
-        self.push(move |world: &mut World| {
-            world.spawn_at_with_caller(bundle, entity, caller).map(|_| {})
-        });
+        self.push(super::spawn_at(bundle, entity));
 
         self.with_entity(entity)
     }
@@ -395,9 +413,33 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Writes an arbitrary [`Message`].
     #[inline]
-    pub fn write_message<M: Message>(&mut self, message: M) -> &mut Self {
+    pub fn write_message<M: Message>(&mut self, message: M) {
         self.push(super::write_message(message));
-        self
+    }
+
+    /// Triggers the given [`Event`], which will run any [`Observer`]s watching for it.
+    ///
+    /// [`Observer`]: crate::observer::Observer
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn trigger<'a>(&mut self, event: impl Event<Trigger<'a>: Default>) {
+        self.push(super::trigger(event));
+    }
+
+    /// Triggers the given [`Event`] using the given [`Trigger`], which will run any [`Observer`]s watching for it.
+    ///
+    /// [`Trigger`]: crate::event::Trigger
+    /// [`Observer`]: crate::observer::Observer
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn trigger_with<E: Event<Trigger<'static>: Send + Sync>>(
+        &mut self,
+        event: E,
+        trigger: E::Trigger<'static>,
+    ) {
+        self.push(super::trigger_with(event, trigger));
+    }
+
+    pub fn add_observer<M>(&mut self, observer: impl IntoObserver<M>) {
+        self.push(super::add_observer(observer));
     }
 }
 
@@ -538,5 +580,31 @@ impl<'a> EntityCommands<'a> {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn(mut self) {
         self.commands.try_despawn(self.entity);
+    }
+
+    #[inline]
+    pub fn observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
+        self.push(super::observe(observer));
+        self
+    }
+
+    #[inline]
+    pub fn try_observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
+        self.push_silenced(super::observe(observer));
+        self
+    }
+
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn clone(&mut self, linked_clone: bool) -> &mut Self {
+        self.push(super::clone(linked_clone));
+        self
+    }
+
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn try_clone(&mut self, linked_clone: bool) -> &mut Self {
+        self.push_silenced(super::clone(linked_clone));
+        self
     }
 }

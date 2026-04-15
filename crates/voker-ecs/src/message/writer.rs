@@ -1,10 +1,10 @@
 use crate::borrow::ResMut;
-use crate::message::{Message, MessageId, MessageIdIter, Messages};
+use crate::message::{Message, MessageKey, MessageKeyIter, MessageQueue};
 use crate::system::{SystemParam, SystemParamError};
 
 /// System parameter that appends messages of type `M`.
 ///
-/// Messages are appended into the current write sequence of [`Messages<M>`]
+/// MessageQueue are appended into the current write sequence of [`MessageQueue<M>`]
 /// and become readable according to message lifecycle rotation.
 ///
 /// # Example
@@ -28,13 +28,13 @@ use crate::system::{SystemParam, SystemParamError};
 /// }
 /// ```
 pub struct MessageWriter<'w, M: Message> {
-    messages: ResMut<'w, Messages<M>>,
+    messages: ResMut<'w, MessageQueue<M>>,
 }
 
 impl<'w, M: Message> MessageWriter<'w, M> {
     /// Writes one message through it's default value and returns its generated id.
     #[inline]
-    pub fn write_default(&mut self) -> MessageId<M>
+    pub fn write_default(&mut self) -> MessageKey<M>
     where
         M: Default,
     {
@@ -43,20 +43,20 @@ impl<'w, M: Message> MessageWriter<'w, M> {
 
     /// Writes one message and returns its generated id.
     #[inline]
-    pub fn write(&mut self, message: M) -> MessageId<M> {
+    pub fn write(&mut self, message: M) -> MessageKey<M> {
         self.messages.write(message)
     }
 
     /// Writes a batch of messages and returns the generated id range.
     #[inline]
-    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageIdIter<M> {
+    pub fn write_batch(&mut self, messages: impl IntoIterator<Item = M>) -> MessageKeyIter<M> {
         self.messages.write_batch(messages)
     }
 }
 
-type InternalParam<M> = ResMut<'static, Messages<M>>;
+type InternalParam<M> = ResMut<'static, MessageQueue<M>>;
 
-// SAFETY: Delegates state, access declaration, and value fetching to `ResMut<Messages<M>>`.
+// SAFETY: Delegates state, access declaration, and value fetching to `ResMut<MessageQueue<M>>`.
 unsafe impl<M: Message> SystemParam for MessageWriter<'_, M> {
     type State = <InternalParam<M> as SystemParam>::State;
     type Item<'world, 'state> = MessageWriter<'world, M>;

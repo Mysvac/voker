@@ -4,7 +4,8 @@ use crate::borrow::{NonSendMut, ResMut};
 use crate::command::Commands;
 use crate::component::HookContext;
 use crate::entity::{Entity, FetchError};
-use crate::message::{Message, MessageId, MessageIdIter};
+use crate::event::{Event, EventId};
+use crate::message::{Message, MessageKey, MessageKeyIter};
 use crate::prelude::{Component, ComponentId, Resource};
 use crate::query::{Query, QueryData, QueryFilter};
 use crate::utils::DebugLocation;
@@ -127,7 +128,7 @@ impl<'w> DeferredWorld<'w> {
     /// See [`World::entities_and_commands`] for the non-deferred version.
     #[inline]
     pub fn entities_and_commands(&mut self) -> (EntityFetcher<'_>, Commands<'_, '_>) {
-        unsafe { self.0.data_mut().entities_and_commands() }
+        self.world_mut().entities_and_commands()
     }
 
     /// Returns mutable access to a `Send` resource if it exists.
@@ -145,6 +146,12 @@ impl<'w> DeferredWorld<'w> {
     }
 
     /// Returns mutable access to a non-`Send` resource if it exists.
+    ///
+    /// # Panics
+    /// Panics if not called on the main thread.
+    /// For system param, consider mark as [`NonSendMarker`].
+    ///
+    /// [`NonSendMarker`]: crate::system::NonSendMarker
     #[inline]
     pub fn get_non_send_mut<R: Resource>(&mut self) -> Option<NonSendMut<'_, R>> {
         self.world_mut().get_non_send_mut::<R>()
@@ -153,6 +160,12 @@ impl<'w> DeferredWorld<'w> {
     /// Returns mutable access to a non-`Send` resource.
     ///
     /// Panics if the resource is not present.
+    ///
+    /// # Panics
+    /// Panics if not called on the main thread.
+    /// For system param, consider mark as [`NonSendMarker`].
+    ///
+    /// [`NonSendMarker`]: crate::system::NonSendMarker
     #[inline]
     pub fn non_send_mut<R: Resource>(&mut self) -> NonSendMut<'_, R> {
         self.world_mut().non_send_mut::<R>()
@@ -163,7 +176,7 @@ impl<'w> DeferredWorld<'w> {
     /// Returns `None` and logs an error when the message type is not
     /// registered. Register first via `World::register_message`.
     #[inline]
-    pub fn write_message<M: Message>(&mut self, message: M) -> Option<MessageId<M>> {
+    pub fn write_message<M: Message>(&mut self, message: M) -> Option<MessageKey<M>> {
         self.world_mut().write_message(message)
     }
 
@@ -175,7 +188,7 @@ impl<'w> DeferredWorld<'w> {
     pub fn write_message_batch<M: Message>(
         &mut self,
         messages: impl IntoIterator<Item = M>,
-    ) -> Option<MessageIdIter<M>> {
+    ) -> Option<MessageKeyIter<M>> {
         self.world_mut().write_message_batch(messages)
     }
 
@@ -199,6 +212,15 @@ impl<'w> DeferredWorld<'w> {
         self.world_mut().try_query_with::<D, F>()
     }
 
+    /// Delay-triggered specified implementation.
+    ///
+    /// Note that events will be pushed to the command queue and will
+    /// **not** be executed immediately.
+    #[inline]
+    pub fn trigger<'a>(&mut self, event: impl Event<Trigger<'a>: Default>) {
+        self.commands().trigger(event);
+    }
+
     /// Mutates component `T` on `entity` while preserving hook semantics.
     ///
     /// This mirrors [`World::modify_component`] for deferred execution paths.
@@ -209,16 +231,6 @@ impl<'w> DeferredWorld<'w> {
         f: impl FnOnce(&mut T) -> R,
     ) -> Result<Option<R>, FetchError> {
         let caller = DebugLocation::caller();
-        self.world_mut().modify_component_with_caller(entity, caller, f)
-    }
-
-    #[inline]
-    pub(crate) fn modify_component_with_caller<T: Component, R>(
-        &mut self,
-        entity: Entity,
-        caller: DebugLocation,
-        f: impl FnOnce(&mut T) -> R,
-    ) -> Result<Option<R>, FetchError> {
         self.world_mut().modify_component_with_caller(entity, caller, f)
     }
 }
@@ -245,12 +257,26 @@ macro_rules! define_trigger {
     };
 }
 
-#[expect(unused, reason = "todo")]
 impl<'w> DeferredWorld<'w> {
-    define_trigger!(trigger_on_add, on_add);
-    define_trigger!(trigger_on_clone, on_clone);
+    // define_trigger!(trigger_on_add, on_add);
+    // define_trigger!(trigger_on_clone, on_clone);
     define_trigger!(trigger_on_insert, on_insert);
-    define_trigger!(trigger_on_remove, on_remove);
+    // define_trigger!(trigger_on_remove, on_remove);
     define_trigger!(trigger_on_discard, on_discard);
-    define_trigger!(trigger_on_despawn, on_despawn);
+    // define_trigger!(trigger_on_despawn, on_despawn);
+
+    /// # Safety
+    /// Caller ensures that the `event_id` is correct ID of given Event.
+    #[inline]
+    pub(crate) unsafe fn trigger_raw<'a, E: Event>(
+        &mut self,
+        event_id: EventId,
+        event: &mut E,
+        trigger: &mut E::Trigger<'a>,
+        caller: DebugLocation,
+    ) {
+        unsafe {
+            self.world_mut().trigger_raw(event_id, event, trigger, caller);
+        }
+    }
 }

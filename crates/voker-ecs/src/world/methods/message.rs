@@ -1,26 +1,31 @@
-use crate::message::{Message, MessageId, MessageIdIter, Messages};
+use core::any::TypeId;
+
+use crate::message::{Message, MessageId, MessageKey};
+use crate::message::{MessageKeyIter, MessageQueue, Messages};
 use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
     /// Registers a message type in the global message registry.
-    pub fn register_message<T: Message>(&mut self) {
-        self.message_registry.register_message::<T>();
-        self.init_resource::<Messages<T>>();
+    pub fn register_message<M: Message>(&mut self) -> MessageId {
+        self.init_resource::<MessageQueue<M>>();
+        self.messages.register::<M>(&mut self.resources)
     }
 
-    /// Deregisters a message type from the global message registry.
-    pub fn unregister_message<T: Message>(&mut self) {
-        self.message_registry.unregister_message::<T>();
-        self.drop_resource::<Messages<T>>();
+    /// Looks up a message ID by its TypeId.
+    pub fn get_message_id<M: Message>(&self) -> Option<MessageId> {
+        self.messages.get_id(TypeId::of::<M>())
     }
 
     /// Writes a [`Message`].
     ///
-    /// This method returns the [`MessageId`] of the written `message`,
+    /// This method returns the [`MessageKey`] of the written `message`,
     /// or [`None`] if the `message` could not be written.
-    pub fn write_message<M: Message>(&mut self, message: M) -> Option<MessageId<M>> {
-        let Some(mut msgs) = self.get_resource_mut::<Messages<M>>() else {
+    ///
+    /// # Panics
+    /// Panics if the [`Message`] is unregistered.
+    pub fn write_message<M: Message>(&mut self, message: M) -> Option<MessageKey<M>> {
+        let Some(mut msgs) = self.get_resource_mut::<MessageQueue<M>>() else {
             unregistered_message(DebugName::type_name::<M>());
             return None;
         };
@@ -29,17 +34,24 @@ impl World {
 
     /// Writes a batch of [`Message`]s from an iterator.
     ///
-    /// This method returns the [IDs](`MessageId`) of the written `messages`,
+    /// This method returns the [IDs](`MessageKey`) of the written `messages`,
     /// or [`None`] if the `events` could not be written.
+    ///
+    /// # Panics
+    /// Panics if the [`Message`] is unregistered.
     pub fn write_message_batch<M: Message>(
         &mut self,
         messages: impl IntoIterator<Item = M>,
-    ) -> Option<MessageIdIter<M>> {
-        let Some(mut msgs) = self.get_resource_mut::<Messages<M>>() else {
+    ) -> Option<MessageKeyIter<M>> {
+        let Some(mut msgs) = self.get_resource_mut::<MessageQueue<M>>() else {
             unregistered_message(DebugName::type_name::<M>());
             return None;
         };
         Some(msgs.write_batch(messages))
+    }
+
+    pub fn update_messages(this: &mut Self) {
+        Messages::run_updates(this);
     }
 }
 

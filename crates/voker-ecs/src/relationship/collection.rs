@@ -283,8 +283,8 @@ impl RelationshipSourceSet for Vec<Entity> {
     }
 
     fn remove(&mut self, entity: Entity) -> bool {
-        let mut slice = self.as_slice().iter();
-        match slice.position(|e| *e == entity) {
+        use crate::utils::position_entity;
+        match position_entity(entity, self.as_slice()) {
             Some(index) => {
                 self.remove(index);
                 true

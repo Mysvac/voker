@@ -7,6 +7,7 @@
 // Modules
 
 mod clear;
+mod clone;
 mod despawn;
 mod fetch_trait;
 mod get_trait;
@@ -28,6 +29,7 @@ use voker_ptr::Ptr;
 use crate::archetype::Archetype;
 use crate::borrow::{UntypedMut, UntypedRef};
 use crate::entity::{Entity, EntityLocation};
+use crate::observer::IntoEntityObserver;
 use crate::prelude::ComponentId;
 use crate::tick::Tick;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation};
@@ -668,7 +670,7 @@ impl<'a> EntityOwned<'a> {
     /// this function.
     ///
     /// # Panics
-    /// If the entity has been despawned while this `EntityWorldMut` is still alive.
+    /// If the entity has been despawned while this `EntityOwned` is still alive.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn location(&self) -> EntityLocation {
@@ -684,7 +686,7 @@ impl<'a> EntityOwned<'a> {
     /// this function.
     ///
     /// # Panics
-    /// If the entity has been despawned while this `EntityWorldMut` is still alive.
+    /// If the entity has been despawned while this `EntityOwned` is still alive.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn archetype(&self) -> &Archetype {
@@ -755,5 +757,22 @@ impl<'a> EntityOwned<'a> {
         unsafe {
             unsafe_world.full_mut().flush();
         }
+    }
+
+    /// Add an observer for the current entity.
+    ///
+    /// # Panics
+    /// If the entity has been despawned while this `EntityOwned` is still alive.
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
+        self.assert_is_spawned_with_caller(DebugLocation::caller());
+
+        let world = unsafe { self.world.full_mut() };
+        let observer = observer.into_observer_for_entity(self.entity, world);
+        world.register_observer(observer);
+        self.relocate();
+
+        self
     }
 }

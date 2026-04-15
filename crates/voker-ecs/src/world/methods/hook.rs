@@ -1,4 +1,5 @@
 use crate::component::{Component, ComponentHooks};
+use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
@@ -19,7 +20,7 @@ impl World {
             panic! {
                 "ComponentHook cannot be modified if the component\
                 already exists in an archetype {} .",
-                core::any::type_name::<C>()
+                DebugName::type_name::<C>()
             }
         }
         unsafe { self.components.get_unchecked_mut(id).hooks_mut() }

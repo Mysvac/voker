@@ -2,6 +2,9 @@ use crate::component::ComponentId;
 use crate::entity::{Entity, StorageId};
 use crate::tick::Tick;
 
+const MULTI_THREADED: bool = voker_task::cfg::multi_threaded!();
+const THRESHOLD: usize = 64_000;
+
 /// A SIMD-optimized `contains` for `ComponentId`.
 ///
 /// See: https://godbolt.org/
@@ -34,9 +37,36 @@ pub(crate) fn contains_storage_id(id: StorageId, slice: &[StorageId]) -> bool {
 /// but it is still faster than directly contains(&entity).
 #[inline(always)]
 pub(crate) fn contains_entity(id: Entity, slice: &[Entity]) -> bool {
+    #[inline(never)]
+    fn par_contains(id: Entity, slice: &[Entity]) -> bool {
+        use voker_task::ParallelSlice;
+        slice.par_contains(&id)
+    }
+
+    if MULTI_THREADED && slice.len() > THRESHOLD {
+        return par_contains(id, slice);
+    }
+
     let val = unsafe { core::mem::transmute::<Entity, u64>(id) };
     let arr = unsafe { core::mem::transmute::<&[Entity], &[u64]>(slice) };
     arr.contains(&val)
+}
+
+#[inline(always)]
+pub(crate) fn position_entity(id: Entity, slice: &[Entity]) -> Option<usize> {
+    #[inline(never)]
+    fn par_position(id: Entity, slice: &[Entity]) -> Option<usize> {
+        use voker_task::ParallelSlice;
+        slice.par_position(|&e| e == id)
+    }
+
+    if MULTI_THREADED && slice.len() > THRESHOLD {
+        return par_position(id, slice);
+    }
+
+    let val = unsafe { core::mem::transmute::<Entity, u64>(id) };
+    let arr = unsafe { core::mem::transmute::<&[Entity], &[u64]>(slice) };
+    arr.iter().position(|&e| e == val)
 }
 
 /// Clamps a tick slice, optimized for bulk processing.

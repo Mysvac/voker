@@ -1,171 +1,160 @@
 use core::cmp::Ordering;
 use core::fmt::{Debug, Display};
-use core::hash::{Hash, Hasher};
+use core::hash::Hash;
 use core::marker::PhantomData;
 
+use voker_utils::num::NonMaxU32;
+
+use super::Message;
 use crate::utils::DebugName;
-
-// -----------------------------------------------------------------------------
-// Message
-
-/// Marker trait for ECS message payload types.
-///
-/// A `Message` type is a short-lived payload sent between systems through
-/// [`Messages<T>`]. The trait has no methods: it only encodes bounds required
-/// by message storage and cross-system usage.
-///
-/// For user code, the recommended path is `#[derive(Message)]`.
-///
-/// To participate in automatic lifecycle rotation, register the type with
-/// [`World::register_message`] and run [`World::update_messages`] each update.
-///
-/// # Using Messages In World
-///
-/// ```rust
-/// use voker_ecs::prelude::*;
-///
-/// #[derive(Message)]
-/// struct Collision { /* .. */ }
-///
-/// let mut world = World::alloc();
-/// world.register_message::<Collision>();
-///
-/// world.write_message(Collision { /* .. */ });
-///
-/// world.update_messages();
-/// ```
-///
-/// # Using Messages In Systems
-///
-/// `Message` is consumed through system parameters in three roles:
-/// - [`MessageWriter<T>`]: append new messages.
-/// - [`MessageReader<T>`]: read unread messages immutably.
-/// - [`MessageMutator<T>`]: read unread messages mutably.
-///
-/// `MessageReader` and `MessageMutator` each keep an independent local cursor,
-/// so one system reading messages does not consume them for another system.
-///
-/// ```rust
-/// use voker_ecs::prelude::*;
-///
-/// #[derive(Message)]
-/// struct Damage {
-///     amount: u32,
-/// }
-///
-/// fn emit(mut writer: MessageWriter<Damage>) {
-///     writer.write(Damage { amount: 120 });
-/// }
-///
-/// fn clamp(mut mutator: MessageMutator<Damage>) {
-///     for msg in mutator.read() {
-///         msg.amount = msg.amount.min(100);
-///     }
-/// }
-///
-/// fn log(mut reader: MessageReader<Damage>) {
-///     for msg in reader.read() {
-///         let _ = msg.amount;
-///     }
-/// }
-/// ```
-///
-/// [`Messages<T>`]: crate::message::Messages
-/// [`MessageWriter<T>`]: crate::message::MessageWriter
-/// [`MessageReader<T>`]: crate::message::MessageReader
-/// [`MessageMutator<T>`]: crate::message::MessageMutator
-/// [`World::register_message`]: crate::world::World::register_message
-/// [`World::update_messages`]: crate::world::World::update_messages
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not a message",
-    label = "invalid message",
-    note = "Consider annotating `{Self}` with `#[derive(Message)]`."
-)]
-pub trait Message: Send + Sync + 'static {}
 
 // -----------------------------------------------------------------------------
 // MessageId
 
-/// Identifier for one message in a `Messages<M>` stream.
+/// A unique identifier for a `Message` type within a specific `World`.
+#[derive(Clone, Copy, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct MessageId(NonMaxU32);
+
+impl MessageId {
+    #[inline]
+    pub(crate) const fn new(id: u32) -> Self {
+        Self(NonMaxU32::new(id).expect("too many resources"))
+    }
+
+    /// Creates a new `MessageId` from a usize.
+    ///
+    /// # Panics
+    /// Panics if `id >= u32::MAX`.
+    #[inline(always)]
+    pub const fn without_provenance(id: usize) -> Self {
+        if id >= u32::MAX as usize {
+            voker_utils::cold_path();
+            panic!("MessageId must be < u32::MAX");
+        }
+        unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
+    }
+
+    /// Convert `MessageId` to usize.
+    #[inline(always)]
+    pub const fn index(self) -> usize {
+        self.0.get() as usize
+    }
+}
+
+impl PartialEq for MessageId {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for MessageId {}
+
+impl Hash for MessageId {
+    #[inline(always)]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        // Sparse hashing is optimized for smaller values.
+        // So we use represented values, rather than the underlying bits
+        state.write_u32(self.0.get());
+    }
+}
+
+impl Debug for MessageId {
+    #[inline(always)]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Debug::fmt(&self.0.get(), f)
+    }
+}
+
+impl Display for MessageId {
+    #[inline(always)]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Display::fmt(&self.0.get(), f)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MessageKey
+
+/// Key for one message in a `MessageQueue<M>` stream.
 ///
-/// `MessageId` is backed by a wrapping `usize` counter. It is stable for
+/// `MessageKey` is backed by a wrapping `usize` counter. It is stable for
 /// correlation within the stream (for example, tracking ids returned by
 /// `write_batch`), but callers should avoid treating it as a globally monotonic
 /// timestamp across very long runtimes.
 ///
 /// Ordering is wrap-aware and designed for stream-local comparisons.
-#[repr(transparent)]
-pub struct MessageId<M: Message> {
-    id: usize,
+pub struct MessageKey<M: Message> {
+    index: usize,
     _marker: PhantomData<M>,
 }
 
-impl<M: Message> MessageId<M> {
-    #[inline(always)]
-    pub(super) const fn new(id: usize) -> Self {
-        MessageId {
-            id,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Creates a new `MessageId` from a usize.
-    #[inline(always)]
-    pub const fn without_provenance(id: usize) -> Self {
+impl<M: Message> MessageKey<M> {
+    #[inline]
+    pub(crate) const fn new(index: usize) -> Self {
         Self {
-            id,
+            index,
             _marker: PhantomData,
         }
     }
 
-    /// Returns the raw message index as `usize`.
+    #[inline(always)]
+    pub const fn without_provenance(index: usize) -> Self {
+        Self {
+            index,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Convert `MessageId` to usize.
     #[inline(always)]
     pub const fn index(self) -> usize {
-        self.id
+        self.index
     }
 }
 
-impl<M: Message> Copy for MessageId<M> {}
+impl<M: Message> Copy for MessageKey<M> {}
 
-impl<M: Message> Clone for MessageId<M> {
+impl<M: Message> Clone for MessageKey<M> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<M: Message> Display for MessageId<M> {
+impl<M: Message> Display for MessageKey<M> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         <Self as Debug>::fmt(self, f)
     }
 }
 
-impl<M: Message> Debug for MessageId<M> {
+impl<M: Message> Debug for MessageKey<M> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "message<{}>#{}", DebugName::type_name::<M>(), self.id)
+        write!(f, "message<{}>#{}", DebugName::type_name::<M>(), self.index)
     }
 }
 
-impl<M: Message> PartialEq for MessageId<M> {
+impl<M: Message> PartialEq for MessageKey<M> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.index == other.index
     }
 }
 
-impl<M: Message> Eq for MessageId<M> {}
+impl<M: Message> Eq for MessageKey<M> {}
 
-impl<M: Message> PartialOrd for MessageId<M> {
+impl<M: Message> PartialOrd for MessageKey<M> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<M: Message> Ord for MessageId<M> {
+impl<M: Message> Ord for MessageKey<M> {
     fn cmp(&self, other: &Self) -> Ordering {
         // Non-wrapping difference between two generations after
         // which a signed interpretation becomes negative.
         const DIFF_MAX: usize = usize::MAX >> 1;
 
-        match self.id.wrapping_sub(other.id) {
+        match self.index.wrapping_sub(other.index) {
             0 => Ordering::Equal,
             1..DIFF_MAX => Ordering::Greater,
             _ => Ordering::Less,
@@ -173,8 +162,8 @@ impl<M: Message> Ord for MessageId<M> {
     }
 }
 
-impl<M: Message> Hash for MessageId<M> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_usize(self.id);
+impl<M: Message> Hash for MessageKey<M> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        state.write_usize(self.index);
     }
 }

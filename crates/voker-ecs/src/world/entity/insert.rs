@@ -1,8 +1,11 @@
 use voker_ptr::OwningPtr;
+use voker_utils::vec::FastVec;
 
 use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
 use crate::component::{ComponentWriter, HookContext};
+use crate::event::EntityComponentsTrigger;
+use crate::prelude::ComponentId;
 use crate::utils::{DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
@@ -152,6 +155,8 @@ fn insert_local(
     let bundle = unsafe { world.bundles.get_unchecked(explicit_bundle_id) };
 
     {
+        use crate::event::{DISCARD, Discard};
+
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
@@ -159,6 +164,21 @@ fn insert_local(
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if arche.has_on_discard_observer() {
+            unsafe {
+                world.trigger_raw(
+                    DISCARD,
+                    &mut Discard { entity },
+                    &mut EntityComponentsTrigger {
+                        components: bundle.components(),
+                        old_archetype: Some(arche),
+                        new_archetype: Some(arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     unsafe {
@@ -173,6 +193,8 @@ fn insert_local(
     }
 
     {
+        use crate::event::{INSERT, Insert};
+
         // trigger_on_insert
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         arche.on_insert_hooks().iter().for_each(|&(id, hook)| {
@@ -180,6 +202,21 @@ fn insert_local(
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if arche.has_on_insert_observer() {
+            unsafe {
+                world.trigger_raw(
+                    INSERT,
+                    &mut Insert { entity },
+                    &mut EntityComponentsTrigger {
+                        components: bundle.components(),
+                        old_archetype: Some(arche),
+                        new_archetype: Some(arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     world.flush();
@@ -218,6 +255,8 @@ fn insert_moved(
     let bundle = unsafe { world.bundles.get_unchecked(explicit_bundle_id) };
 
     {
+        use crate::event::{DISCARD, Discard};
+
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         old_arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
@@ -225,6 +264,28 @@ fn insert_moved(
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if old_arche.has_on_discard_observer() {
+            let mut discard: FastVec<ComponentId, 4> = FastVec::new();
+            let data = discard.data();
+            bundle.components().iter().for_each(|&id| {
+                if old_arche.contains_component(id) {
+                    data.push(id);
+                }
+            });
+            unsafe {
+                world.trigger_raw(
+                    DISCARD,
+                    &mut Discard { entity },
+                    &mut EntityComponentsTrigger {
+                        components: data.as_slice(),
+                        old_archetype: Some(old_arche),
+                        new_archetype: Some(new_arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     {
@@ -279,6 +340,8 @@ fn insert_moved(
     }
 
     {
+        use crate::event::{ADD, Add};
+
         // trigger_on_add
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         new_arche.on_add_hooks().iter().for_each(|&(id, hook)| {
@@ -286,9 +349,35 @@ fn insert_moved(
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if old_arche.has_on_add_observer() {
+            let mut discard: FastVec<ComponentId, 4> = FastVec::new();
+            let data = discard.data();
+
+            new_arche.components().iter().for_each(|&id| {
+                if !old_arche.contains_component(id) {
+                    data.push(id);
+                }
+            });
+
+            unsafe {
+                world.trigger_raw(
+                    ADD,
+                    &mut Add { entity },
+                    &mut EntityComponentsTrigger {
+                        components: data.as_slice(),
+                        old_archetype: Some(old_arche),
+                        new_archetype: Some(new_arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     {
+        use crate::event::{INSERT, Insert};
+
         // trigger_on_insert
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         new_arche.on_insert_hooks().iter().for_each(|&(id, hook)| {
@@ -296,6 +385,30 @@ fn insert_moved(
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if old_arche.has_on_insert_observer() {
+            let mut discard: FastVec<ComponentId, 4> = FastVec::new();
+            let data = discard.data();
+
+            new_arche.components().iter().for_each(|&id| {
+                if !old_arche.contains_component(id) || bundle.contains_component(id) {
+                    data.push(id);
+                }
+            });
+
+            unsafe {
+                world.trigger_raw(
+                    INSERT,
+                    &mut Insert { entity },
+                    &mut EntityComponentsTrigger {
+                        components: data.as_slice(),
+                        old_archetype: Some(old_arche),
+                        new_archetype: Some(new_arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     world.flush();

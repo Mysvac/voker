@@ -48,8 +48,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// With `linked_lifecycle = true`, despawning a parent recursively despawns children.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 #[relationship(relationship_target = Children)]
-#[repr(transparent)]
-pub struct ChildOf(#[relationship] pub Entity);
+pub struct ChildOf(#[related] pub Entity);
 
 impl ChildOf {
     /// Returns the parent entity.
@@ -75,7 +74,7 @@ impl FromWorld for ChildOf {
 #[derive(Component, Default, Debug, PartialEq, Eq)]
 #[component(cloner = Children::cloner)]
 #[relationship_target(relationship = ChildOf, linked_lifecycle)]
-pub struct Children(#[relationship] Vec<Entity>);
+pub struct Children(#[related] Vec<Entity>);
 
 impl Children {
     /// A custom component cloner.
@@ -116,6 +115,7 @@ impl Deref for Children {
 
 impl<'w> EntityOwned<'w> {
     /// Spawns a child entity related to this entity with [`ChildOf`].
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn with_child(&mut self, bundle: impl Bundle) -> &mut Self {
         self.with_related::<ChildOf>(bundle)
@@ -123,6 +123,7 @@ impl<'w> EntityOwned<'w> {
 
     /// Spawns child entities related to this entity with [`ChildOf`]
     /// by running a builder closure against a [`RelatedSpawner`].
+    #[inline]
     pub fn with_children(
         &mut self,
         func: impl FnOnce(&mut RelatedSpawner<'_, ChildOf>),
@@ -135,24 +136,28 @@ impl<'w> EntityOwned<'w> {
     }
 
     /// Adds one child to this entity via [`ChildOf`].
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_child(&mut self, child: Entity) -> &mut Self {
         self.add_related::<ChildOf>(child)
     }
 
     /// Adds many children to this entity via [`ChildOf`].
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
         self.insert_related::<ChildOf>(children)
     }
 
     /// Removes one child relationship from this entity.
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_child(&mut self, child: Entity) -> &mut Self {
         self.remove_related::<ChildOf>(&[child])
     }
 
     /// Removes specific child relationships from this entity.
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove_children(&mut self, children: &[Entity]) -> &mut Self {
         self.remove_related::<ChildOf>(children)
@@ -161,6 +166,7 @@ impl<'w> EntityOwned<'w> {
     /// Removes all child relationships from this entity.
     ///
     /// This detaches children but does not despawn child entities.
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn detach_children(&mut self) -> &mut Self {
         self.detach_related::<Children>()
@@ -170,6 +176,7 @@ impl<'w> EntityOwned<'w> {
     ///
     /// This removes child entities entirely (and recursively, because
     /// `Children` enables linked lifecycle).
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_children(&mut self) -> &mut Self {
         self.despawn_related::<Children>()
@@ -178,12 +185,14 @@ impl<'w> EntityOwned<'w> {
 
 impl<'a> EntityCommands<'a> {
     /// Spawns a child entity related to this entity with [`ChildOf`].
+    #[inline]
     pub fn with_child(&mut self, bundle: impl Bundle) -> &mut Self {
         self.with_related::<ChildOf>(bundle)
     }
 
     /// Spawns child entities related to this entity with [`ChildOf`]
     /// by running a builder closure against a [`RelatedSpawnerCommands`].
+    #[inline]
     pub fn with_children(
         &mut self,
         func: impl FnOnce(&mut RelatedSpawnerCommands<'_, ChildOf>),
@@ -192,16 +201,19 @@ impl<'a> EntityCommands<'a> {
     }
 
     /// Adds one child to this entity via [`ChildOf`].
+    #[inline]
     pub fn add_child(&mut self, child: Entity) -> &mut Self {
         self.add_related::<ChildOf>(child)
     }
 
     /// Adds many children to this entity via [`ChildOf`].
+    #[inline]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
         self.insert_related::<ChildOf>(children)
     }
 
     /// Removes specific child relationships from this entity.
+    #[inline]
     pub fn remove_children(&mut self, children: &[Entity]) -> &mut Self {
         self.remove_related::<ChildOf>(children)
     }
@@ -209,6 +221,7 @@ impl<'a> EntityCommands<'a> {
     /// Removes all child relationships from this entity.
     ///
     /// This detaches children but does not despawn child entities.
+    #[inline]
     pub fn detach_all_children(&mut self) -> &mut Self {
         self.detach_all_related::<ChildOf>()
     }
@@ -217,7 +230,8 @@ impl<'a> EntityCommands<'a> {
     ///
     /// This removes child entities entirely (and recursively, because
     /// `Children` enables linked lifecycle).
-    pub fn despawn_children(&mut self) -> &mut Self {
+    #[inline]
+    pub fn despawn_all_children(&mut self) -> &mut Self {
         self.despawn_all_related::<ChildOf>()
     }
 }

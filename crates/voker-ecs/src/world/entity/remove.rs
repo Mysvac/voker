@@ -1,6 +1,9 @@
+use voker_utils::vec::FastVec;
+
 use crate::archetype::ArcheId;
 use crate::bundle::{Bundle, BundleId};
-use crate::component::HookContext;
+use crate::component::{ComponentId, HookContext};
+use crate::event::EntityComponentsTrigger;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned};
 
@@ -227,6 +230,8 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
     debug_assert_eq!(old_arche.table_id(), location.table_id);
 
     {
+        use crate::event::{DISCARD, Discard};
+
         // trigger_on_discard
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         old_arche.on_discard_hooks().iter().for_each(|&(id, hook)| {
@@ -234,9 +239,35 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if old_arche.has_on_discard_observer() {
+            let mut discard: FastVec<ComponentId, 4> = FastVec::new();
+            let data = discard.data();
+
+            old_arche.components().iter().for_each(|&id| {
+                if !new_arche.contains_component(id) {
+                    data.push(id);
+                }
+            });
+
+            unsafe {
+                world.trigger_raw(
+                    DISCARD,
+                    &mut Discard { entity },
+                    &mut EntityComponentsTrigger {
+                        components: data.as_slice(),
+                        old_archetype: Some(old_arche),
+                        new_archetype: Some(new_arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     {
+        use crate::event::{REMOVE, Remove};
+
         // trigger_on_remove
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         old_arche.on_remove_hooks().iter().for_each(|&(id, hook)| {
@@ -244,6 +275,30 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
                 hook(world.reborrow(), HookContext { id, entity, caller });
             }
         });
+
+        if old_arche.has_on_remove_observer() {
+            let mut discard: FastVec<ComponentId, 4> = FastVec::new();
+            let data = discard.data();
+
+            old_arche.components().iter().for_each(|&id| {
+                if !new_arche.contains_component(id) {
+                    data.push(id);
+                }
+            });
+
+            unsafe {
+                world.trigger_raw(
+                    REMOVE,
+                    &mut Remove { entity },
+                    &mut EntityComponentsTrigger {
+                        components: data.as_slice(),
+                        old_archetype: Some(old_arche),
+                        new_archetype: Some(new_arche),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
     {

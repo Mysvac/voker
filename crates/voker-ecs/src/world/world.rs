@@ -14,7 +14,9 @@ use crate::command::CommandQueue;
 use crate::component::Components;
 use crate::entity::{Entities, EntityAllocator};
 use crate::error::FallbackErrorHandler;
-use crate::message::MessageRegistry;
+use crate::event::Events;
+use crate::message::Messages;
+use crate::observer::Observers;
 use crate::resource::Resources;
 use crate::schedule::Schedules;
 use crate::storage::Storages;
@@ -33,6 +35,7 @@ pub struct World {
     last_run: Tick,
     last_check: Tick,
     thread_hash: u64,
+    pub(crate) last_trigger: u32,
     pub entities: Entities,
     pub allocator: EntityAllocator,
     pub bundles: Bundles,
@@ -41,8 +44,10 @@ pub struct World {
     pub resources: Resources,
     pub schedules: Schedules,
     pub storages: Storages,
+    pub messages: Messages,
+    pub events: Events,
+    pub observers: Observers,
     pub command_queue: CommandQueue,
-    pub message_registry: MessageRegistry,
 }
 
 unsafe impl Send for World {}
@@ -73,6 +78,7 @@ impl World {
             this_run: CachePadded::new(AtomicU32::new(1)),
             last_run: Tick::new(0),
             last_check: Tick::new(0),
+            last_trigger: 0,
             thread_hash: voker_os::thread::thread_hash(),
             entities: Entities::new(),
             allocator: EntityAllocator::new(),
@@ -82,8 +88,10 @@ impl World {
             resources: Resources::new(),
             schedules: Schedules::new(),
             storages: Storages::new(),
+            messages: Messages::new(),
+            events: Events::new(),
+            observers: Observers::new(),
             command_queue: CommandQueue::new(),
-            message_registry: MessageRegistry::new(),
         })
     }
 
@@ -119,6 +127,11 @@ impl World {
 // Tick
 
 impl World {
+    #[inline]
+    pub fn last_trigger(&self) -> u32 {
+        self.last_trigger
+    }
+
     /// Advances `this_run` atomically and returns the previous tick value.
     ///
     /// This is primarily used by concurrent execution paths.

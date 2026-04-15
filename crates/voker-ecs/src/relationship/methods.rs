@@ -161,7 +161,6 @@ fn modify_or_insert_relationship_with_caller<R: Relationship>(
 
         let modified = this.world_scope(|world| {
             let modified = world
-                .deferred()
                 .modify_component_with_caller::<R, _>(source_entity, caller, |r| {
                     *Relationship::raw_target_mut(r) = target_entity;
                 })

@@ -109,6 +109,55 @@ pub(crate) fn severity_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
+pub(crate) fn event_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::Event
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_event_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::EntityEvent
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_event_mut_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::EntityEventMut
+    }
+}
+
+#[inline(always)]
+pub(crate) fn child_of_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::hierarchy::ChildOf
+    }
+}
+
+#[inline(always)]
+pub(crate) fn global_trigger_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::GlobalTrigger
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_trigger_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::EntityTrigger
+    }
+}
+
+#[inline(always)]
+pub(crate) fn propagate_entity_trigger_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::event::PropagateEntityTrigger
+    }
+}
+
+#[inline(always)]
 pub(crate) fn message_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::message::Message

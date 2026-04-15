@@ -63,7 +63,7 @@ impl ResData {
     pub(crate) unsafe fn new(info: &ResourceInfo) -> Self {
         Self {
             id: info.id(),
-            name: info.debug_name(),
+            name: info.name(),
             layout: info.layout(),
             dropper: info.dropper(),
             data: ptr::null_mut(),

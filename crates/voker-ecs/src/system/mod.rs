@@ -42,7 +42,7 @@ pub use function::{FunctionSystem, SystemFunction};
 pub use ident::SystemId;
 pub use input::{In, InMut, InRef, SystemInput};
 pub use meta::{SystemFlags, SystemMeta};
-pub use param::{Local, SystemParam};
+pub use param::{Local, NonSendMarker, SystemParam};
 pub use system::{IntoMapSystem, IntoPipeSystem};
 pub use system::{IntoSystem, MapSystem, PipeSystem, System};
 pub use voker_ecs_derive::SystemParam;

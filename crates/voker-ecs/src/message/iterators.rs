@@ -5,46 +5,46 @@ use core::slice::{Iter, IterMut};
 
 use crate::world::{FromWorld, World};
 
-use super::ident::MessageId;
-use super::{Message, Messages};
+use super::ident::MessageKey;
+use super::{Message, MessageQueue};
 
 // -----------------------------------------------------------------------------
-// MessageIdIter
+// MessageKeyIter
 
-/// Iterator over [`MessageId`] values written by a batch call.
+/// Iterator over [`MessageKey`] values written by a batch call.
 ///
 /// This iterator yields ids in write order: `[start, end)`.
 ///
 /// # Example
 ///
 /// ```rust
-/// use voker_ecs::message::{Message, Messages};
+/// use voker_ecs::message::{Message, MessageQueue};
 ///
 /// #[derive(Message)]
 /// struct Event;
 ///
-/// let mut messages = Messages::<Event>::default();
+/// let mut messages = MessageQueue::<Event>::default();
 /// let mut ids = messages.write_batch([Event, Event]);
 ///
 /// assert_eq!(ids.next().map(|id| id.index()), Some(0));
 /// assert_eq!(ids.next().map(|id| id.index()), Some(1));
 /// assert_eq!(ids.next(), None);
 /// ```
-pub struct MessageIdIter<M: Message> {
+pub struct MessageKeyIter<M: Message> {
     pub(super) last: usize,
     pub(super) end: usize,
     pub(super) _marker: PhantomData<M>,
 }
 
-impl<M: Message> Iterator for MessageIdIter<M> {
-    type Item = MessageId<M>;
+impl<M: Message> Iterator for MessageKeyIter<M> {
+    type Item = MessageKey<M>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.last == self.end {
             return None;
         }
 
-        let id = MessageId::new(self.last);
+        let id = MessageKey::new(self.last);
         self.last = self.last.wrapping_add(1);
         Some(id)
     }
@@ -59,13 +59,13 @@ impl<M: Message> Iterator for MessageIdIter<M> {
     }
 }
 
-impl<M: Message> ExactSizeIterator for MessageIdIter<M> {}
-impl<M: Message> FusedIterator for MessageIdIter<M> {}
+impl<M: Message> ExactSizeIterator for MessageKeyIter<M> {}
+impl<M: Message> FusedIterator for MessageKeyIter<M> {}
 
 // -----------------------------------------------------------------------------
 // MessageWithIdIter
 
-/// Per-system read position for one `Messages<M>` stream.
+/// Per-system read position for one `MessageQueue<M>` stream.
 ///
 /// `MessageCursor` is usually managed by ECS as a local system parameter state
 /// (see [`crate::message::MessageReader`] and [`crate::message::MessageMutator`]).
@@ -82,8 +82,8 @@ pub struct MessageCursor<M: Message> {
 impl<M: Message> FromWorld for MessageCursor<M> {
     fn from_world(world: &World) -> Self {
         let last_index = world
-            .get_resource::<Messages<M>>()
-            .map(Messages::<M>::oldest_message_index)
+            .get_resource::<MessageQueue<M>>()
+            .map(MessageQueue::<M>::oldest_message_index)
             .unwrap_or_default();
 
         Self {
@@ -109,66 +109,71 @@ impl<M: Message> Clone for MessageCursor<M> {
 
 impl<M: Message> MessageCursor<M> {
     /// Returns unread count for this cursor in the given message storage.
-    pub fn len(&self, messages: &Messages<M>) -> usize {
+    pub fn len(&self, messages: &MessageQueue<M>) -> usize {
         let upper = messages.counter.wrapping_sub(self.last_index);
         upper.min(messages.len())
     }
 
     /// Returns `true` if this cursor has no unread messages.
-    pub fn is_empty(&self, messages: &Messages<M>) -> bool {
+    pub fn is_empty(&self, messages: &MessageQueue<M>) -> bool {
         messages.is_empty() || messages.counter == self.last_index
     }
 
     /// Marks all currently readable messages as consumed for this cursor.
-    pub fn clear(&mut self, messages: &Messages<M>) {
+    pub fn clear(&mut self, messages: &MessageQueue<M>) {
         self.last_index = messages.counter;
     }
 
     /// Reads unread messages and advances the cursor as items are consumed.
-    pub fn read<'a>(&'a mut self, messages: &'a Messages<M>) -> MessageIterator<'a, M> {
-        MessageWithIdIterator::new(self, messages).without_id()
+    pub fn read<'a>(&'a mut self, messages: &'a MessageQueue<M>) -> MessageIterator<'a, M> {
+        MessageWithKeyIter::new(self, messages).without_id()
     }
 
     /// Reads unread messages with ids and advances the cursor as items are consumed.
     pub fn read_with_id<'a>(
         &'a mut self,
-        messages: &'a Messages<M>,
-    ) -> MessageWithIdIterator<'a, M> {
-        MessageWithIdIterator::new(self, messages)
+        messages: &'a MessageQueue<M>,
+    ) -> MessageWithKeyIter<'a, M> {
+        MessageWithKeyIter::new(self, messages)
     }
 
     /// Reads unread messages mutably and advances the cursor as items are consumed.
-    pub fn read_mut<'a>(&'a mut self, messages: &'a mut Messages<M>) -> MessageMutIterator<'a, M> {
-        MessageMutWithIdIterator::new(self, messages).without_id()
+    pub fn read_mut<'a>(
+        &'a mut self,
+        messages: &'a mut MessageQueue<M>,
+    ) -> MessageMutIterator<'a, M> {
+        MessageMutWithKeyIter::new(self, messages).without_id()
     }
 
     /// Reads unread mutable messages with ids and advances the cursor.
     pub fn read_mut_with_id<'a>(
         &'a mut self,
-        messages: &'a mut Messages<M>,
-    ) -> MessageMutWithIdIterator<'a, M> {
-        MessageMutWithIdIterator::new(self, messages)
+        messages: &'a mut MessageQueue<M>,
+    ) -> MessageMutWithKeyIter<'a, M> {
+        MessageMutWithKeyIter::new(self, messages)
     }
 }
 
 // -----------------------------------------------------------------------------
-// MessageWithIdIterator
+// MessageWithKeyIter
 
 /// Iterator over unread messages with their message IDs.
 ///
 /// Created by [`MessageCursor::read_with_id`] and
-/// [`crate::message::MessageReader::read_with_id`].
+/// [`MessageReader::read_with_id`].
 ///
 /// Consuming this iterator advances the underlying cursor.
+///
+/// [`MessageReader::read_with_id`]: crate::message::MessageReader::read_with_id
 #[derive(Debug)]
-pub struct MessageWithIdIterator<'a, M: Message> {
+pub struct MessageWithKeyIter<'a, M: Message> {
     cursor: &'a mut MessageCursor<M>,
-    chain: Chain<Iter<'a, (MessageId<M>, M)>, Iter<'a, (MessageId<M>, M)>>,
+    chain: Chain<Iter<'a, (MessageKey<M>, M)>, Iter<'a, (MessageKey<M>, M)>>,
     unread: usize,
 }
 
-impl<'a, M: Message> MessageWithIdIterator<'a, M> {
-    fn new(cursor: &'a mut MessageCursor<M>, messages: &'a Messages<M>) -> Self {
+impl<'a, M: Message> MessageWithKeyIter<'a, M> {
+    fn new(cursor: &'a mut MessageCursor<M>, messages: &'a MessageQueue<M>) -> Self {
         let unread = cursor.len(messages);
         cursor.last_index = messages.counter.wrapping_sub(unread);
 
@@ -191,8 +196,8 @@ impl<'a, M: Message> MessageWithIdIterator<'a, M> {
     }
 }
 
-impl<'a, M: Message> Iterator for MessageWithIdIterator<'a, M> {
-    type Item = (MessageId<M>, &'a M);
+impl<'a, M: Message> Iterator for MessageWithKeyIter<'a, M> {
+    type Item = (MessageKey<M>, &'a M);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.chain.next() {
@@ -236,15 +241,15 @@ impl<'a, M: Message> Iterator for MessageWithIdIterator<'a, M> {
     }
 }
 
-impl<M: Message> ExactSizeIterator for MessageWithIdIterator<'_, M> {}
-impl<M: Message> FusedIterator for MessageWithIdIterator<'_, M> {}
+impl<M: Message> ExactSizeIterator for MessageWithKeyIter<'_, M> {}
+impl<M: Message> FusedIterator for MessageWithKeyIter<'_, M> {}
 
 // -----------------------------------------------------------------------------
 // MessageIterator
 
 /// Iterator over unread messages.
 ///
-/// This is the id-stripped form of [`MessageWithIdIterator`].
+/// This is the id-stripped form of [`MessageWithKeyIter`].
 ///
 /// # Example
 ///
@@ -260,7 +265,7 @@ impl<M: Message> FusedIterator for MessageWithIdIterator<'_, M> {}
 /// ```
 #[derive(Debug)]
 pub struct MessageIterator<'a, M: Message> {
-    iter: MessageWithIdIterator<'a, M>,
+    iter: MessageWithKeyIter<'a, M>,
 }
 
 impl<'a, M: Message> Iterator for MessageIterator<'a, M> {
@@ -294,25 +299,27 @@ impl<M: Message> ExactSizeIterator for MessageIterator<'_, M> {}
 impl<M: Message> FusedIterator for MessageIterator<'_, M> {}
 
 // -----------------------------------------------------------------------------
-// MessageMutWithIdIterator
+// MessageMutWithKeyIter
 
 /// Iterator over unread messages with their message IDs.
 ///
-/// Mutable counterpart of [`MessageWithIdIterator`].
+/// Mutable counterpart of [`MessageWithKeyIter`].
 ///
 /// Created by [`MessageCursor::read_mut_with_id`] and
-/// [`crate::message::MessageMutator::read_with_id`].
+/// [`MessageMutator::read_with_id`].
 ///
 /// Consuming this iterator advances the underlying cursor.
+///
+/// [`MessageMutator::read_with_id`]: crate::message::MessageMutator::read_with_id
 #[derive(Debug)]
-pub struct MessageMutWithIdIterator<'a, M: Message> {
+pub struct MessageMutWithKeyIter<'a, M: Message> {
     cursor: &'a mut MessageCursor<M>,
-    chain: Chain<IterMut<'a, (MessageId<M>, M)>, IterMut<'a, (MessageId<M>, M)>>,
+    chain: Chain<IterMut<'a, (MessageKey<M>, M)>, IterMut<'a, (MessageKey<M>, M)>>,
     unread: usize,
 }
 
-impl<'a, M: Message> MessageMutWithIdIterator<'a, M> {
-    fn new(cursor: &'a mut MessageCursor<M>, messages: &'a mut Messages<M>) -> Self {
+impl<'a, M: Message> MessageMutWithKeyIter<'a, M> {
+    fn new(cursor: &'a mut MessageCursor<M>, messages: &'a mut MessageQueue<M>) -> Self {
         let unread = cursor.len(messages);
         let a_index = cursor.last_index.wrapping_sub(messages.messages_a.start_id);
         let b_index = cursor.last_index.wrapping_sub(messages.messages_b.start_id);
@@ -335,8 +342,8 @@ impl<'a, M: Message> MessageMutWithIdIterator<'a, M> {
     }
 }
 
-impl<'a, M: Message> Iterator for MessageMutWithIdIterator<'a, M> {
-    type Item = (MessageId<M>, &'a mut M);
+impl<'a, M: Message> Iterator for MessageMutWithKeyIter<'a, M> {
+    type Item = (MessageKey<M>, &'a mut M);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.chain.next() {
@@ -380,15 +387,15 @@ impl<'a, M: Message> Iterator for MessageMutWithIdIterator<'a, M> {
     }
 }
 
-impl<M: Message> ExactSizeIterator for MessageMutWithIdIterator<'_, M> {}
-impl<M: Message> FusedIterator for MessageMutWithIdIterator<'_, M> {}
+impl<M: Message> ExactSizeIterator for MessageMutWithKeyIter<'_, M> {}
+impl<M: Message> FusedIterator for MessageMutWithKeyIter<'_, M> {}
 
 // -----------------------------------------------------------------------------
-// MessageWithIdIterator
+// MessageWithKeyIter
 
 /// Iterator over unread mutable messages.
 ///
-/// This is the id-stripped form of [`MessageMutWithIdIterator`].
+/// This is the id-stripped form of [`MessageMutWithKeyIter`].
 ///
 /// # Example
 ///
@@ -408,7 +415,7 @@ impl<M: Message> FusedIterator for MessageMutWithIdIterator<'_, M> {}
 /// ```
 #[derive(Debug)]
 pub struct MessageMutIterator<'a, M: Message> {
-    iter: MessageMutWithIdIterator<'a, M>,
+    iter: MessageMutWithKeyIter<'a, M>,
 }
 
 impl<'a, M: Message> Iterator for MessageMutIterator<'a, M> {

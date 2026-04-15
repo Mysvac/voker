@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use crate::system::{AccessTable, System, SystemError};
 use crate::system::{SystemFlags, SystemId, SystemInput};
 use crate::tick::Tick;
-use crate::world::{UnsafeWorld, World};
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 /// A schedule synchronization system used to apply deferred world mutations.
 ///
@@ -108,6 +108,8 @@ impl<S: 'static> System for ApplyDeferred<S> {
     fn is_exclusive(&self) -> bool {
         true
     }
+
+    fn queue_deferred(&mut self, _world: DeferredWorld) {}
 
     fn apply_deferred(&mut self, _world: &mut World) {}
 }

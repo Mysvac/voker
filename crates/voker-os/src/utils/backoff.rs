@@ -21,6 +21,7 @@ const SPIN_LIMIT: u32 = 5;
 /// is a good time to block the thread using a different synchronization
 /// mechanism. Each step of the back off procedure takes roughly
 /// twice as long as the previous step.
+#[repr(transparent)]
 pub struct Backoff {
     step: Cell<u32>,
 }

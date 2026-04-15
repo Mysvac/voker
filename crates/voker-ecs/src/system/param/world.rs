@@ -58,7 +58,7 @@ unsafe impl SystemParam for DeferredWorld<'_> {
 
     const DEFERRED: bool = true;
     const NON_SEND: bool = true;
-    const EXCLUSIVE: bool = true;
+    const EXCLUSIVE: bool = false;
 
     fn init_state(_world: &mut World) -> Self::State {}
 

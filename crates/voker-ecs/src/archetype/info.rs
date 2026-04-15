@@ -8,6 +8,7 @@ use crate::bundle::BundleId;
 use crate::component::{ComponentHook, HookContext};
 use crate::component::{ComponentId, Components};
 use crate::entity::{Entity, MovedEntityRow};
+use crate::event::EntityComponentsTrigger;
 use crate::storage::TableId;
 use crate::utils::DebugLocation;
 use crate::world::DeferredWorld;
@@ -16,6 +17,18 @@ type HookItem = (ComponentId, ComponentHook);
 
 // -----------------------------------------------------------------------------
 // Archetype
+
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) struct ObserverFlags: u8 {
+        const ADD = 1 << 0;
+        const CLONE = 1 << 1;
+        const INSERT = 1 << 2;
+        const REMOVE = 1 << 3;
+        const DISCARD = 1 << 4;
+        const DESPAWN = 1 << 5;
+    }
+}
 
 /// A collection of entities that share the exact same set of component types.
 ///
@@ -63,8 +76,9 @@ pub struct Archetype {
     id: ArcheId,
     // Backing table for dense components, optimize query.
     table_id: TableId,
+    observers: ObserverFlags,
     // Number of components stored in the table region.
-    dense_len: usize,
+    dense_len: u32,
     // - `[..dense_len]` are stored in tables (sorted).
     // - `[dense_len..]` are stored in sparse maps (sorted).
     components: &'static [ComponentId],
@@ -126,8 +140,9 @@ impl Archetype {
 
         Archetype {
             id: arche_id,
+            observers: ObserverFlags::empty(),
             table_id,
-            dense_len,
+            dense_len: dense_len as u32,
             components: idents,
             on_add,
             on_clone,
@@ -198,13 +213,15 @@ impl Archetype {
     /// contiguous storage layout. The slice is guaranteed to be sorted.
     #[inline(always)]
     pub fn dense_components(&self) -> &'static [ComponentId] {
+        let len = self.dense_len as usize;
+
         #[cfg(not(debug_assertions))]
         unsafe {
             // Disable boundary checking during release.
-            ::core::hint::assert_unchecked(self.dense_len <= self.components.len());
+            ::core::hint::assert_unchecked(len <= self.components.len());
         }
 
-        &self.components[..self.dense_len]
+        &self.components[..len]
     }
 
     /// Returns the list of sparse component types stored in maps.
@@ -214,13 +231,15 @@ impl Archetype {
     /// to be sorted and non-overlapping with dense components.
     #[inline(always)]
     pub fn sparse_components(&self) -> &'static [ComponentId] {
+        let len = self.dense_len as usize;
+
         #[cfg(not(debug_assertions))]
         unsafe {
             // Disable boundary checking during release.
-            ::core::hint::assert_unchecked(self.dense_len <= self.components.len());
+            ::core::hint::assert_unchecked(len <= self.components.len());
         }
 
-        &self.components[self.dense_len..]
+        &self.components[len..]
     }
 
     /// Checks if this archetype contains a specific component type.
@@ -419,7 +438,7 @@ impl Archetype {
         self.on_despawn
     }
 
-    /// Triggers all `on_add` hooks in this archetype for the given entity.
+    /// Triggers all `on_add` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_add(
         &self,
@@ -427,12 +446,29 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{ADD, Add};
+
         self.on_add.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_add_observer() {
+            unsafe {
+                world.trigger_raw(
+                    ADD,
+                    &mut Add { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: None,
+                        new_archetype: Some(self),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
-    /// Triggers all `on_clone` hooks in this archetype for the given entity.
+    /// Triggers all `on_clone` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_clone(
         &self,
@@ -440,12 +476,29 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{CLONE, Clone};
+
         self.on_clone.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_clone_observer() {
+            unsafe {
+                world.trigger_raw(
+                    CLONE,
+                    &mut Clone { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: None,
+                        new_archetype: Some(self),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
-    /// Triggers all `on_insert` hooks in this archetype for the given entity.
+    /// Triggers all `on_insert` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_insert(
         &self,
@@ -453,12 +506,29 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{INSERT, Insert};
+
         self.on_insert.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_insert_observer() {
+            unsafe {
+                world.trigger_raw(
+                    INSERT,
+                    &mut Insert { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: None,
+                        new_archetype: Some(self),
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
-    /// Triggers all `on_remove` hooks in this archetype for the given entity.
+    /// Triggers all `on_remove` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_remove(
         &self,
@@ -466,12 +536,29 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{REMOVE, Remove};
+
         self.on_remove.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_remove_observer() {
+            unsafe {
+                world.trigger_raw(
+                    REMOVE,
+                    &mut Remove { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: Some(self),
+                        new_archetype: None,
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
-    /// Triggers all `on_discard` hooks in this archetype for the given entity.
+    /// Triggers all `on_discard` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_discard(
         &self,
@@ -479,12 +566,29 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{DISCARD, Discard};
+
         self.on_discard.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_discard_observer() {
+            unsafe {
+                world.trigger_raw(
+                    DISCARD,
+                    &mut Discard { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: Some(self),
+                        new_archetype: None,
+                    },
+                    caller,
+                );
+            }
+        }
     }
 
-    /// Triggers all `on_despawn` hooks in this archetype for the given entity.
+    /// Triggers all `on_despawn` hooks and observers in this archetype for the given entity.
     #[inline]
     pub(crate) fn trigger_on_despawn(
         &self,
@@ -492,8 +596,58 @@ impl Archetype {
         mut world: DeferredWorld,
         caller: DebugLocation,
     ) {
+        use crate::event::{DESPAWN, Despawn};
+
         self.on_despawn.iter().for_each(|&(id, hook)| {
             hook(world.reborrow(), HookContext { id, entity, caller });
         });
+
+        if self.has_on_despawn_observer() {
+            unsafe {
+                world.trigger_raw(
+                    DESPAWN,
+                    &mut Despawn { entity },
+                    &mut EntityComponentsTrigger {
+                        components: self.components,
+                        old_archetype: Some(self),
+                        new_archetype: None,
+                    },
+                    caller,
+                );
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Observers
+
+impl Archetype {
+    pub(crate) fn merge_observer_flags(&mut self, flags: ObserverFlags) {
+        self.observers = self.observers.union(flags);
+    }
+
+    pub fn has_on_add_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::ADD)
+    }
+
+    pub fn has_on_clone_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::CLONE)
+    }
+
+    pub fn has_on_insert_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::INSERT)
+    }
+
+    pub fn has_on_remove_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::REMOVE)
+    }
+
+    pub fn has_on_discard_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::DISCARD)
+    }
+
+    pub fn has_on_despawn_observer(&self) -> bool {
+        self.observers.intersects(ObserverFlags::DESPAWN)
     }
 }

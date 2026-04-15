@@ -1,7 +1,7 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
 use crate::system::{IntoSystem, SystemError, SystemId, UninitializedSystemError};
 use crate::tick::Tick;
-use crate::world::{World, WorldId};
+use crate::world::{DeferredWorld, World, WorldId};
 
 use super::{SystemInput, SystemParam};
 
@@ -334,6 +334,16 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         self.meta.set_last_run(this_run);
 
         Ok(output)
+    }
+
+    fn queue_deferred(&mut self, world: DeferredWorld) {
+        if <F::Param as SystemParam>::DEFERRED {
+            let Some(state) = &mut self.state else {
+                uninitialized_system(SystemId::of::<F>());
+            };
+
+            <F::Param as SystemParam>::queue_deferred(&mut state.param, &self.meta, world);
+        }
     }
 
     /// Flushes deferred parameter effects into the real world.

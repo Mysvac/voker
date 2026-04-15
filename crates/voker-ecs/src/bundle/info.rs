@@ -74,13 +74,29 @@ impl BundleInfo {
     /// Returns the list of dense component types in this bundle.
     #[inline(always)]
     pub fn dense_components(&self) -> &'static [ComponentId] {
-        &self.components[..self.dense_len as usize]
+        let len = self.dense_len as usize;
+
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            // Disable boundary checking during release.
+            ::core::hint::assert_unchecked(len <= self.components.len());
+        }
+
+        &self.components[..len]
     }
 
     /// Returns the list of sparse component types in this bundle.
     #[inline(always)]
     pub fn sparse_components(&self) -> &'static [ComponentId] {
-        &self.components[self.dense_len as usize..]
+        let len = self.dense_len as usize;
+
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            // Disable boundary checking during release.
+            ::core::hint::assert_unchecked(len <= self.components.len());
+        }
+
+        &self.components[len..]
     }
 
     /// Checks if this archetype contains a specific component type.

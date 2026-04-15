@@ -1,4 +1,3 @@
-use crate::archetype::Archetype;
 use crate::borrow::UntypedMut;
 use crate::component::Component;
 use crate::entity::{Entity, FetchError};
@@ -57,10 +56,11 @@ pub(crate) fn modify_component_internal<R>(
         return Ok(None);
     }
 
-    let arche: *const Archetype = &raw const *arche;
+    let has_on_discard_hooks = !arche.on_discard_hooks().is_empty();
+    let has_on_insert_hooks = !arche.on_insert_hooks().is_empty();
+
     unsafe {
-        let arche = &*arche;
-        if !arche.on_discard_hooks().is_empty() {
+        if has_on_discard_hooks {
             world
                 .deferred()
                 .trigger_on_discard(entity, Some(component_id).into_iter(), caller);
@@ -77,8 +77,7 @@ pub(crate) fn modify_component_internal<R>(
     let result = f(component.reborrow());
 
     unsafe {
-        let arche = &*arche;
-        if !arche.on_insert_hooks().is_empty() {
+        if has_on_insert_hooks {
             world
                 .deferred()
                 .trigger_on_insert(entity, Some(component_id).into_iter(), caller);

@@ -109,12 +109,12 @@ fn parse_related_field(fields: &syn::Fields, span: Span) -> syn::Result<&syn::Fi
             let mut ret: Option<&syn::Field> = None;
 
             for field in fields.named.iter() {
-                if field.attrs.iter().any(|attr| attr.path().is_ident("relationship"))
+                if field.attrs.iter().any(|attr| attr.path().is_ident("related"))
                     && ret.replace(field).is_some()
                 {
                     return Err(syn::Error::new(
                         span,
-                        "#[relationship] can only annotate in one field.",
+                        "#[related] can only annotate in one field.",
                     ));
                 }
             }
@@ -122,7 +122,7 @@ fn parse_related_field(fields: &syn::Fields, span: Span) -> syn::Result<&syn::Fi
             let Some(ret) = ret else {
                 return Err(syn::Error::new(
                     span,
-                    "`Relationship` derive expected with a field annotated with #[relationship].",
+                    "`Relationship` derive expected with a field annotated with #[related].",
                 ));
             };
 
@@ -138,14 +138,14 @@ fn parse_related_field(fields: &syn::Fields, span: Span) -> syn::Result<&syn::Fi
 
             let field = fields.unnamed.get(0).unwrap();
 
-            if !field.attrs.iter().any(|attr| attr.path().is_ident("relationship")) {
+            if !field.attrs.iter().any(|attr| attr.path().is_ident("related")) {
                 return Err(syn::Error::new(
                     span,
-                    "`Relationship` derive expected with a field annotated with #[relationship].",
+                    "`Relationship` derive expected with a field annotated with #[related].",
                 ));
             }
 
-            Ok(field)
+            Ok(fields.unnamed.get(0).unwrap())
         }
         syn::Fields::Unit => Err(syn::Error::new(
             span,
@@ -256,22 +256,22 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                     ret.required = Some(value.parse()?);
                     Ok(())
                 } else if meta.path.is_ident("on_add") {
-                    ret.on_remove = Some(parse_hook_path(&meta, "Self::on_add")?);
+                    ret.on_add = Some(parse_hook_path(&meta, "Self::on_add")?);
                     Ok(())
                 } else if meta.path.is_ident("on_clone") {
-                    ret.on_remove = Some(parse_hook_path(&meta, "Self::on_clone")?);
+                    ret.on_clone = Some(parse_hook_path(&meta, "Self::on_clone")?);
                     Ok(())
                 } else if meta.path.is_ident("on_insert") {
-                    ret.on_remove = Some(parse_hook_path(&meta, "Self::on_insert")?);
+                    ret.on_insert = Some(parse_hook_path(&meta, "Self::on_insert")?);
                     Ok(())
                 } else if meta.path.is_ident("on_remove") {
                     ret.on_remove = Some(parse_hook_path(&meta, "Self::on_remove")?);
                     Ok(())
                 } else if meta.path.is_ident("on_discard") {
-                    ret.on_remove = Some(parse_hook_path(&meta, "Self::on_discard")?);
+                    ret.on_discard = Some(parse_hook_path(&meta, "Self::on_discard")?);
                     Ok(())
                 } else if meta.path.is_ident("on_despawn") {
-                    ret.on_remove = Some(parse_hook_path(&meta, "Self::on_despawn")?);
+                    ret.on_despawn = Some(parse_hook_path(&meta, "Self::on_despawn")?);
                     Ok(())
                 } else if meta.path.is_ident("cloner") {
                     if meta.input.peek(syn::Token![=]) {
@@ -411,7 +411,7 @@ fn map_entities_tokens(
                     .attrs
                     .iter()
                     .map(syn::Attribute::path)
-                    .any(|p| p.is_ident("entities") || p.is_ident("relationship"))
+                    .any(|p| p.is_ident("entities") || p.is_ident("related"))
                 {
                     let field_member = field
                         .ident

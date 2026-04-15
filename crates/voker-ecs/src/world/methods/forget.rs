@@ -3,13 +3,21 @@ use crate::utils::DebugLocation;
 use crate::world::World;
 
 impl World {
+    /// Forget an entity without dropping its data and without calling components' hooks.
+    ///
+    /// Typically used for cleaning up entities that caused a panic.
+    ///
+    /// # Safety
+    /// This operation is **extremely unsafe** and should be used with extreme caution.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub unsafe fn forget(&mut self, entity: Entity) {
-        self.forget_with_caller(entity, DebugLocation::caller());
+        unsafe {
+            self.forget_with_caller(entity, DebugLocation::caller());
+        }
     }
 
     #[inline]
-    pub(crate) fn forget_with_caller(&mut self, entity: Entity, caller: DebugLocation) {
+    pub(crate) unsafe fn forget_with_caller(&mut self, entity: Entity, caller: DebugLocation) {
         let world_id = self.id();
 
         log::warn!(

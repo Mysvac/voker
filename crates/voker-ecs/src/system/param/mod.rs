@@ -21,6 +21,7 @@ mod world;
 // marker
 
 pub use local::Local;
+pub use marker::NonSendMarker;
 
 // -----------------------------------------------------------------------------
 // SystemParam

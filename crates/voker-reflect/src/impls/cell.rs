@@ -159,20 +159,9 @@ macro_rules! impl_generic_cell {
             /// If there is no entry found, a new one will be generated from the given function.
             #[inline(always)]
             pub fn get_or_insert<G: Any + ?Sized>(&self, f: impl FnOnce() -> $data) -> &$ret {
-                // Separate to reduce code compilation times
-                self.get_or_insert_by_type_id(TypeId::of::<G>(), f)
-            }
-
-            // Separate to reduce code compilation times
-            #[inline(never)]
-            fn get_or_insert_by_type_id(
-                &self,
-                type_id: TypeId,
-                f: impl FnOnce() -> $data,
-            ) -> &$ret {
-                match self.get_by_type_id(type_id) {
+                match self.get_by_type_id(TypeId::of::<G>()) {
                     Some(info) => info,
-                    None => self.insert_by_type_id(type_id, f()),
+                    None => self.insert_by_type_id(TypeId::of::<G>(), f()),
                 }
             }
 

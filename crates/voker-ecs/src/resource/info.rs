@@ -72,7 +72,7 @@ impl ResourceInfo {
 
     /// Returns the resource's debug name.
     #[inline(always)]
-    pub fn debug_name(&self) -> DebugName {
+    pub fn name(&self) -> DebugName {
         self.descriptor.name
     }
 

@@ -414,6 +414,7 @@ impl ComponentCloner {
                         for child in value.iter() {
                             ctx.defer_clone(child);
                         }
+                        dst.write(value);
                     } else {
                         R::raw_sources_mut(&mut value).clear();
                         dst.write(value);
@@ -584,7 +585,9 @@ impl<'w> EntityCloner<'w> {
                 let world = unsafe { self.world.full_mut() };
                 let entities = unsafe { self.cloned.as_mut().as_slice() };
                 for &entity in entities {
-                    world.forget_with_caller(entity, self.caller);
+                    unsafe {
+                        world.forget_with_caller(entity, self.caller);
+                    }
                 }
             }
         }
@@ -675,7 +678,8 @@ impl<'w> EntityCloner<'w> {
                 // through `CloneTarget::assume_initialized`, but it's unrecommand.
                 assert!(
                     initialized,
-                    "The ComponentCloner of `{name}<{type_id:?}>` did not write data."
+                    "The ComponentCloner of `{name}<{type_id:?}>` did not write data. {}",
+                    caller,
                 )
             }
 

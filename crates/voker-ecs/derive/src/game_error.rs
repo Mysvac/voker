@@ -94,7 +94,7 @@ pub(crate) fn impl_derive_game_error(ast: DeriveInput) -> TokenStream {
         Err(e) => return e.into_compile_error().into(),
     };
 
-    use crate::path::fp::{FromFP, SendFP, SyncFP};
+    use crate::path::fp::{ErrorFP, FromFP, SendFP, SyncFP};
     let voker_ecs_path = crate::path::voker_ecs();
     let game_error_ = crate::path::game_error_(&voker_ecs_path);
     let severity_ = crate::path::severity_(&voker_ecs_path);
@@ -106,7 +106,7 @@ pub(crate) fn impl_derive_game_error(ast: DeriveInput) -> TokenStream {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote! { Self: #SendFP + #SyncFP + 'static });
+            .push(parse_quote! { Self: #ErrorFP + #SendFP + #SyncFP + 'static });
     } else if generics.lifetimes().next().is_some() {
         generics
             .make_where_clause()

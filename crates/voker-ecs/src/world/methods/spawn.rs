@@ -3,11 +3,11 @@ use core::ptr::NonNull;
 
 use voker_ptr::OwningPtr;
 
-use crate::archetype::Archetype;
+use crate::archetype::{ArcheId, Archetype};
 use crate::bundle::{Bundle, BundleId};
 use crate::component::ComponentWriter;
 use crate::entity::{AllocEntitiesIter, Entity, EntityLocation, SpawnError};
-use crate::storage::Table;
+use crate::storage::{Table, TableId};
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
 
@@ -21,7 +21,6 @@ struct BundleSpawner<'a> {
 }
 
 impl<'a> BundleSpawner<'a> {
-    #[inline(never)]
     fn new(
         world: &'a mut World,
         bundle_id: BundleId,
@@ -277,6 +276,100 @@ impl World {
             location,
             world: self.into(),
             entity,
+        })
+    }
+
+    /// Spawns a new empty entity and returns an owned handle to it.
+    ///
+    /// This function is faster then `spawn(())`.
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn spawn_empty(&mut self) -> EntityOwned<'_> {
+        let caller = DebugLocation::caller();
+        self.spawn_empty_with_caller(caller)
+    }
+
+    pub fn spawn_empty_with_caller(&mut self, caller: DebugLocation) -> EntityOwned<'_> {
+        let entity = self.allocator.alloc_mut();
+
+        let guard = ForgetEntityOnPanic {
+            entity,
+            world: self.unsafe_world(),
+            caller,
+        };
+
+        let world = unsafe { guard.world.full_mut() };
+
+        let arche_row =
+            unsafe { world.archetypes.get_unchecked_mut(ArcheId::EMPTY).alloc_row(entity) };
+        let table_row = unsafe {
+            world
+                .storages
+                .tables
+                .get_unchecked_mut(TableId::EMPTY)
+                .alloc_row(entity)
+        };
+        let location = EntityLocation {
+            arche_id: ArcheId::EMPTY,
+            table_id: TableId::EMPTY,
+            arche_row,
+            table_row,
+        };
+        unsafe {
+            world.entities.set_spawned(entity, location).unwrap();
+        }
+
+        ::core::mem::drop(guard);
+
+        EntityOwned {
+            world: self.unsafe_world(),
+            entity,
+            location: Some(location),
+        }
+    }
+
+    pub fn spawn_empty_at_with_caller(
+        &mut self,
+        entity: Entity,
+        caller: DebugLocation,
+    ) -> Result<EntityOwned<'_>, SpawnError> {
+        self.entities.can_spawn(entity)?;
+
+        let entity = self.allocator.alloc_mut();
+
+        let guard = ForgetEntityOnPanic {
+            entity,
+            world: self.unsafe_world(),
+            caller,
+        };
+
+        let world = unsafe { guard.world.full_mut() };
+
+        let arche_row =
+            unsafe { world.archetypes.get_unchecked_mut(ArcheId::EMPTY).alloc_row(entity) };
+        let table_row = unsafe {
+            world
+                .storages
+                .tables
+                .get_unchecked_mut(TableId::EMPTY)
+                .alloc_row(entity)
+        };
+        let location = EntityLocation {
+            arche_id: ArcheId::EMPTY,
+            table_id: TableId::EMPTY,
+            arche_row,
+            table_row,
+        };
+        unsafe {
+            world.entities.set_spawned(entity, location).unwrap();
+        }
+
+        ::core::mem::drop(guard);
+
+        Ok(EntityOwned {
+            world: self.unsafe_world(),
+            entity,
+            location: Some(location),
         })
     }
 }
