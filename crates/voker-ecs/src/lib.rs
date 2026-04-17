@@ -61,6 +61,7 @@ pub mod observer;
 
 pub mod clone;
 pub mod hierarchy;
+pub mod reflect;
 pub mod relationship;
 
 pub mod name;
@@ -84,13 +85,15 @@ pub mod prelude {
     pub use crate::error::{ErrorContext, ErrorHandler, FallbackErrorHandler};
     pub use crate::error::{GameError, IntoGameError};
     pub use crate::event::{Add, Clone, Despawn, Discard, Insert, Remove};
-    pub use crate::event::{Event, EntityEvent, EntityEventMut};
+    pub use crate::event::{EntityEvent, EntityEventMut, Event};
     pub use crate::hierarchy::{ChildOf, Children};
     pub use crate::message::{Message, MessageKey, MessageMutator, MessageReader, MessageWriter};
     pub use crate::name::Name;
     pub use crate::observer::{IntoEntityObserver, IntoObserver, ObservedBy, On};
     pub use crate::query::{Added, And, Changed, Or, With, Without};
     pub use crate::query::{Query, QueryEntityError, QuerySingleError, QueryState, Single};
+    pub use crate::reflect::{AppTypeRegistry, ReflectFromWorld, ReflectMapEntities};
+    pub use crate::reflect::{ReflectComponent, ReflectResource};
     pub use crate::relationship::{RelatedSpawner, RelatedSpawnerCommands};
     pub use crate::relationship::{Relationship, RelationshipTarget};
     pub use crate::resource::{Resource, ResourceId};

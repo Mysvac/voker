@@ -190,8 +190,6 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         let meet = result.unwrap_or_else(|payload| {
             voker_utils::cold_path();
             log::error!("Encountered a panic in system `{}`!", ident);
-            #[cfg(feature = "std")]
-            ::std::eprintln!("Encountered a panic in system `{}`!", ident);
             *self.executor.panic_payload.lock() = Some(payload);
             deferred = false;
             false
@@ -289,7 +287,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     ) -> Box<dyn FnOnce() + Send + 'scope> {
         let world = self.world;
         let systems = self.systems;
-        let panic_payload = &self.executor.panic_payload;
+        let _panic_payload = &self.executor.panic_payload;
 
         // Drain without reallocating by reusing the existing buffer capacity.
         let mut deferred: Vec<u32> = Vec::new();
@@ -308,7 +306,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 #[cfg(feature = "std")]
                 if let Err(e) = ::std::panic::catch_unwind(func) {
                     voker_utils::cold_path();
-                    *panic_payload.lock() = Some(e);
+                    *_panic_payload.lock() = Some(e);
                 }
 
                 #[cfg(not(feature = "std"))]

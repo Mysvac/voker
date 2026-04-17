@@ -22,7 +22,6 @@ impl Drop for AbortOnDropFail {
 
         crate::cfg::std! {
             if {
-                ::std::eprintln!("Aborting due to drop component panicked.");
                 ::std::process::abort();
             } else {
                 panic!("Aborting due to drop component panicked.");

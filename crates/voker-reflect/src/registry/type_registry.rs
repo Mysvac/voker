@@ -4,8 +4,9 @@ use core::fmt::Debug;
 use voker_utils::extra::TypeIdMap;
 use voker_utils::hash::{HashMap, HashSet};
 
-use crate::info::{TypeInfo, Typed};
-use crate::registry::{FromType, GetTypeMeta, TypeData, TypeMeta};
+use crate::Reflect;
+use crate::info::{TypeInfo, TypePath, Typed};
+use crate::registry::{FromType, GetTypeMeta, ReflectConvert, TypeData, TypeMeta};
 
 // -----------------------------------------------------------------------------
 // TypeRegistry
@@ -170,7 +171,7 @@ impl TypeRegistry {
     /// # use core::any::TypeId;
     /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectDefault}};
     /// #[derive(Reflect, Default)]
-    /// #[reflect(default)]
+    /// #[reflect(Default)]
     /// struct Foo {
     ///   name: Option<String>,
     ///   value: i32
@@ -239,6 +240,45 @@ impl TypeRegistry {
             ),
         }
         self
+    }
+
+    /// Registers a fallible conversion route from `T` into `U`.
+    ///
+    /// The target type `U` must already be registered.
+    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath,
+        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+    {
+        let type_meta = self.get_mut(TypeId::of::<U>()).unwrap_or_else(|| {
+            panic!(
+                "attempted to call `TypeRegistry::register_type_conversion` for type `{}` without registering it first",
+                U::type_path(),
+            )
+        });
+
+        match type_meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_type_conversion::<T, U, _>(function),
+            None => {
+                let mut data = ReflectConvert::default();
+                data.register_type_conversion::<T, U, _>(function);
+                type_meta.insert_data(data);
+            }
+        }
+
+        self
+    }
+
+    /// Registers an infallible `Into` conversion route from `T` into `U`.
+    ///
+    /// The target type `U` must already be registered.
+    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath + From<T>,
+    {
+        self.register_type_conversion::<T, U, _>(|input| Ok(input.into()))
     }
 
     /// Whether the type with given [`TypeId`] has been registered in this registry.
@@ -470,7 +510,7 @@ mod tests {
     }
 
     #[derive(Reflect, Default)]
-    #[reflect(default)]
+    #[reflect(Default)]
     struct NeedsDefault {
         value: i32,
     }

@@ -40,7 +40,8 @@ use voker_ecs_derive::Component;
 /// assert_eq!(name.as_str(), "Hero");
 /// ```
 #[derive(Component, Reflect, Clone)]
-#[reflect(Opaque, full)]
+#[reflect(Opaque, Component, FromWorld, Default, Clone, Debug)]
+#[reflect(Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Name {
     name: Cow<'static, str>,
     hash: u64,

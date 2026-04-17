@@ -60,7 +60,7 @@ impl TypeRegistry {
     /// # use std::any::TypeId;
     /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectDefault}};
     /// #[derive(Reflect, Default)]
-    /// #[reflect(default)]
+    /// #[reflect(Default)]
     /// struct Foo {
     ///     name: Option<String>,
     ///     value: i32,

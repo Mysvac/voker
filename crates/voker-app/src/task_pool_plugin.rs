@@ -6,7 +6,6 @@ use voker_ecs::system::NonSendMarker;
 use voker_os::sync::Arc;
 use voker_task::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPool, TaskPoolBuilder};
 
-#[cfg(not(all(target_arch = "wasm32", feature = "web")))]
 fn tick_global_task_pools(_: NonSendMarker) {
     let ticker = TaskPool::local_ticker();
     while ticker.try_tick() {}
@@ -24,7 +23,6 @@ impl Plugin for TaskPoolPlugin {
         // Setup the default voker task pools
         self.task_pool_options.create_default_pools();
 
-        #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
         _app.add_systems(crate::Last, tick_global_task_pools);
     }
 }
@@ -169,7 +167,6 @@ impl TaskPoolOptions {
                     .thread_num(io_threads)
                     .thread_name("IO Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
                 let builder = {
                     let mut builder = builder;
                     if let Some(f) = self.io.on_thread_spawn.clone() {
@@ -199,7 +196,6 @@ impl TaskPoolOptions {
                     .thread_num(async_compute_threads)
                     .thread_name("Async Compute Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
                 let builder = {
                     let mut builder = builder;
                     if let Some(f) = self.async_compute.on_thread_spawn.clone() {
@@ -228,7 +224,6 @@ impl TaskPoolOptions {
                     .thread_num(compute_threads)
                     .thread_name("Compute Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
                 let builder = {
                     let mut builder = builder;
                     if let Some(f) = self.compute.on_thread_spawn.clone() {

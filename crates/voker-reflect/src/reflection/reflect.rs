@@ -341,7 +341,7 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// This method will panic if the [kind] is [opaque] and the call to [`reflect_clone`] fails.
     ///
     /// By default, [`#[derive(Reflect)]`](crate::derive::Reflect) requires the
-    /// `#[reflect(clone)]` flag for opaque types, so this function rarely panics.
+    /// `#[reflect(Clone)]` flag for opaque types, so this function rarely panics.
     ///
     /// # Example
     ///
@@ -477,17 +477,17 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     ///     3. Return `Err`.
     ///
     /// Therefore, it's generally recommended to implement [`Clone`] for your type and
-    /// mark it with the `#[reflect(clone)]` attribute.
+    /// mark it with the `#[reflect(Clone)]` attribute.
     ///
     /// ```
     /// # use voker_reflect::Reflect;
     /// #[derive(Reflect, Clone)]
-    /// #[reflect(clone)]
+    /// #[reflect(Clone)]
     /// struct A { /* ... */ }
     /// ```
     ///
     /// By default, [`#[derive(Reflect)]`](crate::derive::Reflect) requires
-    /// the `reflect(clone)` flag for Opaque type, so this function always succeeds.
+    /// the `reflect(Clone)` flag for Opaque type, so this function always succeeds.
     ///
     /// [`to_dynamic`]: Reflect::to_dynamic
     fn reflect_clone(&self) -> Result<Box<dyn Reflect>, ReflectCloneError>;
@@ -513,7 +513,7 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// - [`crate::impls::map_eq`]
     ///
     /// If the type implements [`PartialEq`], consider marking it with the
-    /// `#[reflect(eq)]` attribute. When this attribute is present,
+    /// `#[reflect(PartialEq)]` attribute. When this attribute is present,
     /// the function uses the type's own implementation instead, and types that
     /// differ immediately return `Some(false)`.
     ///
@@ -521,7 +521,7 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// use voker_reflect::Reflect;
     ///
     /// #[derive(Reflect, PartialEq)]
-    /// #[reflect(eq)]
+    /// #[reflect(PartialEq)]
     /// struct A { /* ... */ }
     /// ```
     #[inline]
@@ -551,7 +551,7 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// - [`crate::impls::map_cmp`]
     ///
     /// If the type implements [`PartialOrd`], consider marking it with the
-    /// `#[reflect(cmp)]` attribute. When this attribute is present,
+    /// `#[reflect(PartialOrd)]` attribute. When this attribute is present,
     /// the function uses the type's own implementation instead, and types that
     /// differ immediately return `None`.
     ///
@@ -559,7 +559,7 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// use voker_reflect::Reflect;
     ///
     /// #[derive(Reflect, PartialOrd, PartialEq)]
-    /// #[reflect(cmp)]
+    /// #[reflect(PartialOrd)]
     /// struct A { /* ... */ }
     /// ```
     fn reflect_cmp(&self, _other: &dyn Reflect) -> Option<Ordering> {
@@ -588,14 +588,14 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// - [`crate::impls::map_hash`]
     ///
     /// If the type implements [`Hash`](core::hash::Hash), consider annotating it with the
-    /// `#[reflect(hash)]` attribute to make this function use the [`Hash`](core::hash::Hash)'s
+    /// `#[reflect(Hash)]` attribute to make this function use the [`Hash`](core::hash::Hash)'s
     /// implementation instead.
     ///
     /// ```
     /// use voker_reflect::Reflect;
     ///
     /// #[derive(Reflect, Hash)]
-    /// #[reflect(hash)]
+    /// #[reflect(Hash)]
     /// struct A { /* ... */ }
     /// ```
     #[inline]
@@ -618,14 +618,14 @@ pub trait Reflect: DynamicTypePath + DynamicTyped + Send + Sync + Any {
     /// - [`crate::impls::map_debug`]
     ///
     /// If the type implements [`Debug`](core::fmt::Debug), consider annotating it with the
-    /// `#[reflect(debug)]` attribute to make this function use the [`Debug`](core::fmt::Debug)'s
+    /// `#[reflect(Debug)]` attribute to make this function use the [`Debug`](core::fmt::Debug)'s
     /// implementation instead.
     ///
     /// ```
     /// use voker_reflect::Reflect;
     ///
     /// #[derive(Reflect, Debug)]
-    /// #[reflect(debug)]
+    /// #[reflect(Debug)]
     /// struct A { /* ... */ }
     /// ```
     ///
@@ -870,7 +870,7 @@ mod tests {
     use crate::{FromReflect, Reflect};
 
     #[derive(Reflect, Clone, PartialEq, Debug)]
-    #[reflect(clone)]
+    #[reflect(Clone)]
     struct Sample {
         value: i32,
     }

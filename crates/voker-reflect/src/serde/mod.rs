@@ -124,7 +124,7 @@
 // -----------------------------------------------------------------------------
 // Debug utils
 
-crate::cfg::debug! {
+crate::cfg::backtrace! {
     mod info_stack;
     use info_stack::TypeInfoStack;
 }

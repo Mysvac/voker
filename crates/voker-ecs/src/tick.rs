@@ -41,7 +41,7 @@ pub const MAX_TICK_AGE: u32 = u32::MAX - (CHECK_CYCLE << 1) - 1;
 ///
 /// *Note* that a system that hasn't been run yet has a `Tick` of 0.
 #[derive(Reflect, Clone, Copy, PartialEq, Eq)]
-#[reflect(Opaque, clone, eq, hash, debug)]
+#[reflect(Opaque, Clone, PartialEq, Hash, Debug)]
 #[repr(transparent)]
 pub struct Tick(u32);
 

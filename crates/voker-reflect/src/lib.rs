@@ -10,7 +10,7 @@
 pub mod cfg {
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
-        #[cfg(all(feature = "std", any(debug_assertions, feature = "debug")))] => debug,
+        #[cfg(feature = "backtrace")] => backtrace,
         #[cfg(feature = "reflect_docs")] => reflect_docs,
     }
 }
@@ -57,7 +57,8 @@ pub use voker_reflect_derive::{auto_register, impl_auto_register};
 pub mod prelude {
     pub use crate::access::{PathAccessor, ReflectPathAccess};
     pub use crate::info::{TypeInfo, TypePath, Typed};
-    pub use crate::registry::{ReflectDefault, ReflectFromReflect, TypeMeta, TypeRegistry};
+    pub use crate::registry::{ReflectConvert, ReflectDefault, ReflectFromReflect};
+    pub use crate::registry::{TypeMeta, TypeRegistry};
     pub use crate::serde::{DeserializeDriver, SerializeDriver};
     pub use crate::serde::{ReflectDeserializeDriver, ReflectSerializeDriver};
     pub use crate::{FromReflect, Reflect};

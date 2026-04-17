@@ -101,7 +101,7 @@ use voker_reflect::prelude::*;
 use voker_reflect::ops::Struct;
 
 #[derive(Reflect, Default)]
-#[reflect(default)]
+#[reflect(Default)]
 struct Enemy {
     species: String,
     hp: u32,

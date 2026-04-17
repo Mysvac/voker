@@ -30,7 +30,6 @@ impl Drop for AbortOnPanic {
 
         crate::cfg::std! {
             if {
-                ::std::eprintln!("Aborting due to allocator error.");
                 ::std::process::abort();
             } else {
                 panic!("Aborting due to allocator error.");

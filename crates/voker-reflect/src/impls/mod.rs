@@ -62,6 +62,8 @@ mod native;
 mod vc_os;
 mod vc_utils;
 
+mod glam;
+
 crate::cfg::std! { mod std; }
 
 // -----------------------------------------------------------------------------

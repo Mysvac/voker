@@ -25,7 +25,7 @@ use crate::registry::FromType;
 /// use serde::Serialize;
 ///
 /// #[derive(Reflect, Serialize, PartialEq, Debug)]
-/// #[reflect(serialize)]
+/// #[reflect(Serialize)]
 /// struct MyStruct {
 ///   value: i32
 /// }

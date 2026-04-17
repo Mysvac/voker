@@ -18,18 +18,19 @@ mod kw {
     syn::custom_keyword!(Tuple);
     syn::custom_keyword!(Enum);
     syn::custom_keyword!(Opaque);
-    syn::custom_keyword!(default);
-    syn::custom_keyword!(clone);
-    syn::custom_keyword!(debug);
-    syn::custom_keyword!(hash);
-    syn::custom_keyword!(eq);
-    syn::custom_keyword!(cmp);
-    syn::custom_keyword!(serialize);
-    syn::custom_keyword!(deserialize);
-    syn::custom_keyword!(serde); // serialize + deserialize + auto_register
+    syn::custom_keyword!(Default);
+    syn::custom_keyword!(Clone);
+    syn::custom_keyword!(Debug);
+    syn::custom_keyword!(Hash);
+    syn::custom_keyword!(PartialEq);
+    syn::custom_keyword!(PartialOrd);
+    syn::custom_keyword!(Serialize);
+    syn::custom_keyword!(Deserialize);
+    syn::custom_keyword!(FromWorld);
+    syn::custom_keyword!(Component);
+    syn::custom_keyword!(Resource);
     syn::custom_keyword!(type_path);
     syn::custom_keyword!(doc);
-    syn::custom_keyword!(full); // serde + clone + debug + hash + partial_eq + partial_cmp + default
     syn::custom_keyword!(type_data);
 }
 
@@ -59,7 +60,7 @@ impl TypeAttributes {
         {
             return Err(syn::Error::new(
                 span,
-                "#[reflect(clone)] must be specified when auto impl `Reflect` or `FromReflect` for Opaque Type.",
+                "#[reflect(Clone)] must be specified when auto impl `Reflect` or `FromReflect` for Opaque Type.",
             ));
         }
         Ok(())
@@ -115,26 +116,28 @@ impl TypeAttributes {
             self.parse_custom_attribute(input)
         } else if lookahead.peek(kw::doc) {
             self.parse_docs(input)
-        } else if lookahead.peek(kw::serde) {
-            self.parse_serde(input)
-        } else if lookahead.peek(kw::full) {
-            self.parse_full(input)
-        } else if lookahead.peek(kw::clone) {
+        } else if lookahead.peek(kw::Clone) {
             self.parse_clone(input)
-        } else if lookahead.peek(kw::default) {
+        } else if lookahead.peek(kw::Default) {
             self.parse_default(input)
-        } else if lookahead.peek(kw::hash) {
+        } else if lookahead.peek(kw::Hash) {
             self.parse_hash(input)
-        } else if lookahead.peek(kw::eq) {
-            self.parse_eq(input)
-        } else if lookahead.peek(kw::cmp) {
-            self.parse_cmp(input)
-        } else if lookahead.peek(kw::debug) {
+        } else if lookahead.peek(kw::PartialEq) {
+            self.parse_partial_eq(input)
+        } else if lookahead.peek(kw::PartialOrd) {
+            self.parse_partial_ord(input)
+        } else if lookahead.peek(kw::Debug) {
             self.parse_debug(input)
-        } else if lookahead.peek(kw::serialize) {
+        } else if lookahead.peek(kw::Serialize) {
             self.parse_serialize(input)
-        } else if lookahead.peek(kw::deserialize) {
+        } else if lookahead.peek(kw::Deserialize) {
             self.parse_deserialize(input)
+        } else if lookahead.peek(kw::FromWorld) {
+            self.parse_from_world(input)
+        } else if lookahead.peek(kw::Component) {
+            self.parse_component(input)
+        } else if lookahead.peek(kw::Resource) {
+            self.parse_resource(input)
         } else if lookahead.peek(kw::Opaque) {
             self.parse_opaque(input)
         } else if lookahead.peek(kw::type_path) {
@@ -179,81 +182,80 @@ impl TypeAttributes {
         }
     }
 
-    // #[reflect(serde)]
-    fn parse_serde(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::serde>()?.span;
-        self.avail_traits.serialize = Some(s);
-        self.avail_traits.deserialize = Some(s);
-        Ok(())
-    }
-
-    // #[reflect(full)]
-    fn parse_full(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::full>()?.span;
-        self.avail_traits.clone = Some(s);
-        self.avail_traits.default = Some(s);
-        self.avail_traits.debug = Some(s);
-        self.avail_traits.hash = Some(s);
-        self.avail_traits.eq = Some(s);
-        self.avail_traits.cmp = Some(s);
-        self.avail_traits.serialize = Some(s);
-        self.avail_traits.deserialize = Some(s);
-        Ok(())
-    }
-
-    // #[reflect(default)]
+    // #[reflect(Default)]
     fn parse_default(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::default>()?.span;
+        let s = input.parse::<kw::Default>()?.span;
         self.avail_traits.default = Some(s);
         Ok(())
     }
 
-    // #[reflect(clone)]
+    // #[reflect(Clone)]
     fn parse_clone(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::clone>()?.span;
+        let s = input.parse::<kw::Clone>()?.span;
         self.avail_traits.clone = Some(s);
         Ok(())
     }
 
-    // #[reflect(hash)]
+    // #[reflect(Hash)]
     fn parse_hash(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::hash>()?.span;
+        let s = input.parse::<kw::Hash>()?.span;
         self.avail_traits.hash = Some(s);
         Ok(())
     }
 
-    // #[reflect(eq)]
-    fn parse_eq(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::eq>()?.span;
-        self.avail_traits.eq = Some(s);
+    // #[reflect(PartialEq)]
+    fn parse_partial_eq(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::PartialEq>()?.span;
+        self.avail_traits.partial_eq = Some(s);
         Ok(())
     }
 
-    // #[reflect(cmp)]
-    fn parse_cmp(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::cmp>()?.span;
-        self.avail_traits.cmp = Some(s);
+    // #[reflect(PartialOrd)]
+    fn parse_partial_ord(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::PartialOrd>()?.span;
+        self.avail_traits.partial_ord = Some(s);
         Ok(())
     }
 
-    // #[reflect(debug)]
+    // #[reflect(Debug)]
     fn parse_debug(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::debug>()?.span;
+        let s = input.parse::<kw::Debug>()?.span;
         self.avail_traits.debug = Some(s);
         Ok(())
     }
 
-    // #[reflect(serialize)]
+    // #[reflect(Serialize)]
     fn parse_serialize(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::serialize>()?.span;
+        let s = input.parse::<kw::Serialize>()?.span;
         self.avail_traits.serialize = Some(s);
         Ok(())
     }
 
-    // #[reflect(deserialize)]
+    // #[reflect(Deserialize)]
     fn parse_deserialize(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::deserialize>()?.span;
+        let s = input.parse::<kw::Deserialize>()?.span;
         self.avail_traits.deserialize = Some(s);
+        Ok(())
+    }
+
+    // #[reflect(FromWorld)]
+    fn parse_from_world(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::FromWorld>()?.span;
+        self.avail_traits.from_world = Some(s);
+        Ok(())
+    }
+
+    // #[reflect(Component)]
+    fn parse_component(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::Component>()?.span;
+        self.avail_traits.component = Some(s);
+        Ok(())
+    }
+
+    // #[reflect(Resource)]
+    fn parse_resource(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::Resource>()?.span;
+        self.avail_traits.resource = Some(s);
         Ok(())
     }
 

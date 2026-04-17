@@ -13,7 +13,7 @@ use super::struct_serializer::StructSerializer;
 use super::tuple_serializer::TupleSerializer;
 use super::tuple_struct_serializer::TupleStructSerializer;
 
-crate::cfg::debug! {
+crate::cfg::backtrace! {
     use super::error_utils::TYPE_INFO_STACK;
 }
 
@@ -39,7 +39,7 @@ use crate::registry::{ReflectSerialize, TypeRegistry};
 /// 3. **Reflection Default**: As a last resort, uses the reflection system's default serialization method.
 ///
 /// For custom `Opaque` types, the reflection system does **not** provide default serialization.
-/// Users must annotate these types with `#[reflect(serialize)]` to supply a serde-based `Serialize` implementation.
+/// Users must annotate these types with `#[reflect(Serialize)]` to supply a serde-based `Serialize` implementation.
 ///
 /// # Type Path Context
 ///
@@ -176,7 +176,7 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
             return p.serialize(self.value, serializer);
         }
 
-        crate::cfg::debug! {
+        crate::cfg::backtrace! {
             if let Some(info) = self.value.represented_type_info() {
                 TYPE_INFO_STACK.with_borrow_mut(|stack|stack.push(info));
             } else {
@@ -234,12 +234,12 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
             }
             .serialize(serializer),
             ReflectRef::Opaque(_) => Err(ser::Error::custom(format!(
-                "No default serialization method is available for this opaque type: `{}`. Register ReflectSerialize (for example via #[reflect(serialize)]).",
+                "No default serialization method is available for this opaque type: `{}`. Register ReflectSerialize (for example via #[reflect(Serialize)]).",
                 self.value.reflect_type_path(),
             ))),
         };
 
-        crate::cfg::debug! {
+        crate::cfg::backtrace! {
             TYPE_INFO_STACK.with_borrow_mut(|stack|stack.pop());
         }
 
@@ -267,7 +267,7 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
 /// 3. **Reflection Default**: As a last resort, uses the reflection system's default serialization method.
 ///
 /// For custom `Opaque` types, the reflection system does **not** provide default serialization.
-/// Users must annotate these types with `#[reflect(serialize)]` to supply a serde-based `Serialize` implementation.
+/// Users must annotate these types with `#[reflect(Serialize)]` to supply a serde-based `Serialize` implementation.
 ///
 /// # Output Format
 ///

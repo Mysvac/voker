@@ -10,10 +10,9 @@ pub mod cfg {
 
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
-        #[cfg(all(target_arch = "wasm32", feature = "web"))] => web,
         #[cfg(all(feature = "std", feature = "async_io"))] => async_io,
-        #[cfg(any(not(feature = "std"), feature = "web"))] => single_threaded,
-        #[cfg(all(feature = "std", not(feature = "web")))] => multi_threaded,
+        #[cfg(not(feature = "std"))] => single_threaded,
+        #[cfg(feature = "std")] => multi_threaded,
     }
 }
 
@@ -29,7 +28,6 @@ extern crate alloc;
 // -----------------------------------------------------------------------------
 // Modules
 
-mod cond_send;
 mod macro_utils;
 mod slice;
 
@@ -39,7 +37,6 @@ mod platform;
 // -----------------------------------------------------------------------------
 // Exports
 
-pub use cond_send::{BoxedFuture, CondSendFuture};
 pub use slice::ParallelSlice;
 
 pub use platform::block_on;

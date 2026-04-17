@@ -91,9 +91,8 @@ impl AccessTable {
 
     /// Returns whether exclusive world access can be declared.
     ///
-    /// Exclusive world access requires no previously declared world/resource/
-    /// query access.
-    pub fn can_world_mut(&self) -> bool {
+    /// Can only be used for table building, invalid for merged table.
+    fn can_world_mut(&self) -> bool {
         !self.world_mut
             && !self.world_ref
             && self.res_reading.is_clear()
@@ -103,16 +102,18 @@ impl AccessTable {
 
     /// Returns whether shared world access can be declared.
     ///
-    /// Shared world access is read-only over the world and therefore conflicts
-    /// with any write-capable resource or query access.
-    pub fn can_world_ref(&self) -> bool {
-        self.world_ref
-            || (!self.world_mut
+    /// Can only be used for table building, invalid for merged table.
+    fn can_world_ref(&self) -> bool {
+        self.world_ref || {
+            !self.world_mut
                 && self.res_writing.is_clear()
-                && self.filter.values().all(AccessParam::is_read_only))
+                && self.filter.values().all(AccessParam::is_read_only)
+        }
     }
 
     /// Declares exclusive world access.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_world_mut(&mut self) -> bool {
         if self.can_world_mut() {
             *self = const { Self::new() };
@@ -125,6 +126,8 @@ impl AccessTable {
     }
 
     /// Declares shared world access.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_world_ref(&mut self) -> bool {
         if self.can_world_ref() {
             if !self.world_ref {
@@ -139,16 +142,22 @@ impl AccessTable {
     }
 
     /// Returns whether read access to a resource id can be declared.
-    pub fn can_reading_res(&self, id: ResourceId) -> bool {
+    ///
+    /// Can only be used for table building, invalid for merged table.
+    fn can_reading_res(&self, id: ResourceId) -> bool {
         self.world_ref || (!self.world_mut && !self.res_writing.contains(id.index()))
     }
 
     /// Returns whether write access to a resource id can be declared.
-    pub fn can_writing_res(&self, id: ResourceId) -> bool {
+    ///
+    /// Can only be used for table building, invalid for merged table.
+    fn can_writing_res(&self, id: ResourceId) -> bool {
         !self.world_ref && !self.world_mut && !self.res_reading.contains(id.index())
     }
 
     /// Declares read access to a resource id.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_reading_res(&mut self, id: ResourceId) -> bool {
         if self.can_reading_res(id) {
             if !self.world_ref {
@@ -162,6 +171,8 @@ impl AccessTable {
     }
 
     /// Declares write access to a resource id.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_writing_res(&mut self, id: ResourceId) -> bool {
         if self.can_writing_res(id) {
             let index = id.index();
@@ -225,9 +236,6 @@ impl AccessTable {
         if self.world_mut || other.world_mut {
             return false;
         }
-        if self.world_ref && other.world_ref {
-            return true;
-        }
         if !self.res_writing.is_disjoint(&other.res_reading)
             || !other.res_writing.is_disjoint(&self.res_reading)
         {
@@ -246,12 +254,12 @@ impl AccessTable {
 
     /// Merges two access tables conservatively.
     ///
-    /// Used when composing systems (for example pipe/map combinators) into one
+    /// Used when composing systems (for example `pipe` combinators) into one
     /// executable unit with a single access declaration.
     pub fn merge(mut self, other: Self) -> Self {
         self.world_mut |= other.world_mut;
-        self.world_ref &= other.world_ref;
-        if self.world_mut || self.world_ref {
+        self.world_ref |= other.world_ref;
+        if self.world_mut {
             self.res_reading = FixedBitSet::new();
             self.res_writing = FixedBitSet::new();
             self.filter = NoOpHashMap::new();

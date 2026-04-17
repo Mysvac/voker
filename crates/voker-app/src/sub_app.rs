@@ -4,12 +4,15 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::fmt::Debug;
 use voker_ecs::prelude::{IntoObserver, Message};
+use voker_ecs::reflect::AppTypeRegistry;
 
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{InternedScheduleLabel, IntoSystemConfig};
 use voker_ecs::schedule::{Schedule, ScheduleLabel};
 use voker_ecs::system::{IntoSystem, SystemInput};
 use voker_ecs::world::{FromWorld, World};
+use voker_reflect::registry::{FromType, GetTypeMeta, TypeData};
+use voker_reflect::{Reflect, info::TypePath};
 use voker_utils::hash::HashSet;
 
 use crate::plugin::PlaceholderPlugin;
@@ -139,13 +142,25 @@ impl SubApp {
         self
     }
 
+    /// Adds one system to the given schedule label.
+    ///
+    /// This function is faster then `add_systems`.
+    pub fn add_system<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        system: impl IntoSystem<(), (), M>,
+    ) -> &mut Self {
+        self.world.add_system(label, system);
+        self
+    }
+
     /// Adds systems/configuration to the given schedule label.
     pub fn add_systems<M>(
         &mut self,
-        schedule: impl ScheduleLabel,
+        label: impl ScheduleLabel,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.world.add_systems(schedule, systems);
+        self.world.add_systems(label, systems);
         self
     }
 
@@ -214,6 +229,45 @@ impl SubApp {
         T: Message,
     {
         self.world.register_message::<T>();
+        self
+    }
+
+    /// Registers reflected type metadata for `T` in [`AppTypeRegistry`].
+    pub fn register_type<T: GetTypeMeta>(&mut self) -> &mut Self {
+        let registry = self.world.resource_mut::<AppTypeRegistry>();
+        registry.write().register::<T>();
+        self
+    }
+
+    /// Registers type data `D` for reflected type `T` in [`AppTypeRegistry`].
+    pub fn register_type_data<T: voker_reflect::info::Typed, D: TypeData + FromType<T>>(
+        &mut self,
+    ) -> &mut Self {
+        let registry = self.world.resource_mut::<AppTypeRegistry>();
+        registry.write().register_type_data::<T, D>();
+        self
+    }
+
+    /// Registers a fallible conversion route from `T` to `U` in [`AppTypeRegistry`].
+    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath,
+        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+    {
+        let registry = self.world.resource_mut::<AppTypeRegistry>();
+        registry.write().register_type_conversion::<T, U, F>(function);
+        self
+    }
+
+    /// Registers an infallible `Into` conversion route from `T` to `U` in [`AppTypeRegistry`].
+    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath + From<T>,
+    {
+        let registry = self.world.resource_mut::<AppTypeRegistry>();
+        registry.write().register_into_type_conversion::<T, U>();
         self
     }
 

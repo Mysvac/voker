@@ -7,7 +7,7 @@ use crate::derive::{impl_auto_register, impl_reflect, impl_type_path};
 
 impl_reflect! {
     #[reflect(type_path = "core::sync::atomic::Ordering")]
-    #[reflect(clone, debug, hash, eq)]
+    #[reflect(Clone, Debug, Hash, PartialEq)]
     pub enum Ordering {
         Relaxed,
         Release,

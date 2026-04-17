@@ -9,7 +9,6 @@
 pub mod cfg {
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
-        #[cfg(all(target_arch = "wasm32", feature = "web"))] => web,
     }
 }
 

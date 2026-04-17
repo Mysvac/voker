@@ -31,7 +31,7 @@ crate::cfg::switch! {
 /// If this value is intended for use in hash tables, consider applying a
 /// second hash function.
 pub fn thread_hash() -> u64 {
-    use core::hash::{Hash, Hasher};
+    use core::hash::Hasher;
 
     struct NoOpHasher(u64);
     impl Hasher for NoOpHasher {
@@ -55,7 +55,8 @@ pub fn thread_hash() -> u64 {
     hasher.write_u64(1);
 
     crate::cfg::std! {
-        std::thread::current().id().hash(&mut hasher);
+        let id = std::thread::current().id();
+        ::core::hash::Hash::hash(&id, &mut hasher);
     }
 
     hasher.finish()

@@ -15,7 +15,7 @@ use crate::entity::Entity;
 use crate::storage::{Maps, Table, TableId, TableRow};
 use crate::tick::Tick;
 use crate::utils::DebugCheckedUnwrap;
-use crate::world::{UnsafeWorld, World};
+use crate::world::UnsafeWorld;
 
 // -----------------------------------------------------------------------------
 // ComponentRegistrar
@@ -202,7 +202,6 @@ enum WritedState {
 /// - Offsets must be valid within the data buffer
 /// - Entity must be properly prepared to receive components
 pub struct ComponentWriter<'a> {
-    world: UnsafeWorld<'a>,
     data: OwningPtr<'a>,
     entity: Entity,
     tick: Tick,
@@ -227,12 +226,11 @@ impl ComponentWriter<'_> {
         let world_mut = unsafe { world.data_mut() };
         // This writer only requires `data_mut` (not `full_mut`),
         // so it must use `this_run` instead of `this_run_fast`.
-        let tick = world_mut.this_run();
+        let tick = world_mut.this_run_fast();
         let table = unsafe { world_mut.storages.tables.get_unchecked_mut(table_id) };
         let maps = &mut world_mut.storages.maps;
         let components = &world_mut.components;
         ComponentWriter {
-            world,
             data,
             entity,
             tick,
@@ -270,11 +268,11 @@ impl ComponentWriter<'_> {
     /// - `T` must be part of the target entity layout.
     /// - `T` must be registered and storage for it must be prepared.
     #[inline(never)]
-    pub unsafe fn write_required<T: Component>(&mut self, func: impl FnOnce(&World) -> T) {
+    pub unsafe fn write_required<T: Component>(&mut self, func: impl FnOnce() -> T) {
         let type_id = TypeId::of::<T>();
         let component = unsafe { self.components.get_id(type_id).debug_checked_unwrap() };
         if !self.writed.contains_key(&component) {
-            let data = func(unsafe { self.world.read_only() });
+            let data = func();
             voker_ptr::into_owning!(data);
             match T::STORAGE {
                 StorageMode::Dense => unsafe {

@@ -25,6 +25,7 @@ fn insert_internal<'a, 'b>(
 }
 
 #[cold]
+#[track_caller]
 #[inline(never)]
 fn uninitialized_resource(name: DebugName) -> ! {
     panic!(
@@ -36,6 +37,26 @@ fn uninitialized_resource(name: DebugName) -> ! {
 }
 
 impl World {
+    pub fn contains_resource<T: Resource>(&self) -> bool {
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.res_set.get(id)
+        {
+            data.is_active()
+        } else {
+            false
+        }
+    }
+
+    pub fn contains_non_send<T: Resource>(&self) -> bool {
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.res_set.get(id)
+        {
+            data.is_active()
+        } else {
+            false
+        }
+    }
+
     /// Inserts or replaces a `Send` resource and returns a mutable reference to it.
     ///
     /// The resource is registered by type on first use. Once inserted, it can be
@@ -265,18 +286,14 @@ impl World {
     /// assert_eq!(world.resource::<Bar>().0,  false);
     /// ```
     pub fn init_resource<T: Resource + Send + FromWorld>(&mut self) {
-        let id = self.register_resource::<T>();
-        self.prepare_resource(id);
-
-        let unsafe_world = self.unsafe_world();
-        unsafe {
-            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
-            if !data.is_active() {
-                let world = unsafe_world.read_only();
-                let this_run = world.this_run();
-                data.insert(T::from_world(world), this_run);
-            }
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.res_set.get(id)
+            && data.is_active()
+        {
+            return;
         }
+        let value = T::from_world(self);
+        self.insert_resource::<T>(value);
     }
 
     /// Returns an exclusive resource borrow with change detection.
@@ -590,23 +607,15 @@ impl World {
     /// # Panics
     /// - Panics if called from a thread other than the world's main thread.
     pub fn init_non_send<T: Resource + FromWorld>(&mut self) {
-        assert! {
-            self.thread_hash() == voker_os::thread::thread_hash(),
-            "!Send Resource can only be accessed mut on the main thread.",
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.res_set.get(id)
+            && data.is_active()
+        {
+            return;
         }
 
-        let id = self.register_resource::<T>();
-        self.prepare_resource(id);
-
-        let unsafe_world = self.unsafe_world();
-        unsafe {
-            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
-            if !data.is_active() {
-                let world = unsafe_world.read_only();
-                let this_run = world.this_run();
-                data.insert(T::from_world(world), this_run);
-            }
-        }
+        let value = T::from_world(self);
+        self.insert_non_send::<T>(value);
     }
 
     /// Returns an exclusive resource borrow with change detection.
@@ -676,7 +685,7 @@ impl World {
     /// resource and the world simultaneously.
     ///
     /// If the resource is not exist, return `None` directly.
-    pub fn resource_scope<T: Resource + Send, R>(
+    pub fn try_resource_scope<T: Resource + Send, R>(
         &mut self,
         func: impl FnOnce(&mut World, ResMut<T>) -> R,
     ) -> Option<R> {
@@ -721,11 +730,28 @@ impl World {
     /// Rust's borrowing rules, allowing the closure to mutably borrow both the
     /// resource and the world simultaneously.
     ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    pub fn resource_scope<T: Resource + Send, R>(
+        &mut self,
+        func: impl FnOnce(&mut World, ResMut<T>) -> R,
+    ) -> R {
+        self.try_resource_scope(func)
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+
+    /// Executes a closure with exclusive access to a resource and the world.
+    ///
+    /// This method temporarily removes the resource from the world to satisfy
+    /// Rust's borrowing rules, allowing the closure to mutably borrow both the
+    /// resource and the world simultaneously.
+    ///
     /// If the resource is not exist, return `None` directly.
     ///
     /// # Panics
     /// Panics if called from a thread other than the world's main thread.
-    pub fn non_send_scope<T: Resource, R>(
+    pub fn try_non_send_scope<T: Resource, R>(
         &mut self,
         func: impl FnOnce(&mut World, NonSendMut<T>) -> R,
     ) -> Option<R> {
@@ -766,6 +792,23 @@ impl World {
         } else {
             None
         }
+    }
+
+    /// Executes a closure with exclusive access to a resource and the world.
+    ///
+    /// This method temporarily removes the resource from the world to satisfy
+    /// Rust's borrowing rules, allowing the closure to mutably borrow both the
+    /// resource and the world simultaneously.
+    ///
+    /// # Panics
+    /// Panics if the resource does not exist or called from a thread other than
+    /// the world's main thread.
+    pub fn non_send_scope<T: Resource, R>(
+        &mut self,
+        func: impl FnOnce(&mut World, NonSendMut<T>) -> R,
+    ) -> R {
+        self.try_non_send_scope(func)
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
     }
 }
 

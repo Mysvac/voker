@@ -248,11 +248,6 @@ impl<T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'_, T> {
     }
 }
 
-// provided for `Condvar` implementation.
-pub(super) fn guard_lock<'a, T: ?Sized>(guard: &MutexGuard<'a, T>) -> &'a Futex {
-    &guard.lock.futex
-}
-
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use std::fmt::Debug;

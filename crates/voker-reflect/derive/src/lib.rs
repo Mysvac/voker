@@ -92,7 +92,7 @@ mod utils;
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(Opaque, clone)]
+/// #[reflect(Opaque, Clone)]
 /// struct Foo { /* ... */ }
 ///
 /// impl Clone for Foo {  /* ... */ }
@@ -107,29 +107,24 @@ mod utils;
 /// not assume their availability by default. Use attributes to declare available traits so the macro can optimize
 /// accordingly.
 ///
-/// As noted, `Opaque` types require `Clone` support, so they must implement it and be marked with the `clone` flag.
+/// As noted, `Opaque` types require `Clone` support, so they must implement it and be marked with the `Clone` flag.
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(Opaque, clone, hash)]
+/// #[reflect(Opaque, Clone, Hash)]
 /// struct Foo { /* ... */ }
 /// // impl Clone, Hash ...
 /// ```
 ///
 /// Available flags:
 ///
-/// - `clone`: Standard `Clone`
-/// - `hash`: Standard `Hash`
-/// - `eq`: Standard `PartialEq`
-/// - `cmp`: Standard `PartialOrd`
-/// - `default`: Standard `Default`
-/// - `serialize`: `serde::Serialize`
-/// - `deserialize`: `serde::Deserialize`
-///
-/// Two convenience bundles enable multiple flags simultaneously:
-///
-/// - `serde`: `serialize` + `deserialize`
-/// - `full`: All seven traits listed above
+/// - `Clone`: Standard `Clone`
+/// - `Hash`: Standard `Hash`
+/// - `PartialEq`: Standard `PartialEq`
+/// - `PartialOrd`: Standard `PartialOrd`
+/// - `Default`: Standard `Default`
+/// - `Serialize`: `serde::Serialize`
+/// - `Deserialize`: `serde::Deserialize`
 ///
 /// These attributes can only be applied at the type level.
 ///
@@ -149,9 +144,9 @@ mod utils;
 ///
 /// - `ReflectFromReflect`: If the default `FromReflect` implementation is enabled (not disabled with
 ///   `#[reflect(FromReflect = false)]`).
-/// - `ReflectDefault`: If `Default` is marked as available via `#[reflect(default)]`.
-/// - `ReflectSerialize`: If `serde::Serialize` is marked as available via `#[reflect(serialize)]`.
-/// - `ReflectDeserialize`: If `serde::Deserialize` is marked as available via `#[reflect(deserialize)]`.
+/// - `ReflectDefault`: If `Default` is marked as available via `#[reflect(Default)]`.
+/// - `ReflectSerialize`: If `serde::Serialize` is marked as available via `#[reflect(Serialize)]`.
+/// - `ReflectDeserialize`: If `serde::Deserialize` is marked as available via `#[reflect(Deserialize)]`.
 ///
 /// You can also manually add type traits using `#[reflect(type_data = (...))]`. These will be automatically
 /// inserted into `get_type_meta`.
@@ -264,7 +259,7 @@ mod utils;
 /// ```
 ///
 /// Important: This only takes effect with the default serialization provided by the reflection system.
-/// If the type is annotated with `reflect(serde)` and supports serialization via the serde library,
+/// If the type is annotated with `reflect(Serialize, Deserialize)` and supports serialization via the serde library,
 /// this field attribute will not have any effect.
 #[proc_macro_derive(Reflect, attributes(reflect))]
 pub fn derive_full_reflect(input: TokenStream) -> TokenStream {
@@ -357,14 +352,14 @@ pub(crate) enum ImplSourceKind {
 /// ## Example
 ///
 /// ```rust, ignore
-/// impl_reflect_opaque!(u64 (full));
-/// impl_reflect_opaque!(::utils::One<T: Clone> (clone));
-/// impl_reflect_opaque!(::alloc::string::String (clone, debug, docs = "hello"));
-/// impl_reflect_opaque!((in core::time) Instant (clone));
-/// impl_reflect_opaque!((in core::time as Ins) Instant (clone));
+/// impl_reflect_opaque!(u64 (Clone, Debug, Hash, PartialEq, PartialOrd, Default, Serialize, Deserialize));
+/// impl_reflect_opaque!(::utils::One<T: Clone> (Clone));
+/// impl_reflect_opaque!(::alloc::string::String (Clone, Debug, docs = "hello"));
+/// impl_reflect_opaque!((in core::time) Instant (Clone));
+/// impl_reflect_opaque!((in core::time as Ins) Instant (Clone));
 /// ```
 ///
-/// This macro always implies `Opaque`, so `clone` is required.
+/// This macro always implies `Opaque`, so `Clone` is required.
 ///
 /// See available attributes in [`derive Reflect`](derive_full_reflect) .
 #[proc_macro]

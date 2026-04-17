@@ -5,6 +5,7 @@ use core::fmt::Debug;
 use core::panic::AssertUnwindSafe;
 use voker_ecs::message::{MessageCursor, MessageQueue};
 use voker_ecs::prelude::{Component, IntoObserver, Message};
+use voker_ecs::reflect::AppTypeRegistry;
 use voker_ecs::world::{FromWorld, World};
 
 use voker_ecs::error::ErrorHandler;
@@ -13,6 +14,8 @@ use voker_ecs::resource::Resource;
 use voker_ecs::schedule::Schedule;
 use voker_ecs::schedule::{IntoSystemConfig, ScheduleLabel};
 use voker_ecs::system::{IntoSystem, SystemInput};
+use voker_reflect::registry::{FromType, GetTypeMeta, TypeData};
+use voker_reflect::{Reflect, info::TypePath};
 use voker_utils::hash::HashMap;
 
 use crate::InternedAppLabel;
@@ -83,6 +86,11 @@ impl Default for App {
         app.sub_apps.main.update_schedule = Some(Main.intern());
         app.add_plugins(MainSchedulePlugin);
         app.add_message::<AppExit>();
+
+        let mut registry = AppTypeRegistry::default();
+        registry.auto_register();
+        app.insert_resource(registry);
+
         app
     }
 }
@@ -253,6 +261,18 @@ impl App {
         self.sub_apps.iter().any(SubApp::is_building_plugins)
     }
 
+    /// Adds one system to a schedule in the main sub-app.
+    ///
+    /// This function is faster then `add_systems`.
+    pub fn add_system<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        system: impl IntoSystem<(), (), M>,
+    ) -> &mut Self {
+        self.main_mut().add_system(label, system);
+        self
+    }
+
     /// Adds systems/configuration to a schedule in the main sub-app.
     pub fn add_systems<M>(
         &mut self,
@@ -384,6 +404,41 @@ impl App {
         self
     }
 
+    /// Registers reflected type metadata for `T` in the app type registry.
+    pub fn register_type<T: GetTypeMeta>(&mut self) -> &mut Self {
+        self.main_mut().register_type::<T>();
+        self
+    }
+
+    /// Registers type data `D` for reflected type `T` in the app type registry.
+    pub fn register_type_data<T: voker_reflect::info::Typed, D: TypeData + FromType<T>>(
+        &mut self,
+    ) -> &mut Self {
+        self.main_mut().register_type_data::<T, D>();
+        self
+    }
+
+    /// Registers a fallible conversion route from `T` to `U` in the app type registry.
+    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath,
+        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+    {
+        self.main_mut().register_type_conversion::<T, U, F>(function);
+        self
+    }
+
+    /// Registers an infallible `Into` conversion route from `T` to `U` in the app type registry.
+    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    where
+        T: Reflect + TypePath,
+        U: Reflect + TypePath + From<T>,
+    {
+        self.main_mut().register_into_type_conversion::<T, U>();
+        self
+    }
+
     /// Registers a resource type in the main world.
     pub fn register_resource<T: Resource>(&mut self) -> &mut Self {
         self.world_mut().register_resource::<T>();
@@ -497,14 +552,8 @@ impl SubApps {
 fn run_once(mut app: App) -> AppExit {
     if app.plugins_state() != PluginsState::Cleaned {
         while app.plugins_state() == PluginsState::Adding {
-            crate::cfg::web! {
-                if {
-                    // No need
-                } else {
-                    let ticker = voker_task::TaskPool::local_ticker();
-                    while ticker.try_tick() {}
-                }
-            }
+            let ticker = voker_task::TaskPool::local_ticker();
+            while ticker.try_tick() {}
         }
         app.finish();
         app.cleanup();

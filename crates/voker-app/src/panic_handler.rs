@@ -49,9 +49,6 @@ impl Plugin for PanicHandlerPlugin {
 
             SET_HOOK.call_once(|| {
                 voker_cfg::switch! {
-                    crate::cfg::web => {
-                        std::panic::set_hook(alloc::boxed::Box::new(console_error_panic_hook::hook));
-                    }
                     voker_ecs::cfg::backtrace => {
                         let current_hook = std::panic::take_hook();
                         std::panic::set_hook(alloc::boxed::Box::new(

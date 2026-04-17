@@ -29,6 +29,8 @@
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::slice;
+use serde::{Deserialize, Serialize};
+use voker_reflect::Reflect;
 
 use crate::bundle::Bundle;
 use crate::clone::{CloneContext, CloneSource, CloneTarget};
@@ -46,7 +48,10 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// When removed, the child is detached from the previous parent.
 ///
 /// With `linked_lifecycle = true`, despawning a parent recursively despawns children.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Reflect, Component, Serialize, Deserialize)]
+#[reflect(Component, FromWorld, Clone, Debug)]
+#[reflect(PartialEq, Serialize, Deserialize)]
 #[relationship(relationship_target = Children)]
 pub struct ChildOf(#[related] pub Entity);
 
@@ -59,7 +64,7 @@ impl ChildOf {
 }
 
 impl FromWorld for ChildOf {
-    fn from_world(_: &World) -> Self {
+    fn from_world(_: &mut World) -> Self {
         Self(Entity::PLACEHOLDER)
     }
 }
@@ -71,8 +76,9 @@ impl FromWorld for ChildOf {
 ///
 /// Avoid mutating this component directly. Update `ChildOf` on child entities
 /// instead so both sides of the relationship remain synchronized.
-#[derive(Component, Default, Debug, PartialEq, Eq)]
+#[derive(Reflect, Component, Default, Debug, PartialEq, Eq)]
 #[component(cloner = Children::cloner)]
+#[reflect(Component, FromWorld, Default, Debug, PartialEq)]
 #[relationship_target(relationship = ChildOf, linked_lifecycle)]
 pub struct Children(#[related] Vec<Entity>);
 

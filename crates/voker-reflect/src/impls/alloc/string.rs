@@ -1,1 +1,10 @@
-crate::derive::impl_reflect_opaque!(::alloc::string::String(full));
+crate::derive::impl_reflect_opaque!(::alloc::string::String(
+    Default,
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize
+));

@@ -192,7 +192,16 @@ impl Display for EntityTag {
 /// (8-byte aligned) to enable efficient bitwise operations and serialization.
 /// Endianness-aware field ordering ensures consistent behavior across platforms.
 #[derive(Reflect, Clone, Copy)]
-#[reflect(Opaque, serde, clone, hash, eq, cmp, debug)]
+#[reflect(
+    Opaque,
+    Clone,
+    Debug,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize
+)]
 #[repr(C, align(8))]
 pub struct Entity {
     // Field ordering is endianness-dependent to ensure consistent u64 representation

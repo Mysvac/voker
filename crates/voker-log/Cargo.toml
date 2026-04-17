@@ -1,0 +1,34 @@
+[package]
+name = "voker-log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+trace = ["dep:tracing-error"]
+trace_tracy_memory = ["dep:tracy-client"]
+
+[dependencies]
+voker-os = { path = "../voker-os", default-features = false, features = ["std"] }
+voker-app = { path = "../voker-app", default-features = false, features = ["std"] }
+
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-log = { version = "0.2" }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "env-filter", "fmt"] }
+tracing-error = { version = "0.2", optional = true }
+tracy-client = { version = "0.18.3", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_log-sys = "0.3"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+tracing-oslog = "0.3"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition", "--generate-macro-expansion"]
+all-features = true

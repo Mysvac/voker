@@ -35,7 +35,9 @@
 //! assert_ne!(source, cloned);
 //! assert_eq!(world.entity_ref(cloned).get::<Health>().unwrap().0, 10);
 //! ```
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 use core::any::TypeId;
 use core::ptr::NonNull;
 
@@ -45,8 +47,6 @@ use crate::prelude::Component;
 use crate::relationship::{Relationship, RelationshipSourceSet, RelationshipTarget};
 use crate::utils::{DebugLocation, DebugName, ForgetEntityOnPanic};
 use crate::world::{UnsafeWorld, World};
-use alloc::boxed::Box;
-use alloc::vec::Vec;
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
 use voker_utils::vec::SmallVec;
 

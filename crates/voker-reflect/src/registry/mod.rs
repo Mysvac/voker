@@ -11,6 +11,7 @@
 //!     - [`ReflectDefault`]: Provides [`Default`] support for reflected types.
 //!     - [`ReflectFromPtr`]: Converts raw pointers into reflection references.
 //!     - [`ReflectFromReflect`]: Provide [`FromReflect`] support for deserialization.
+//!     - [`ReflectConvert`]: Provides runtime conversion routes between reflected types.
 //!     - [`ReflectSerialize`]: Provides serialization support for reflected types.
 //!     - [`ReflectDeserialize`]: Provides deserialization support for reflected types.
 //! - [`reflect_trait`]: An attribute macro that generates a `{Trait}FromReflect` helper usable as a [`TypeData`].
@@ -61,6 +62,7 @@ mod type_registry;
 
 pub use auto_register::{AutoRegister, RegisterFn};
 pub use from_type::FromType;
+pub use traits::ReflectConvert;
 pub use traits::ReflectDefault;
 pub use traits::{ReflectDeserialize, ReflectSerialize};
 pub use traits::{ReflectFromPtr, ReflectFromReflect};

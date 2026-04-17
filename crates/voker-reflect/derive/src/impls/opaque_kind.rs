@@ -112,7 +112,7 @@ fn get_opaque_apply_impl(meta: &ReflectMeta) -> TokenStream {
         }
     } else {
         unreachable!(
-            "#[reflect(clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -134,7 +134,7 @@ fn get_opaque_to_dynamic_impl(meta: &ReflectMeta) -> TokenStream {
         }
     } else {
         unreachable!(
-            "#[reflect(clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -159,7 +159,7 @@ fn get_opaque_clone_impl(meta: &ReflectMeta) -> TokenStream {
         }
     } else {
         unreachable!(
-            "#[reflect(clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -170,7 +170,7 @@ fn get_opaque_eq_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.eq {
+    if let Some(span) = meta.attrs().avail_traits.partial_eq {
         let reflect_eq = Ident::new("reflect_eq", span);
 
         quote! {
@@ -193,7 +193,7 @@ fn get_opaque_cmp_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.cmp {
+    if let Some(span) = meta.attrs().avail_traits.partial_ord {
         let reflect_cmp = Ident::new("reflect_cmp", span);
 
         quote! {

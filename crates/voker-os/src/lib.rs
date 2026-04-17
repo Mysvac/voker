@@ -11,7 +11,6 @@ pub mod cfg {
 
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
-        #[cfg(all(target_arch = "wasm32", feature = "web"))] => web,
     }
 }
 
@@ -32,12 +31,3 @@ pub mod utils;
 
 // -----------------------------------------------------------------------------
 // Special platform support
-
-#[doc(hidden)]
-pub mod exports {
-    crate::cfg::web! {
-        pub use js_sys;
-        pub use wasm_bindgen;
-        pub use wasm_bindgen_futures;
-    }
-}

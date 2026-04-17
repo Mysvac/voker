@@ -85,7 +85,6 @@ impl SystemExecutor for SingleThreadedExecutor {
                     if let Err(payload) = ::std::panic::catch_unwind(func) {
                         voker_utils::cold_path();
                         log::error!("Encountered a panic in system `{}`!", system.id());
-                        ::std::eprintln!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     }
 
@@ -116,7 +115,6 @@ impl SystemExecutor for SingleThreadedExecutor {
                     let condition = ::std::panic::catch_unwind(func).unwrap_or_else(|payload| {
                         voker_utils::cold_path();
                         log::error!("Encountered a panic in system `{}`!", system.id());
-                        ::std::eprintln!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     });
 

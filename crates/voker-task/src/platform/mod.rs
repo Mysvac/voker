@@ -3,14 +3,6 @@ use crate::cfg;
 mod thread_executor;
 
 cfg::switch! {
-    cfg::web => {
-        mod web;
-        use web as impls;
-    }
-    cfg::std => {
-        mod multi;
-        use multi as impls;
-    }
     _ => {
         mod fallback;
         use fallback as impls;

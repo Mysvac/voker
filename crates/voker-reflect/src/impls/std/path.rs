@@ -7,7 +7,7 @@ use crate::info::{OpaqueInfo, TypeInfo, Typed};
 use crate::registry::{ReflectDefault, FromType, GetTypeMeta, ReflectDeserialize};
 use crate::registry::{ReflectFromPtr, ReflectFromReflect, ReflectSerialize, TypeMeta};
 
-impl_reflect_opaque!(::std::path::PathBuf(full));
+impl_reflect_opaque!(::std::path::PathBuf(Default, Debug, Clone, Hash, PartialEq, PartialOrd, Serialize, Deserialize));
 
 impl_type_path!(::std::path::Path);
 

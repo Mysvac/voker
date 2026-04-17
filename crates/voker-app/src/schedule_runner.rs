@@ -5,13 +5,6 @@ use crate::{App, AppExit};
 use core::time::Duration;
 use voker_os::time::Instant;
 
-#[cfg(all(target_arch = "wasm32", feature = "web"))]
-use {
-    alloc::{boxed::Box, rc::Rc},
-    core::cell::RefCell,
-    wasm_bindgen::{JsCast, prelude::*},
-};
-
 /// Determines the method used to run an [`App`]'s [`Schedule`](voker_ecs::schedule::Schedule).
 ///
 /// It is used in the [`ScheduleRunnerPlugin`].
@@ -72,14 +65,8 @@ impl Plugin for ScheduleRunnerPlugin {
 
             if plugins_state != PluginsState::Cleaned {
                 while app.plugins_state() == PluginsState::Adding {
-                    crate::cfg::web! {
-                        if {
-                            // No need
-                        } else {
-                            let ticker = voker_task::TaskPool::local_ticker();
-                            while ticker.try_tick() {}
-                        }
-                    }
+                    let ticker = voker_task::TaskPool::local_ticker();
+                    while ticker.try_tick() {}
                 }
                 app.finish();
                 app.cleanup();
@@ -119,54 +106,13 @@ impl Plugin for ScheduleRunnerPlugin {
                         Ok(None)
                     };
 
-                    crate::cfg::web! {
-                        if {
-                            fn set_timeout(callback: &Closure<dyn FnMut()>, dur: Duration) {
-                                web_sys::window()
-                                    .unwrap()
-                                    .set_timeout_with_callback_and_timeout_and_arguments_0(
-                                        callback.as_ref().unchecked_ref(),
-                                        dur.as_millis() as i32,
-                                    )
-                                    .expect("Should register `setTimeout`.");
+                    loop {
+                        match tick(&mut app, wait) {
+                            Ok(Some(delay)) => {
+                                voker_os::thread::sleep(delay);
                             }
-                            let asap = Duration::from_millis(1);
-
-                            let exit = Rc::new(RefCell::new(AppExit::Success));
-                            let closure_exit = exit.clone();
-
-                            let mut app = Rc::new(app);
-                            let moved_tick_closure = Rc::new(RefCell::new(None));
-                            let base_tick_closure = moved_tick_closure.clone();
-
-                            let tick_app = move || {
-                                let app = Rc::get_mut(&mut app).unwrap();
-                                let delay = tick(app, wait);
-                                match delay {
-                                    Ok(delay) => set_timeout(
-                                        moved_tick_closure.borrow().as_ref().unwrap(),
-                                        delay.unwrap_or(asap),
-                                    ),
-                                    Err(code) => {
-                                        closure_exit.replace(code);
-                                    }
-                                }
-                            };
-                            *base_tick_closure.borrow_mut() =
-                                Some(Closure::wrap(Box::new(tick_app) as Box<dyn FnMut()>));
-                            set_timeout(base_tick_closure.borrow().as_ref().unwrap(), asap);
-
-                            exit.take()
-                        } else {
-                            loop {
-                                match tick(&mut app, wait) {
-                                    Ok(Some(delay)) => {
-                                        voker_os::thread::sleep(delay);
-                                    }
-                                    Ok(None) => continue,
-                                    Err(exit) => return exit,
-                                }
-                            }
+                            Ok(None) => continue,
+                            Err(exit) => return exit,
                         }
                     }
                 }

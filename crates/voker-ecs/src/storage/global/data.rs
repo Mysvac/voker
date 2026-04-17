@@ -26,7 +26,6 @@ impl Drop for AbortOnDropFail {
 
         crate::cfg::std! {
             if {
-                ::std::eprintln!("Aborting due to drop resource panicked.");
                 ::std::process::abort();
             } else {
                 panic!("Aborting due to drop resource panicked.");

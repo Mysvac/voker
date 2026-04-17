@@ -229,7 +229,7 @@ fn get_struct_eq_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.eq {
+    if let Some(span) = meta.attrs().avail_traits.partial_eq {
         let reflect_eq = Ident::new("reflect_eq", span);
 
         quote! {
@@ -258,7 +258,7 @@ fn get_struct_cmp_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.cmp {
+    if let Some(span) = meta.attrs().avail_traits.partial_ord {
         let reflect_cmp = Ident::new("reflect_cmp", span);
 
         quote! {
