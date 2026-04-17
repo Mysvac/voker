@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use super::{Direction, GraphNode};
 use crate::system::{AccessTable, SystemFlags, SystemId};
-use crate::world::World;
+use crate::world::{DeferredWorld, World};
 
 // -----------------------------------------------------------------------------
 // SystemKey
@@ -107,6 +107,15 @@ impl SystemObject {
         match self {
             SystemObject::Action { system, .. } => system.is_non_send(),
             SystemObject::Condition { system, .. } => system.is_non_send(),
+        }
+    }
+
+    /// Transfer the tasks from the deferred queue to the target world.
+    #[inline]
+    pub fn queue_deferred(&mut self, world: DeferredWorld) {
+        match self {
+            SystemObject::Action { system, .. } => system.queue_deferred(world),
+            SystemObject::Condition { system, .. } => system.queue_deferred(world),
         }
     }
 

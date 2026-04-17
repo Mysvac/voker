@@ -17,7 +17,7 @@ use super::{Message, MessageQueue};
 ///
 /// # Example
 ///
-/// ```rust
+/// ```
 /// use voker_ecs::message::{Message, MessageQueue};
 ///
 /// #[derive(Message)]
@@ -68,12 +68,14 @@ impl<M: Message> FusedIterator for MessageKeyIter<M> {}
 /// Per-system read position for one `MessageQueue<M>` stream.
 ///
 /// `MessageCursor` is usually managed by ECS as a local system parameter state
-/// (see [`crate::message::MessageReader`] and [`crate::message::MessageMutator`]).
-/// Each system instance has its own cursor, so one system reading messages does
-/// not consume them for other systems.
+/// (see [`MessageReader`] and [`MessageMutator`]). Each system instance has its
+/// own cursor, so one system reading messages does not consume them for other systems.
 ///
 /// Cursor advancement is pull-based: it advances when iterator items are
 /// consumed (or when methods like `count`/`nth`/`last` skip items).
+///
+/// [`MessageReader`]: crate::message::MessageReader
+/// [`MessageMutator`]: crate::message::MessageMutator
 pub struct MessageCursor<M: Message> {
     pub(super) last_index: usize,
     pub(super) _marker: PhantomData<M>,
@@ -321,14 +323,14 @@ pub struct MessageMutWithKeyIter<'a, M: Message> {
 impl<'a, M: Message> MessageMutWithKeyIter<'a, M> {
     fn new(cursor: &'a mut MessageCursor<M>, messages: &'a mut MessageQueue<M>) -> Self {
         let unread = cursor.len(messages);
+        cursor.last_index = messages.counter.wrapping_sub(unread);
+
         let a_index = cursor.last_index.wrapping_sub(messages.messages_a.start_id);
         let b_index = cursor.last_index.wrapping_sub(messages.messages_b.start_id);
 
         let a = messages.messages_a.get_mut(a_index..).unwrap_or_default();
         let b = messages.messages_b.get_mut(b_index..).unwrap_or_default();
         debug_assert_eq!(unread, a.len() + b.len());
-
-        cursor.last_index = messages.counter.wrapping_sub(unread);
 
         Self {
             cursor,

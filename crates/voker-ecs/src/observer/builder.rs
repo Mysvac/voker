@@ -51,7 +51,13 @@ impl Observer {
 // -----------------------------------------------------------------------------
 // IntoObserver
 
+/// Converts a value into a runtime [`Observer`].
+///
+/// This is implemented for:
+/// - [`Observer`] itself (identity conversion),
+/// - and observer systems that satisfy [`IntoObserverSystem`].
 pub trait IntoObserver<Marker>: Send + 'static {
+    /// Builds an [`Observer`] and performs any required world registration.
     fn into_observer(self, world: &mut World) -> Observer;
 }
 
@@ -67,7 +73,12 @@ impl<E: Event, B: Bundle, M, T: IntoObserverSystem<E, B, M>> IntoObserver<(E, B,
     }
 }
 
+/// Converts a value into an entity-scoped [`Observer`].
+///
+/// This is a convenience layer over [`IntoObserver`], attaching the resulting
+/// observer to a specific target entity.
 pub trait IntoEntityObserver<Marker>: Send + 'static {
+    /// Builds an observer scoped to `entity`.
     fn into_observer_for_entity(self, entity: Entity, world: &mut World) -> Observer;
 }
 

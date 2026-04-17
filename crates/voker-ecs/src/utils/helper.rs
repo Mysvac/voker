@@ -29,12 +29,6 @@ pub(crate) fn contains_storage_id(id: StorageId, slice: &[StorageId]) -> bool {
     arr.contains(&val)
 }
 
-/// A SIMD-optimized `contains` for `Entity`.
-///
-/// See: https://godbolt.org/
-///
-/// For u64, it may only be possible to unroll the loop,
-/// but it is still faster than directly contains(&entity).
 #[inline(always)]
 pub(crate) fn contains_entity(id: Entity, slice: &[Entity]) -> bool {
     #[inline(never)]

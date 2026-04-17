@@ -438,6 +438,11 @@ impl<'w, 's> Commands<'w, 's> {
         self.push(super::trigger_with(event, trigger));
     }
 
+    /// Adds a global [`Observer`] to the [`World`].
+    ///
+    /// The observer will run when matching events are triggered.
+    ///
+    /// [`Observer`]: crate::observer::Observer
     pub fn add_observer<M>(&mut self, observer: impl IntoObserver<M>) {
         self.push(super::add_observer(observer));
     }
@@ -582,18 +587,33 @@ impl<'a> EntityCommands<'a> {
         self.commands.try_despawn(self.entity);
     }
 
+    /// Adds an entity-scoped [`Observer`] to this entity.
+    ///
+    /// The observer is evaluated when matching events are triggered for this
+    /// target entity.
+    ///
+    /// [`Observer`]: crate::observer::Observer
     #[inline]
     pub fn observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
         self.push(super::observe(observer));
         self
     }
 
+    /// Adds an entity-scoped [`Observer`] to this entity.
+    ///
+    /// Errors are ignored if the entity is despawned before command execution.
+    ///
+    /// [`Observer`]: crate::observer::Observer
     #[inline]
     pub fn try_observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
         self.push_silenced(super::observe(observer));
         self
     }
 
+    /// Clones this entity.
+    ///
+    /// If `linked_clone` is `true`, the clone keeps an entity-link relationship
+    /// with the source entity when supported by clone behavior.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clone(&mut self, linked_clone: bool) -> &mut Self {
@@ -601,6 +621,12 @@ impl<'a> EntityCommands<'a> {
         self
     }
 
+    /// Clones this entity.
+    ///
+    /// Errors are ignored if the entity is despawned before command execution.
+    ///
+    /// If `linked_clone` is `true`, the clone keeps an entity-link relationship
+    /// with the source entity when supported by clone behavior.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_clone(&mut self, linked_clone: bool) -> &mut Self {

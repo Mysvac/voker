@@ -35,6 +35,7 @@ impl<N: GraphNode> Dag<N> {
         }
     }
 
+    /// Creates a new directed acyclic graph with specific capacity.
     pub fn with_capacity(nodes: usize, edges: usize) -> Self {
         Self {
             graph: DiGraph::with_capacity(nodes, edges),
@@ -69,6 +70,15 @@ impl<N: GraphNode> Dag<N> {
         !self.dirty
     }
 
+    /// Ensures the cached topological order is up to date.
+    ///
+    /// If the graph is marked dirty, this recomputes the topological order
+    /// from the underlying graph and refreshes the internal cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToposortError`] if the graph cannot be topologically sorted,
+    /// typically due to a cycle.
     pub fn ensure_toposorted(&mut self) -> Result<(), ToposortError<N>> {
         if self.dirty {
             // recompute the toposort, reusing the existing allocation
@@ -89,11 +99,26 @@ impl<N: GraphNode> Dag<N> {
         }
     }
 
+    /// Returns the current topological order of this graph.
+    ///
+    /// This will recompute the order if the graph is dirty, otherwise it
+    /// returns the cached order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToposortError`] if topological sorting fails.
     pub fn toposort(&mut self) -> Result<&[N], ToposortError<N>> {
         self.ensure_toposorted()?;
         Ok(&self.toposort)
     }
 
+    /// Returns both the current topological order and the underlying graph.
+    ///
+    /// This will recompute the cached order if needed before returning.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToposortError`] if topological sorting fails.
     pub fn toposort_and_graph(&mut self) -> Result<(&[N], &DiGraph<N>), ToposortError<N>> {
         self.ensure_toposorted()?;
         Ok((&self.toposort, &self.graph))

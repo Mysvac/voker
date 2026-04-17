@@ -14,7 +14,7 @@ use crate::utils::DebugName;
 pub struct EventMeta {
     id: EventId,
     name: DebugName,
-    type_id: TypeId,
+    // type_id: TypeId,
 }
 
 impl Debug for EventMeta {
@@ -39,11 +39,11 @@ impl EventMeta {
         self.name
     }
 
-    /// Returns the event's [`TypeId`].
-    #[inline(always)]
-    pub fn type_id(&self) -> TypeId {
-        self.type_id
-    }
+    // /// Returns the event's [`TypeId`].
+    // #[inline(always)]
+    // pub fn type_id(&self) -> TypeId {
+    //     self.type_id
+    // }
 }
 
 // -----------------------------------------------------------------------------
@@ -124,7 +124,7 @@ impl Events {
         let meta = EventMeta {
             id,
             name: DebugName::type_name::<T>(),
-            type_id: TypeId::of::<T>(),
+            // type_id: TypeId::of::<T>(),
         };
         self.metas.push(meta);
         self.mapper.insert(TypeId::of::<T>(), id);

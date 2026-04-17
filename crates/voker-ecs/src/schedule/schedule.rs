@@ -170,16 +170,24 @@ unsafe impl Send for SystemSchedule {}
 
 /// View of `SystemSchedule` for encapsulating internal implementation
 pub struct SystemScheduleView<'s> {
+    /// Stable system keys aligned with all other columns.
     pub keys: &'s [SystemKey],
+    /// Mutable access to compiled system objects.
     pub systems: &'s mut [SystemObject],
+    /// Conflict lookup table used by the executor.
     pub conflict: &'s ConflictTable,
+    /// Number of normal dependency predecessors for each system index.
     pub incoming: &'s [u32],
+    /// Normal dependency adjacency by system index.
     pub outgoing: &'s [&'s [u32]],
+    /// Number of run-condition predecessors for each system index.
     pub condition_incoming: &'s [u32],
+    /// Run-condition adjacency by system index.
     pub condition_outgoing: &'s [&'s [u32]],
 }
 
 impl SystemSchedule {
+    /// Returns a structured view over compiled schedule data.
     pub fn view(&mut self) -> SystemScheduleView<'_> {
         let SystemSchedule {
             keys,
@@ -203,34 +211,42 @@ impl SystemSchedule {
         }
     }
 
+    /// Returns mutable access to compiled systems.
     pub fn systems_mut(&mut self) -> &mut [SystemObject] {
         &mut self.systems
     }
 
+    /// Returns compiled system keys.
     pub fn keys(&self) -> &[SystemKey] {
         &self.keys
     }
 
+    /// Returns compiled systems in execution-index order.
     pub fn systems(&self) -> &[SystemObject] {
         &self.systems
     }
 
+    /// Returns the conflict lookup table.
     pub fn conflict(&self) -> &ConflictTable {
         &self.conflict
     }
 
+    /// Returns normal dependency incoming counts.
     pub fn incoming(&self) -> &[u32] {
         &self.incoming
     }
 
+    /// Returns normal dependency adjacency lists.
     pub fn outgoing(&self) -> &[&[u32]] {
         &self.outgoing
     }
 
+    /// Returns run-condition dependency incoming counts.
     pub fn condition_incoming(&self) -> &[u32] {
         &self.condition_incoming
     }
 
+    /// Returns run-condition dependency adjacency lists.
     pub fn condition_outgoing(&self) -> &[&[u32]] {
         &self.condition_outgoing
     }
@@ -385,12 +401,22 @@ impl ConflictTable {
         }
     }
 
+    /// Marks `(a, b)` as conflicting in the table.
+    ///
+    /// # Safety
+    /// `a` and `b` must be valid matrix indices in `[0, self.lines)`.
     pub unsafe fn set_conflict(&mut self, a: u32, b: u32) {
         let index = a as usize * self.lines + b as usize;
         debug_assert!(index <= self.lines * self.lines);
         unsafe { self.table.insert_unchecked(index) }
     }
 
+    /// Marks every pair involving `a` as conflicting.
+    ///
+    /// This is used for exclusive systems.
+    ///
+    /// # Safety
+    /// `a` must be a valid matrix index in `[0, self.lines)`.
     pub unsafe fn set_exclusive(&mut self, a: u32) {
         for line in 0..self.lines {
             let index = a as usize * self.lines + line;
@@ -402,6 +428,10 @@ impl ConflictTable {
         }
     }
 
+    /// Returns whether `(a, b)` conflicts.
+    ///
+    /// # Safety
+    /// `a` and `b` must be valid matrix indices in `[0, self.lines)`.
     #[inline(always)]
     pub unsafe fn is_conflict(&self, a: u32, b: u32) -> bool {
         let index = a as usize * self.lines + b as usize;
@@ -834,6 +864,9 @@ impl Schedule {
         true
     }
 
+    /// Inserts an explicit dependency edge `before -> after`.
+    ///
+    /// Returns `false` if either system is not registered.
     pub fn insert_order(&mut self, before: SystemId, after: SystemId) -> bool {
         let Some(b) = self.allocator.get_key(before) else {
             return false;
@@ -852,6 +885,9 @@ impl Schedule {
         true
     }
 
+    /// Removes an explicit dependency edge `before -> after`.
+    ///
+    /// Returns `false` if either system is not registered.
     pub fn remove_order(&mut self, before: SystemId, after: SystemId) -> bool {
         let Some(b) = self.allocator.get_key(before) else {
             return false;
@@ -868,6 +904,9 @@ impl Schedule {
         self.ordering.remove_order(b, a)
     }
 
+    /// Adds a run-condition edge `condition -> runnable`.
+    ///
+    /// Returns `false` if either system is not registered.
     pub fn insert_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
         let Some(r) = self.allocator.get_key(runnable) else {
             return false;
@@ -886,6 +925,9 @@ impl Schedule {
         true
     }
 
+    /// Removes a run-condition edge `condition -> runnable`.
+    ///
+    /// Returns `false` if either system is not registered.
     pub fn remove_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
         let Some(r) = self.allocator.get_key(runnable) else {
             return false;
@@ -917,10 +959,12 @@ impl Schedule {
         self.allocator.iter()
     }
 
+    /// Returns the explicit dependency graph.
     pub fn dependency_graph(&self) -> &Dag<SystemKey> {
         &self.ordering.dependency
     }
 
+    /// Returns the run-condition graph.
     pub fn condition_graph(&self) -> &Dag<SystemKey> {
         &self.ordering.condition
     }

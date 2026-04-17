@@ -163,6 +163,10 @@ impl Schedules {
         self.entry(label).remove_order(before, after)
     }
 
+    /// Removes a run-condition edge: `condition -> runnable`.
+    ///
+    /// Returns `false` if either system name is not present or the edge does
+    /// not exist.
     pub fn remove_run_if(
         &mut self,
         label: impl ScheduleLabel,
@@ -172,6 +176,9 @@ impl Schedules {
         self.entry(label).remove_run_if(runnable, condition)
     }
 
+    /// Adds one action system to the schedule identified by `label`.
+    ///
+    /// This is a chainable helper around [`Schedule::add_system`].
     pub fn add_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
@@ -180,6 +187,9 @@ impl Schedules {
         self
     }
 
+    /// Removes one action system from the schedule identified by `label`.
+    ///
+    /// This is a chainable helper around [`Schedule::del_system`].
     pub fn del_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
     where
         S: IntoSystem<(), (), M>,
@@ -188,6 +198,9 @@ impl Schedules {
         self
     }
 
+    /// Adds one condition system to the schedule identified by `label`.
+    ///
+    /// This is a chainable helper around [`Schedule::add_condition`].
     pub fn add_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
     where
         S: IntoSystem<(), bool, M>,
@@ -196,6 +209,9 @@ impl Schedules {
         self
     }
 
+    /// Removes one condition system from the schedule identified by `label`.
+    ///
+    /// This is a chainable helper around [`Schedule::del_condition`].
     pub fn del_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
     where
         S: IntoSystem<(), bool, M>,
@@ -204,6 +220,10 @@ impl Schedules {
         self
     }
 
+    /// Adds one or many systems/configurations to the schedule identified by
+    /// `label`.
+    ///
+    /// This is equivalent to calling [`Schedules::config`].
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_systems<M>(
         &mut self,
@@ -214,6 +234,10 @@ impl Schedules {
         self
     }
 
+    /// Applies a full [`IntoSystemConfig`] to the schedule identified by
+    /// `label`.
+    ///
+    /// This can insert systems and update dependency/run-condition edges.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn config<M>(
         &mut self,

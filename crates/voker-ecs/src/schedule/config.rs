@@ -282,10 +282,6 @@ impl SystemConfig {
     }
 }
 
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` does not describe a valid system configuration",
-    label = "invalid system configuration"
-)]
 /// Converts values into a [`SystemConfig`] that can be inserted into a schedule.
 ///
 /// This trait is implemented for:
@@ -293,6 +289,10 @@ impl SystemConfig {
 /// - condition systems (`IntoSystem<(), bool, _>`),
 /// - tuples of other `IntoSystemConfig` values,
 /// - and [`SystemConfig`] itself.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not describe a valid system configuration",
+    label = "invalid system configuration"
+)]
 pub trait IntoSystemConfig<Marker>: Sized {
     fn into_config(self) -> SystemConfig;
 

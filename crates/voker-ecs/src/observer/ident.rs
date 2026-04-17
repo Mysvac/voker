@@ -11,12 +11,17 @@ use crate::world::DeferredWorld;
 // ObserverId
 
 slotmap::new_key_type! {
+    /// Stable identifier for an observer stored in [`Observers`](crate::observer::Observers).
     pub struct ObserverId;
 }
 
 // -----------------------------------------------------------------------------
 // ObservedBy
 
+/// Component storing observer ids currently watching this entity.
+///
+/// This component is maintained internally by observer registration and
+/// lifecycle hooks.
 #[derive(Component, Default, Debug, Clone)]
 #[component(storage = "sparse", on_clone, on_discard, on_remove)]
 pub struct ObservedBy(pub(crate) SmallVec<ObserverId, 4>);
@@ -30,6 +35,7 @@ impl Deref for ObservedBy {
 }
 
 impl ObservedBy {
+    /// Returns the observer ids currently associated with this entity.
     pub fn get(&self) -> &[ObserverId] {
         self.0.as_slice()
     }

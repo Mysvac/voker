@@ -14,6 +14,11 @@ use crate::utils::DebugLocation;
 // -----------------------------------------------------------------------------
 // On
 
+/// Observer system input wrapper.
+///
+/// `On<E, B>` provides the triggered event `E`, trigger state
+/// (`E::Trigger`), observer metadata, and optional bundle marker `B` used by
+/// observer filtering APIs.
 pub struct On<'w, 't, E: Event, B: Bundle = ()> {
     observer: ObserverId,
     event_id: EventId,
@@ -27,6 +32,7 @@ pub struct On<'w, 't, E: Event, B: Bundle = ()> {
 }
 
 impl<'w, 't, E: Event, B: Bundle> On<'w, 't, E, B> {
+    /// Creates an observer input value from event/trigger runtime state.
     pub fn new(
         event: &'w mut E,
         trigger: &'w mut E::Trigger<'t>,
@@ -43,30 +49,37 @@ impl<'w, 't, E: Event, B: Bundle> On<'w, 't, E, B> {
         }
     }
 
+    /// Returns the runtime event type id.
     pub fn id(&self) -> EventId {
         self.event_id
     }
 
+    /// Returns the callsite captured at trigger time.
     pub fn caller(&self) -> DebugLocation {
         self.caller
     }
 
+    /// Returns the currently running observer id.
     pub fn observer(&self) -> ObserverId {
         self.observer
     }
 
+    /// Returns an immutable reference to the event payload.
     pub fn event(&self) -> &E {
         self.event
     }
 
+    /// Returns a mutable reference to the event payload.
     pub fn event_mut(&mut self) -> &mut E {
         self.event
     }
 
+    /// Returns an immutable reference to trigger state.
     pub fn trigger(&self) -> &E::Trigger<'t> {
         self.trigger
     }
 
+    /// Returns a mutable reference to trigger state.
     pub fn trigger_mut(&mut self) -> &mut E::Trigger<'t> {
         self.trigger
     }
@@ -78,14 +91,17 @@ where
     B: Bundle,
     T: Traversal<E>,
 {
+    /// Returns the original target before propagation traversal began.
     pub fn original_event_target(&self) -> Entity {
         self.trigger.original_event_target
     }
 
+    /// Enables or disables propagation for subsequent traversal steps.
     pub fn set_propagate(&mut self, should_propagate: bool) {
         self.trigger.propagate = should_propagate;
     }
 
+    /// Returns whether propagation is currently enabled.
     pub fn get_propagate(&self) -> bool {
         self.trigger.propagate
     }
@@ -132,6 +148,7 @@ impl<E: Event, B: Bundle> SystemInput for On<'_, '_, E, B> {
 // -----------------------------------------------------------------------------
 // System
 
+/// Marker trait for systems that can run as observers for event type `E`.
 pub trait ObserverSystem<E: Event, B: Bundle, Output = ()>:
     System<Input = On<'static, 'static, E, B>, Output = Output> + Send + 'static
 {
@@ -142,9 +159,12 @@ impl<E: Event, B: Bundle, Output, T> ObserverSystem<E, B, Output> for T where
 {
 }
 
+/// Converts values into observer-compatible systems.
 pub trait IntoObserverSystem<E: Event, B: Bundle, M, Output = ()>: Send + 'static {
+    /// Concrete observer system type.
     type System: ObserverSystem<E, B, Output>;
 
+    /// Converts `this` into an initialized observer system value.
     fn into_system(this: Self) -> Self::System;
 }
 

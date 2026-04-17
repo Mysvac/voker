@@ -172,6 +172,7 @@ fn modify_or_insert_relationship_with_caller<R: Relationship>(
             modified
         });
 
+        this.relocate();
         if modified {
             return;
         }

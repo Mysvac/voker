@@ -79,7 +79,6 @@ impl<D: QueryData, F: QueryFilter> QueryIter<'_, '_, D, F> {
     /// Advances to the next non-empty storage slice and refreshes caches.
     ///
     /// Returns `None` when no storage remains.
-    #[cold]
     #[inline(never)]
     fn update_slice(&mut self) -> Option<()> {
         self.row = 0;

@@ -21,6 +21,14 @@ use crate::world::DeferredWorld;
 // -----------------------------------------------------------------------------
 // ObserverRunner
 
+/// Low-level observer dispatch function pointer.
+///
+/// The runner receives:
+/// - the deferred world handle,
+/// - event metadata,
+/// - the observer id,
+/// - erased event pointer,
+/// - erased trigger pointer.
 pub type ObserverRunner =
     unsafe fn(DeferredWorld, EventContext, ObserverId, event: PtrMut, trigger: PtrMut);
 
@@ -40,6 +48,10 @@ impl<T: Any + System> NamedSystem for T {
 // -----------------------------------------------------------------------------
 // Observer
 
+/// Runtime observer descriptor and execution state.
+///
+/// An observer binds a system to one event type and optional target filters
+/// (entities/components), plus optional error handling configuration.
 pub struct Observer {
     pub(crate) event_id: EventId,
     pub(crate) last_trigger: u32,
@@ -57,20 +69,24 @@ impl Debug for Observer {
 }
 
 impl Observer {
+    /// Returns the debug name of the backing observer system.
     pub fn system_name(&self) -> DebugName {
         self.system.system_name()
     }
 
+    /// Restricts this observer to a single target entity.
     pub fn with_entity(mut self, entity: Entity) -> Self {
         self.observed_entities.insert(entity);
         self
     }
 
+    /// Restricts this observer to multiple target entities.
     pub fn with_entities<I: IntoIterator<Item = Entity>>(mut self, entities: I) -> Self {
         self.observed_entities.extend(entities);
         self
     }
 
+    /// Restricts this observer to a specific component target.
     pub fn with_component(mut self, component: ComponentId) -> Self {
         self.observed_components.push(component);
         self.observed_components.sort();
@@ -78,6 +94,7 @@ impl Observer {
         self
     }
 
+    /// Restricts this observer to multiple component targets.
     pub fn with_components<I: IntoIterator<Item = ComponentId>>(mut self, components: I) -> Self {
         self.observed_components.extend(components);
         self.observed_components.sort();
@@ -85,6 +102,7 @@ impl Observer {
         self
     }
 
+    /// Overrides the fallback error handler used when this observer fails.
     pub fn with_error_handler(mut self, error_handler: fn(GameError, ErrorContext)) -> Self {
         self.error_handler = Some(error_handler);
         self

@@ -107,7 +107,7 @@ impl<M: Message> MessageKey<M> {
         }
     }
 
-    /// Convert `MessageId` to usize.
+    /// Convert `MessageKey` to usize.
     #[inline(always)]
     pub const fn index(self) -> usize {
         self.index

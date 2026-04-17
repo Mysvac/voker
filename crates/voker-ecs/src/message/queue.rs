@@ -28,7 +28,7 @@ pub(super) struct MessageSequence<M: Message> {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```
 /// use voker_ecs::message::{Message, MessageQueue};
 ///
 /// #[derive(Message)]
@@ -241,8 +241,13 @@ impl<M: Message> MessageQueue<M> {
     /// The current write sequence becomes the older readable sequence. Then a new
     /// empty write sequence is prepared by clearing the previous older sequence.
     ///
-    /// This method is usually driven by [`crate::message::MessageRegistry`] or
-    /// [`crate::world::World::update_messages`].
+    /// This method is usually driven by [`Messages`] or [`update_messages`].
+    ///
+    /// 如果你使用了 voker_app 的 MainSchedulePlugin，那么此插件会负责
+    /// 周期性更新，用户不应显式调用此函数。
+    ///
+    /// [`Messages`]: crate::message::Messages
+    /// [`update_messages`]: crate::world::World::update_messages
     pub fn update(&mut self) {
         core::mem::swap(&mut self.messages_a, &mut self.messages_b);
 

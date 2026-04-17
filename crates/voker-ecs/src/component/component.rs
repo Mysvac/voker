@@ -173,10 +173,10 @@ pub trait Component: Sized + Send + Sync + 'static {
     /// Optional relationship metadata registrar for link-like components.
     const RELATIONSHIP_REGISTRAR: Option<RelationshipRegistrar> = None;
 
-    #[inline(always)]
-    #[expect(unused_variables, reason = "default implementation")]
     /// Remaps embedded entity references after entity-ID migration.
     ///
     /// Override this when the component stores [`crate::entity::Entity`] values.
+    #[inline(always)]
+    #[expect(unused_variables, reason = "default implementation")]
     fn map_entities<E: EntityMapper>(this: &mut Self, mapper: &mut E) {}
 }

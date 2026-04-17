@@ -1,5 +1,7 @@
+use voker_utils::vec::SmallVec;
+
 use crate::event::{Event, EventContext, EventId, Trigger};
-use crate::observer::{IntoObserver, Observer, ObserverId};
+use crate::observer::{IntoObserver, ObservedBy, Observer, ObserverId};
 use crate::utils::DebugLocation;
 use crate::world::World;
 
@@ -31,7 +33,48 @@ impl World {
             }
         }
 
-        self.observers.register(observer)
+        let entity_based = !observer.observed_entities.is_empty();
+
+        let observer_id = self.observers.register(observer);
+
+        if entity_based {
+            let unsafe_world = self.unsafe_world();
+            let observers = unsafe { &mut unsafe_world.data_mut().observers };
+            let entity_world = unsafe { unsafe_world.full_mut() };
+            let observer = unsafe { self.observers.get_unchecked(observer_id) };
+
+            for entity in observer.observed_entities.clone() {
+                let mut owned = match entity_world.get_entity_owned(entity) {
+                    Ok(val) => val,
+                    Err(e) => unsafe {
+                        let observer = observers.get_unchecked_mut(observer_id);
+
+                        observer.observed_entities.remove(&entity);
+                        let name = observer.system_name();
+
+                        log::warn!(
+                            "Observer `{name}` try to observe a despawned entity, the target has been removed. {e}"
+                        );
+
+                        if observer.observed_entities.is_empty() {
+                            observers.observers.remove(observer_id);
+                            return observer_id;
+                        }
+
+                        continue;
+                    },
+                };
+
+                if let Some(mut by) = owned.get_mut::<ObservedBy>() {
+                    by.0.push(observer_id);
+                } else {
+                    let by = ObservedBy(SmallVec::from_slice(&[observer_id]));
+                    owned.insert(by);
+                }
+            }
+        }
+
+        observer_id
     }
 
     /// Converts and registers an observer system, returning its [`ObserverId`].

@@ -14,7 +14,34 @@ use crate::world::DeferredWorld;
 // -----------------------------------------------------------------------------
 // Trigger
 
+/// Defines how an [`Event`] is dispatched to observers.
+///
+/// A `Trigger` controls:
+/// - which observers are selected,
+/// - which trigger state is passed to observer systems,
+/// - and dispatch ordering.
+///
+/// Most users should rely on derive defaults and built-in trigger types.
+/// Implementing custom triggers is an advanced internal extension point.
+///
+/// # Safety
+///
+/// Implementations must ensure that dispatch only happens for event types
+/// compatible with the trigger type. In practice, this means constraining
+/// impls with `E: for<'a> Event<Trigger<'a> = Self>` (or equivalent).
+///
+/// Calling [`Trigger::trigger`] is also `unsafe` because observer runner
+/// invocation depends on strict pointer/type compatibility between:
+/// - `event`,
+/// - `observers`,
+/// - and the trigger value.
 pub unsafe trait Trigger<E: Event> {
+    /// Dispatches `event` with this trigger strategy.
+    ///
+    /// # Safety
+    /// - `observers` must originate from `world`.
+    /// - `observers` must be compatible with event type `E`.
+    /// - `event` must be dispatched with its matching trigger type.
     unsafe fn trigger(
         &mut self,
         world: DeferredWorld,
@@ -27,6 +54,9 @@ pub unsafe trait Trigger<E: Event> {
 // -----------------------------------------------------------------------------
 // GlobalTrigger
 
+/// Dispatches an event to all matching global observers.
+///
+/// This is the default trigger behavior for plain [`Event`] derive usage.
 #[derive(Default, Debug)]
 pub struct GlobalTrigger;
 
@@ -78,6 +108,11 @@ impl GlobalTrigger {
 // -----------------------------------------------------------------------------
 // EntityTrigger
 
+/// Dispatches an [`EntityEvent`] to:
+/// - all matching global observers, and
+/// - entity-scoped observers watching [`EntityEvent::event_target`].
+///
+/// This is the default trigger behavior for [`EntityEvent`] derive usage.
 #[derive(Default, Debug)]
 pub struct EntityTrigger;
 
@@ -144,10 +179,28 @@ impl EntityTrigger {
 // -----------------------------------------------------------------------------
 // EntityComponentsTrigger
 
+/// Trigger for entity events that also target a component set.
+///
+/// This trigger first runs normal entity-event dispatch (same semantics as
+/// [`EntityTrigger`]), then runs component-scoped observer sets for each
+/// component in [`EntityComponentsTrigger::components`].
+///
+/// This is primarily used by lifecycle events such as add/insert/remove.
 #[derive(Default)]
 pub struct EntityComponentsTrigger<'a> {
+    /// Component ids associated with this dispatch.
+    ///
+    /// For batched structural changes, this can contain multiple components.
     pub components: &'a [ComponentId],
+
+    /// Archetype snapshot before the lifecycle transition.
+    ///
+    /// Useful for observers that need pre-change structural context.
     pub old_archetype: Option<&'a Archetype>,
+
+    /// Archetype snapshot after the lifecycle transition.
+    ///
+    /// Useful for observers that need post-change structural context.
     pub new_archetype: Option<&'a Archetype>,
 }
 
@@ -182,17 +235,15 @@ impl<'a> EntityComponentsTrigger<'a> {
         let components = self.components;
         let mut trigger = PtrMut::from_mut(self);
 
-        {
-            unsafe {
-                EntityTrigger::trigger_internal(
-                    world.reborrow(),
-                    context,
-                    observers,
-                    event.reborrow(),
-                    trigger.reborrow(),
-                    entity,
-                );
-            }
+        unsafe {
+            EntityTrigger::trigger_internal(
+                world.reborrow(),
+                context,
+                observers,
+                event.reborrow(),
+                trigger.reborrow(),
+                entity,
+            );
         }
 
         for id in components {
@@ -230,6 +281,13 @@ impl<'a> EntityComponentsTrigger<'a> {
 // -----------------------------------------------------------------------------
 // PropagateEntityTrigger
 
+/// Propagating entity-event trigger.
+///
+/// This trigger starts at the event target, runs normal entity dispatch on the
+/// current node, then traverses to the next entity with [`Traversal`] and
+/// repeats while propagation remains enabled.
+///
+/// `AUTO_PROPAGATE` controls the initial value of [`Self::propagate`].
 pub struct PropagateEntityTrigger<const AUTO_PROPAGATE: bool, E: EntityEvent, T: Traversal<E>> {
     /// The original [`Entity`] the [`Event`] was _first_ triggered for.
     pub original_event_target: Entity,

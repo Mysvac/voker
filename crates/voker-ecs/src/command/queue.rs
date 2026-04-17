@@ -49,7 +49,7 @@ impl RawCommandQueue {
     ///
     /// # Safety
     /// The internal pointers must be valid.
-    #[inline]
+    #[inline(always)]
     pub unsafe fn is_empty(&self) -> bool {
         // SAFETY: Pointers are guaranteed to be valid by requirements on `.clone_unsafe`
         // It should be `>=`, because the `append` function does not modify the cursor.

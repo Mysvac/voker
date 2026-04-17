@@ -56,16 +56,27 @@ pub trait Command: Send + Sized + 'static {
     /// is ultimately applied.
     fn apply(self, world: &mut World) -> Self::Output;
 
+    /// Overrides the resulting error severity of this command.
+    ///
+    /// If this command succeeds, no error is produced.
+    /// If it fails, the returned error severity is replaced with `severity`.
     #[inline]
     fn with_severity(self, severity: Severity) -> impl Command<Output = Option<GameError>> {
         move |world: &mut World| self.apply(world).with_severity(severity)
     }
 
+    /// Merges `severity` into the resulting error severity of this command.
+    ///
+    /// This preserves the original severity information while escalating it
+    /// with the provided value when needed.
     #[inline]
     fn merge_severity(self, severity: Severity) -> impl Command<Output = Option<GameError>> {
         move |world: &mut World| self.apply(world).merge_severity(severity)
     }
 
+    /// Maps the resulting error severity of this command with a custom function.
+    ///
+    /// The mapper is only evaluated when this command produces an error.
     #[inline]
     fn map_severity(
         self,
@@ -401,6 +412,11 @@ pub fn trigger_with<E: Event<Trigger<'static>: Send + Sync>>(
     }
 }
 
+/// Adds a global [`Observer`] to the [`World`].
+///
+/// The observer will run when matching events are triggered.
+///
+/// [`Observer`]: crate::observer::Observer
 #[inline]
 pub fn add_observer<M>(observer: impl IntoObserver<M>) -> impl Command {
     move |world: &mut World| {
@@ -471,7 +487,10 @@ pub fn clear() -> impl EntityCommand {
     }
 }
 
-/// An [`EntityCommand`] that clears all components from an entity.
+/// An [`EntityCommand`] that clones an entity.
+///
+/// If `linked_clone` is `true`, the clone keeps an entity-link relationship
+/// with the source entity when supported by clone behavior.
 #[inline]
 #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn clone(linked_clone: bool) -> impl EntityCommand {
@@ -481,6 +500,11 @@ pub fn clone(linked_clone: bool) -> impl EntityCommand {
     }
 }
 
+/// Adds an entity-scoped [`Observer`] to this entity.
+///
+/// The observer is invoked only for events matching this specific entity.
+///
+/// [`Observer`]: crate::observer::Observer
 #[inline]
 pub fn observe<M>(observer: impl IntoEntityObserver<M>) -> impl EntityCommand {
     move |mut entity: EntityOwned| {

@@ -21,11 +21,17 @@ type HookItem = (ComponentId, ComponentHook);
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) struct ObserverFlags: u8 {
+        /// Observer is interested in add events.
         const ADD = 1 << 0;
+        /// Observer is interested in clone events.
         const CLONE = 1 << 1;
+        /// Observer is interested in insert events.
         const INSERT = 1 << 2;
+        /// Observer is interested in remove events.
         const REMOVE = 1 << 3;
+        /// Observer is interested in discard events.
         const DISCARD = 1 << 4;
+        /// Observer is interested in despawn events.
         const DESPAWN = 1 << 5;
     }
 }
@@ -623,30 +629,40 @@ impl Archetype {
 // Observers
 
 impl Archetype {
+    /// Merges observer interests into this archetype's observer flags.
+    ///
+    /// This is used when registering observers so trigger paths can skip
+    /// expensive event dispatch for event kinds with no listeners.
     pub(crate) fn merge_observer_flags(&mut self, flags: ObserverFlags) {
         self.observers = self.observers.union(flags);
     }
 
+    /// Returns `true` if there is any `Add` observer for this archetype.
     pub fn has_on_add_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::ADD)
     }
 
+    /// Returns `true` if there is any `Clone` observer for this archetype.
     pub fn has_on_clone_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::CLONE)
     }
 
+    /// Returns `true` if there is any `Insert` observer for this archetype.
     pub fn has_on_insert_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::INSERT)
     }
 
+    /// Returns `true` if there is any `Remove` observer for this archetype.
     pub fn has_on_remove_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::REMOVE)
     }
 
+    /// Returns `true` if there is any `Discard` observer for this archetype.
     pub fn has_on_discard_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DISCARD)
     }
 
+    /// Returns `true` if there is any `Despawn` observer for this archetype.
     pub fn has_on_despawn_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DESPAWN)
     }

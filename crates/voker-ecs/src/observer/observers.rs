@@ -12,11 +12,13 @@ use crate::observer::{Observer, ObserverId};
 // -----------------------------------------------------------------------------
 // ObserverRunner & ObserverMap
 
+/// Map from observer id to runner function.
 pub type ObserverMap = SparseHashMap<ObserverId, ObserverRunner>;
 
 // -----------------------------------------------------------------------------
 // CachedComponentObservers
 
+/// Cached observers grouped by one component target.
 #[derive(Default, Debug)]
 pub struct CachedComponentObservers {
     // Observers watching for events targeting this component, but not a specific entity
@@ -40,6 +42,12 @@ impl CachedComponentObservers {
 // -----------------------------------------------------------------------------
 // CachedObservers
 
+/// Cached observers grouped for one event type.
+///
+/// This structure powers fast trigger dispatch by splitting observers into:
+/// - global observers,
+/// - component-scoped observers,
+/// - entity-scoped observers.
 #[derive(Default, Debug)]
 pub struct CachedObservers {
     /// Observers watching for any time this event is triggered, regardless of target.
@@ -52,6 +60,7 @@ pub struct CachedObservers {
 }
 
 impl CachedObservers {
+    /// Creates an empty cache bucket for one event type.
     const fn new() -> Self {
         Self {
             global_observers: ObserverMap::new(),
@@ -80,10 +89,11 @@ impl CachedObservers {
 // -----------------------------------------------------------------------------
 // Observers
 
+/// Observer registry and per-event dispatch caches.
 #[derive(Debug)]
 pub struct Observers {
-    pub(super) runners: Vec<CachedObservers>,
-    pub(super) observers: SlotMap<ObserverId, Observer>,
+    pub(crate) runners: Vec<CachedObservers>,
+    pub(crate) observers: SlotMap<ObserverId, Observer>,
 }
 
 impl Observers {
@@ -151,14 +161,20 @@ impl Observers {
 }
 
 impl Observers {
+    /// Returns cached observers for the given event id, if registered.
     pub fn get_observers(&self, event_id: EventId) -> Option<&CachedObservers> {
         self.runners.get(event_id.index())
     }
 
+    /// Returns an observer by id.
     pub fn get(&self, id: ObserverId) -> Option<&Observer> {
         self.observers.get(id)
     }
 
+    /// Returns an observer by id without bounds checks.
+    ///
+    /// # Safety
+    /// `id` must refer to a live observer in this storage.
     pub unsafe fn get_unchecked(&self, id: ObserverId) -> &Observer {
         unsafe { self.observers.get_unchecked(id) }
     }
