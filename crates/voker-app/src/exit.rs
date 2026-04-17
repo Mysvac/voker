@@ -1,6 +1,16 @@
 use core::num::NonZeroU8;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+use voker_ecs::prelude::Message;
+
+/// A [`Message`] that indicates the [`App`] should exit.
+///
+/// If one or more of these are present at the end of an update, the
+/// [runner] will end and ([maybe]) return control to the caller.
+///
+/// [`App`]: crate::App
+/// [runner]: crate::App::set_runner
+/// [maybe]: crate::App::run
+#[derive(Message, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum AppExit {
     #[default]
     Success,

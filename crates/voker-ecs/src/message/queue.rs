@@ -243,9 +243,6 @@ impl<M: Message> MessageQueue<M> {
     ///
     /// This method is usually driven by [`Messages`] or [`update_messages`].
     ///
-    /// 如果你使用了 voker_app 的 MainSchedulePlugin，那么此插件会负责
-    /// 周期性更新，用户不应显式调用此函数。
-    ///
     /// [`Messages`]: crate::message::Messages
     /// [`update_messages`]: crate::world::World::update_messages
     pub fn update(&mut self) {

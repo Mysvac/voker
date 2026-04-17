@@ -23,8 +23,6 @@
 /// world.register_message::<Collision>();
 ///
 /// world.write_message(Collision { /* .. */ });
-///
-/// world.update_messages();
 /// ```
 ///
 /// # Using MessageQueue In Systems

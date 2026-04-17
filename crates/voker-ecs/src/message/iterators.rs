@@ -110,6 +110,14 @@ impl<M: Message> Clone for MessageCursor<M> {
 }
 
 impl<M: Message> MessageCursor<M> {
+    pub fn new(messages: &MessageQueue<M>) -> Self {
+        let last_index = messages.oldest_message_index();
+        Self {
+            last_index,
+            _marker: PhantomData,
+        }
+    }
+
     /// Returns unread count for this cursor in the given message storage.
     pub fn len(&self, messages: &MessageQueue<M>) -> usize {
         let upper = messages.counter.wrapping_sub(self.last_index);

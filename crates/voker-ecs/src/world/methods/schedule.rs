@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // Schedule
 
+use crate::prelude::IntoSystemConfig;
 use crate::schedule::{Schedule, ScheduleLabel};
 use crate::world::World;
 
@@ -61,5 +62,10 @@ impl World {
     /// with running the schedule.
     pub fn run_schedule(&mut self, label: impl ScheduleLabel) {
         self.schedule_scope(label, |world, sched| sched.run(world));
+    }
+
+    /// Adds one or many systems/configurations to the schedule identified by label.
+    pub fn add_systems<M>(&mut self, label: impl ScheduleLabel, systems: impl IntoSystemConfig<M>) {
+        self.schedules.add_systems(label, systems);
     }
 }

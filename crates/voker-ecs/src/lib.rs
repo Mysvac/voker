@@ -84,6 +84,7 @@ pub mod prelude {
     pub use crate::error::{ErrorContext, ErrorHandler, FallbackErrorHandler};
     pub use crate::error::{GameError, IntoGameError};
     pub use crate::event::{Add, Clone, Despawn, Discard, Insert, Remove};
+    pub use crate::event::{Event, EntityEvent, EntityEventMut};
     pub use crate::hierarchy::{ChildOf, Children};
     pub use crate::message::{Message, MessageKey, MessageMutator, MessageReader, MessageWriter};
     pub use crate::name::Name;

@@ -13,6 +13,15 @@ std = [
     "voker-os/std",
     "voker-ecs/std",
     "voker-reflect/std",
+    "dep:ctrlc",
+]
+
+web = [
+    "voker-os/web",
+    "voker-task/web",
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:console_error_panic_hook",
 ]
 
 [dependencies]
@@ -23,6 +32,17 @@ voker-os = { path = "../voker-os", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
 voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
+
+cfg-if = "1.0"
+log = { version = "0.4", default-features = false }
+
+[target.'cfg(any(all(unix, not(target_os = "horizon")), windows))'.dependencies]
+ctrlc = { version = "3.5", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", features = ["Window"], optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [lints]
 workspace = true

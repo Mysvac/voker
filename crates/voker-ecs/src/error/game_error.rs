@@ -279,18 +279,14 @@ impl GameError {
 impl Display for GameError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Display::fmt(&self.inner.error, f)?;
-        #[cfg(feature = "backtrace")]
-        Display::fmt(&self.inner.backtrace, f)?;
-        Ok(())
+        self.format_backtrace(f)
     }
 }
 
 impl Debug for GameError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Debug::fmt(&self.inner.error, f)?;
-        #[cfg(feature = "backtrace")]
-        Debug::fmt(&self.inner.backtrace, f)?;
-        Ok(())
+        self.format_backtrace(f)
     }
 }
 
@@ -406,5 +402,95 @@ impl<T: IntoGameError, E: IntoGameError> IntoGameError for Result<T, E> {
             Ok(x) => x.to_err(),
             Err(y) => y.to_err(),
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IntoGameError
+
+#[cfg(feature = "backtrace")]
+const FILTER_MESSAGE: &str = "note: Some \"noisy\" backtrace lines have been filtered out. Run with `VOKER_BACKTRACE=full` for a verbose backtrace.";
+
+#[cfg(feature = "backtrace")]
+std::thread_local! {
+    static SKIP_NORMAL_BACKTRACE: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// When called, this will skip the currently configured panic hook when a
+/// [`GameError`] backtrace has already been printed.
+#[cfg(feature = "backtrace")]
+#[expect(clippy::print_stdout, reason = "Allowed behind `std` feature gate.")]
+pub fn game_error_panic_hook(
+    current_hook: impl Fn(&std::panic::PanicHookInfo),
+) -> impl Fn(&std::panic::PanicHookInfo) {
+    move |info| {
+        if SKIP_NORMAL_BACKTRACE.replace(false) {
+            if let Some(payload) = info.payload().downcast_ref::<&str>() {
+                std::println!("{payload}");
+            } else if let Some(payload) = info.payload().downcast_ref::<alloc::string::String>() {
+                std::println!("{payload}");
+            }
+            return;
+        }
+
+        current_hook(info);
+    }
+}
+
+impl GameError {
+    #[cfg_attr(not(feature = "backtrace"), inline(always))]
+    fn format_backtrace(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        #[cfg(feature = "backtrace")]
+        {
+            let f = _f;
+            let backtrace = &self.inner.backtrace;
+            if let std::backtrace::BacktraceStatus::Captured = backtrace.status() {
+                let full_backtrace =
+                    std::env::var("VOKER_BACKTRACE").is_ok_and(|val| val == "full");
+
+                let backtrace_str = alloc::string::ToString::to_string(backtrace);
+                let mut skip_next_location_line = false;
+                for line in backtrace_str.split('\n') {
+                    if !full_backtrace {
+                        if skip_next_location_line {
+                            if line.starts_with("             at") {
+                                continue;
+                            }
+                            skip_next_location_line = false;
+                        }
+                        if line.contains("std::backtrace_rs::backtrace::") {
+                            skip_next_location_line = true;
+                            continue;
+                        }
+                        if line.contains("std::backtrace::Backtrace::") {
+                            skip_next_location_line = true;
+                            continue;
+                        }
+                        if line.contains("<voker_ecs::error::game_error::GameError as core::convert::From<E>>::from") {
+                            skip_next_location_line = true;
+                            continue;
+                        }
+                        if line.contains("<core::result::Result<T,F> as core::ops::try_trait::FromResidual<core::result::Result<core::convert::Infallible,E>>>::from_residual") {
+                            skip_next_location_line = true;
+                            continue;
+                        }
+                        if line.contains("__rust_begin_short_backtrace") {
+                            break;
+                        }
+                        if line.contains("voker_ecs::observer::Observers::invoke::{{closure}}") {
+                            break;
+                        }
+                    }
+                    writeln!(f, "{line}")?;
+                }
+                if !full_backtrace {
+                    if std::thread::panicking() {
+                        SKIP_NORMAL_BACKTRACE.set(true);
+                    }
+                    writeln!(f, "{FILTER_MESSAGE}")?;
+                }
+            }
+        }
+        Ok(())
     }
 }

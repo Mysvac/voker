@@ -346,7 +346,6 @@ when you want to decouple producers and consumers without adding direct dependen
 
 ```rust
 use voker_ecs::prelude::*;
-use voker_ecs_derive::Message;
 
 #[derive(Message)]
 struct Collision {
@@ -366,4 +365,53 @@ fn handle_collisions(mut reader: MessageReader<Collision>) {
         let _ = (collision.lhs, collision.rhs);
     }
 }
+```
+
+### Observers
+
+Observers are systems that watch for a "trigger" of a specific `Event`:
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(Event)]
+struct Speak {
+    message: String
+}
+
+let mut world = World::alloc();
+
+world.add_observer(|event: On<Speak>| {
+    println!("{}", event.message);
+});
+
+world.trigger(Speak {
+    message: "Hello!".to_string(),
+});
+```
+
+These differ from `MessageReader` and `MessageWriter` in that they are "reactive".
+Rather than happening at a specific point in a schedule, they happen _immediately_ whenever a trigger happens.
+Triggers can trigger other triggers, and they all will be evaluated at the same time!
+
+If the event is an `EntityEvent`, it can also be triggered to target specific entities:
+
+```rust
+use voker_ecs::prelude::*;
+
+#[derive(EntityEvent)]
+struct Explode {
+    #[event_target]
+    entity: Entity,
+}
+
+let mut world = World::alloc();
+let entity = world.spawn_empty().entity();
+
+world.add_observer(|explode: On<Explode>, mut commands: Commands| {
+    println!("Entity {} goes BOOM!", explode.entity);
+    commands.with_entity(explode.entity).despawn();
+});
+
+world.trigger(Explode { entity });
 ```

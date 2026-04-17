@@ -265,7 +265,7 @@ impl Plugin for MainSchedulePlugin {
             sched.add_systems(FixedMain::run_fixed_main.after(fixed_main_begin));
         });
 
-        fn can_update_messages(
+        fn message_update_condition(
             mut main_reader: MessageReader<MainBegin>,
             mut fixed_main_reader: MessageReader<FixedMainBegin>,
             mut main_ran: Local<bool>,
@@ -290,7 +290,7 @@ impl Plugin for MainSchedulePlugin {
         }
 
         sub.edit_schedule(First, |sched| {
-            sched.add_systems(World::update_messages.run_if(can_update_messages));
+            sched.add_systems(World::update_messages.run_if(message_update_condition));
         });
     }
 }

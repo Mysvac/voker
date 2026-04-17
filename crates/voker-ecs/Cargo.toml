@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = [ "std", "debug" ]
+default = [ "std", "debug", "backtrace" ]
 
 std = [
     "voker-os/std",

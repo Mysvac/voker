@@ -380,6 +380,8 @@ impl IntoSystemConfig<()> for () {
 macro_rules! impl_tuple_into_system_config {
     (0: []) => {};
     (1 : [0 : P0 TO ]) => {
+        #[cfg_attr(docsrs, doc(fake_variadic))]
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 8 items long.")]
         impl<P, M> IntoSystemConfig<(SystemConfig, (P, M),)> for (P,)
         where
             P: IntoSystemConfig<M>
@@ -391,6 +393,7 @@ macro_rules! impl_tuple_into_system_config {
         }
     };
     ($num:literal : [$($index:tt : $p:ident $m:ident),+]) => {
+        #[cfg_attr(docsrs, doc(hidden))]
         impl<$($p, $m),*> IntoSystemConfig<(SystemConfig, ($($m,)*),)> for ($($p,)*)
         where
             $($p: IntoSystemConfig<$m>),*
