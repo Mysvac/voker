@@ -13,33 +13,37 @@
 //! ## Implemented Menu
 //!
 //! - basic:
-//!     - `i8`-`i128`, `u8`-`u128`, `isize`, `usize`, `f32`, `f64`
-//!     - `()`, `(P0,)`, `(P0, P1, ...)`. the num of P <= 12
-//!     - `[T; N]`
-//!     - `&'static str`, `String`
+//!   - `i8`-`i128`, `u8`-`u128`, `isize`, `usize`, `f32`, `f64`
+//!   - `()`, `(P0,)`, `(P0, P1, ...)` (up to 12 tuple elements)
+//!   - `[T; N]`
+//!   - `&'static str`, `String`
 //! - core:
-//!     - `Atomic`: Ordering, I8-I64, U8-U64, Isize, Usize (without Ptr)
-//!     - `NonZero`: I8-I128, U8-U128, Isize, Usize, `Wrapping`, `Saturating`
-//!     - `core::any::TypeId`
-//!     - `PhantomData<T>`, T implemted `TypePath`.
-//!     - `ops`: Range, Bound, RangeFull, RangeToInclusive, RangeTo, RangeFrom, RangeInclusive
-//!     - `Option<T>` , `Result<T, E>`
-//!     - `&'static core::panic::Location<'static>`
-//!     - `core::time::Duration`
+//!   - atomics: `Ordering`, `AtomicI8`-`AtomicI64`, `AtomicU8`-`AtomicU64`, `AtomicIsize`, `AtomicUsize` (without pointer atomics)
+//!   - non-zero and wrappers: `NonZero*`, `Wrapping`, `Saturating`
+//!   - `core::any::TypeId`
+//!   - `PhantomData<T>` (`T: TypePath`)
+//!   - ranges and bounds: `Range`, `Bound`, `RangeFull`, `RangeToInclusive`, `RangeTo`, `RangeFrom`, `RangeInclusive`
+//!   - `Option<T>`, `Result<T, E>`
+//!   - `&'static core::panic::Location<'static>`
+//!   - `core::time::Duration`
 //! - alloc:
-//!     - `String`, `Vec<T>`, `VecDeque<T>`
-//!     - `Cow<'static, str>`, `Cow<'static, [T]>`
-//!     - `BTreeMap<K, V>`, `BTreeSet<T>`
-//!     - `Arc` (without `Box`)
-//! - std: ("std" feature)
-//!     - `OsString` `PathBuf`
-//!     - `HashMap` `HashSet`
-//!- voker_utils:
-//!     - `Hashed` `HashMap` `HashSet`
-//!     - `hashbrown::HashMap` `hashbrown::HashSet`
-//!     - `fastvec::StackVec` `fastvec::AutoVec`
+//!   - `String`, `Vec<T>`, `VecDeque<T>`
+//!   - `Cow<'static, str>`, `Cow<'static, [T]>`
+//!   - `BTreeMap<K, V>`, `BTreeSet<T>`
+//!   - `Arc` (without `Box`)
+//! - std (`std` feature):
+//!   - `OsString`, `PathBuf`
+//!   - `HashMap`, `HashSet`
+//! - voker_utils:
+//!   - `Hashed`, `HashMap`, `HashSet`
+//!   - `hashbrown::HashMap`, `hashbrown::HashSet`
+//!   - `fastvec::StackVec`, `fastvec::AutoVec`
 //! - voker_os:
-//!     - `time::Instant`
+//!   - `time::Instant`
+//! - glam (`glam` feature):
+//!   - common glam math types implemented in `impls/glam.rs`
+//! - uuid (`uuid` feature):
+//!   - `uuid::Uuid`
 //!
 //! [`concat`]: crate::impls::concat
 //! [`Reflect::reflect_cmp`]: crate::Reflect::reflect_cmp

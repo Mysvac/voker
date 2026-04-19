@@ -1,5 +1,5 @@
 //! Performance diagnostic plugins
-//! 
+//!
 //! Provide basic data analysis on entity count, frame rate,
 //! and system overhead (CPU and Memory usage, etc.).
 #![cfg_attr(docsrs, feature(doc_cfg))]

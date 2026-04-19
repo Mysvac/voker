@@ -1,0 +1,24 @@
+[package]
+name = "voker-state-derive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+voker-macro-utils = { path = "../../voker-macro-utils" }
+
+syn = { version = "2.0", features = ["visit", "visit-mut", "full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+all-features = true

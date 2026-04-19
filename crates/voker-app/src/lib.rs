@@ -78,6 +78,6 @@ pub mod prelude {
     pub use crate::{
         App, AppExit, First, FixedFirst, FixedLast, FixedPostUpdate, FixedPreUpdate, FixedUpdate,
         Last, Main, Plugin, PluginGroup, PostStartup, PostUpdate, PreStartup, PreUpdate,
-        SpawnScene, Startup, SubApp, TaskPoolOptions, TaskPoolPlugin, Update,
+        SpawnScene, Startup, SubApp, TaskPoolOptions, TaskPoolPlugin, Update, RunFixedMainLoopSystems,
     };
 }

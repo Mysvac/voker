@@ -15,6 +15,7 @@ std = [
     "voker-task/std",
     "voker-reflect/std",
     "voker-ecs/std",
+    "voker-state/std",
     "voker-math/std",
 ]
 
@@ -84,6 +85,7 @@ voker-os = { path = "../voker-os", default-features = false }
 voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-state = { path = "../voker-state", default-features = false }
 voker-math = { path = "../voker-math", default-features = false }
 voker-asset = { path = "../voker-asset", default-features = false }
 

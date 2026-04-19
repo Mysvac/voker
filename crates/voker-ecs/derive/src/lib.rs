@@ -337,9 +337,14 @@ pub fn derive_schedule_label(input: TokenStream) -> TokenStream {
 /// - unit structs,
 /// - enums with unit variants only.
 ///
+/// Optional attribute:
+/// - `#[system_set(typed)]`
+///   Enables typed mode, allowing non-unit structs/enums.
+///   In this mode, both `begin` and `end` use `TAG = 0`.
+///
 /// For enums, generated begin/end marker systems use the variant index as
 /// `TAG`, so each variant gets a distinct pair.
-#[proc_macro_derive(SystemSet)]
+#[proc_macro_derive(SystemSet, attributes(system_set))]
 pub fn derive_system_set(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     schedule::impl_derive_system_set(ast)

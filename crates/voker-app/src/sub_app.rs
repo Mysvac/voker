@@ -211,8 +211,7 @@ impl SubApp {
 
     /// Ensures a schedule with the given label exists.
     pub fn init_schedule(&mut self, label: impl ScheduleLabel) -> &mut Self {
-        let label = label.intern();
-        self.world_mut().schedule_entry(label);
+        self.world_mut().schedule_entry(label.intern());
         self
     }
 
@@ -222,14 +221,23 @@ impl SubApp {
         self
     }
 
+    /// Returns a mutable reference to the schedule associated with label, if it exists.
+    pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
+        self.world_mut().schedules.get_mut(label.intern())
+    }
+
+    /// Returns a reference to the schedule associated with label, if it exists.
+    pub fn get_schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
+        self.world().schedules.get(label.intern())
+    }
+
     /// Edits a schedule in place, creating it if necessary.
     pub fn edit_schedule(
         &mut self,
         label: impl ScheduleLabel,
         mut f: impl FnMut(&mut Schedule),
     ) -> &mut Self {
-        let label = label.intern();
-        f(self.world_mut().schedule_entry(label));
+        f(self.world_mut().schedule_entry(label.intern()));
         self
     }
 
@@ -241,7 +249,7 @@ impl SubApp {
         label: impl ScheduleLabel,
         system: impl IntoSystem<(), (), M>,
     ) -> &mut Self {
-        self.world_mut().add_system(label, system);
+        self.world_mut().add_system(label.intern(), system);
         self
     }
 
@@ -251,7 +259,7 @@ impl SubApp {
         label: impl ScheduleLabel,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.world_mut().add_systems(label, systems);
+        self.world_mut().add_systems(label.intern(), systems);
         self
     }
 

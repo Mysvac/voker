@@ -15,8 +15,8 @@ use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
 use crate::prelude::IntoSystemConfig;
 use crate::schedule::{
-    AnonymousSchedule, AnonymousSystemSet, InternedScheduleSet, SystemConfig, SystemNode,
-    SystemSet, ToposortError,
+    AnonymousSchedule, AnonymousSystemSet, InternedSystemSet, SystemConfig, SystemNode, SystemSet,
+    ToposortError,
 };
 use crate::system::{IntoSystem, SystemId};
 use crate::world::World;
@@ -106,7 +106,7 @@ pub struct Schedule {
 // -----------------------------------------------------------------------------
 // SystemSets
 
-type SystemSets = HashMap<InternedScheduleSet, NoOpHashSet<SystemId>>;
+type SystemSets = HashMap<InternedSystemSet, NoOpHashSet<SystemId>>;
 
 // -----------------------------------------------------------------------------
 // Allocator
@@ -777,7 +777,7 @@ impl Schedule {
     ///
     /// A set exists once it is explicitly initialized or when at least one
     /// system is inserted with that set.
-    pub fn system_sets(&self) -> impl ExactSizeIterator<Item = InternedScheduleSet> + '_ {
+    pub fn system_sets(&self) -> impl ExactSizeIterator<Item = InternedSystemSet> + '_ {
         self.system_sets.keys().copied()
     }
 
@@ -787,7 +787,7 @@ impl Schedule {
     }
 
     /// Returns `true` if a system set has internal state in this schedule.
-    pub fn contains_system_set(&self, name: InternedScheduleSet) -> bool {
+    pub fn contains_system_set(&self, name: InternedSystemSet) -> bool {
         self.system_sets.contains_key(&name)
     }
 
@@ -795,7 +795,7 @@ impl Schedule {
     ///
     /// This also ensures the set boundary marker systems exist and wires
     /// run-condition edges so the system executes within `set` boundaries.
-    pub fn insert_action(&mut self, system: ActionSystem, set: InternedScheduleSet) {
+    pub fn insert_action(&mut self, system: ActionSystem, set: InternedSystemSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -848,7 +848,7 @@ impl Schedule {
     /// This also ensures the set boundary marker systems exist and wires
     /// run-condition edges so the condition is evaluated within `set`
     /// boundaries.
-    pub fn insert_condition(&mut self, system: ConditionSystem, set: InternedScheduleSet) {
+    pub fn insert_condition(&mut self, system: ConditionSystem, set: InternedSystemSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -900,7 +900,7 @@ impl Schedule {
     ///
     /// If absent, this inserts the set's begin/end markers and a direct
     /// `begin -> end` condition edge.
-    pub fn init_system_set(&mut self, set: InternedScheduleSet) {
+    pub fn init_system_set(&mut self, set: InternedSystemSet) {
         if !self.system_sets.contains_key(&set) {
             if !self.is_changed {
                 self.recycle_schedule();
@@ -935,7 +935,7 @@ impl Schedule {
     /// Removes `set` and all systems currently tracked inside it.
     ///
     /// This includes set boundary marker systems.
-    pub fn remove_system_set(&mut self, set: InternedScheduleSet) {
+    pub fn remove_system_set(&mut self, set: InternedSystemSet) {
         if let Some(sets) = self.system_sets.remove(&set) {
             for id in sets {
                 self.remove(id);

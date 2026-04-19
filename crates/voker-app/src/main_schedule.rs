@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 
-use voker_ecs::borrow::ResMut;
+use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::message::{Message, MessageReader, MessageWriter};
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{InternedScheduleLabel, SingleThreadedExecutor};
-use voker_ecs::schedule::{IntoSystemConfig, Schedule, ScheduleLabel};
+use voker_ecs::schedule::{IntoSystemConfig, Schedule, ScheduleLabel, SystemSet};
 use voker_ecs::system::Local;
 use voker_ecs::world::World;
 
@@ -16,89 +16,100 @@ use crate::{App, DuplicateStrategy, Plugin};
 // ---------------------------------------------------------
 // Main and FixedMain
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Root schedule that drives startup and per-frame main phases.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Main;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Root schedule for fixed-timestep phases.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedMain;
 
 // ---------------------------------------------------------
 // Startup
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Startup phase that runs before [`Startup`].
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct PreStartup;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Main startup phase.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Startup;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Startup phase that runs after [`Startup`].
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct PostStartup;
 
 // ---------------------------------------------------------
 // Main
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Scene spawning phase in the main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct SpawnScene;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// First phase of the per-frame main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct First;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Pre-update phase of the per-frame main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct PreUpdate;
 
+/// Runs the [`FixedMain`] schedule in a loop according
+/// until all relevant elapsed time has been "consumed".
 #[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct RunFixedMainLoop;
+
 /// Core update phase of the per-frame main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Update;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Post-update phase of the per-frame main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct PostUpdate;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Final phase of the per-frame main pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Last;
 
 // ---------------------------------------------------------
 // FixedMain
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// First phase of the fixed-timestep pipeline.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedFirst;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Pre-update fixed-timestep phase.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedPreUpdate;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Core fixed-timestep update phase.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedUpdate;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Post-update fixed-timestep phase.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedPostUpdate;
 
-#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 /// Final fixed-timestep phase.
+#[derive(ScheduleLabel, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct FixedLast;
 
 // -----------------------------------------------------------------------------
 // Message
 
-#[derive(Message, Debug, Default, Clone, Copy)]
 /// Marker message emitted at the start of each main frame.
+#[derive(Message, Debug, Default, Clone, Copy)]
 pub struct MainBegin;
 
-#[derive(Message, Debug, Default, Clone, Copy)]
 /// Marker message emitted at the start of each fixed-timestep frame.
+#[derive(Message, Debug, Default, Clone, Copy)]
 pub struct FixedMainBegin;
+
+/// A flag indicating that the fixed loop is enabled.
+/// 
+/// The `TimePlugin` is required for enabling.
+#[derive(Resource, Debug, Default, Clone, Copy)]
+pub struct EnableFixedMain;
 
 // -----------------------------------------------------------------------------
 // Order
@@ -125,6 +136,7 @@ impl Default for MainScheduleOrder {
             labels: alloc::vec![
                 First.intern(),
                 PreUpdate.intern(),
+                RunFixedMainLoop.intern(),
                 Update.intern(),
                 SpawnScene.intern(),
                 PostUpdate.intern(),
@@ -226,6 +238,21 @@ impl FixedMainScheduleOrder {
 }
 
 // -----------------------------------------------------------------------------
+// Order
+
+/// Set enum for the systems that want to run inside [`RunFixedMainLoop`],
+/// 
+/// but before or after the fixed update logic. Systems in this set will
+/// run exactly once per frame, regardless of the number of fixed updates.
+/// They will also run under a variable timestep.
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Copy, Clone)]
+pub enum RunFixedMainLoopSystems {
+    BeforeFixedMainLoop,
+    FixedMainLoop,
+    AfterFixedMainLoop,
+}
+
+// -----------------------------------------------------------------------------
 // System
 
 impl Main {
@@ -270,15 +297,34 @@ impl FixedMain {
 // MainSchedulePlugin
 
 /// Built-in scheduler plugin automatically added by [`App::new`](crate::App::new).
-///
-/// During setup this plugin:
-/// - Initializes schedule graph entries for [`PreStartup`], [`Startup`], [`PostStartup`],
-///   [`SpawnScene`], [`First`], [`PreUpdate`], [`Update`], [`PostUpdate`], [`Last`],
-///   [`FixedFirst`], [`FixedPreUpdate`], [`FixedUpdate`], [`FixedPostUpdate`], and [`FixedLast`].
-/// - Creates executor-backed root schedules [`Main`] and [`FixedMain`].
-/// - Inserts scheduling resources [`MainScheduleOrder`] and [`FixedMainScheduleOrder`].
-/// - Registers messages [`MainBegin`] and [`FixedMainBegin`].
-///
+/// 
+/// Default order:
+/// 
+/// **Main-Startup**: (run_once)
+/// 
+/// 1. [`PreStartup`]
+/// 2. [`Startup`]
+/// 3. [`PostStartup`]
+/// 
+/// **Main-Loop**:
+/// 
+/// 1. [`First`]
+/// 2. [`PreUpdate`]
+/// 3. [`RunFixedMainLoop`]
+///    -> run **FixedMain-Loop**
+/// 4. [`Update`]
+/// 5. [`SpawnScene`]
+/// 6. [`PostUpdate`]
+/// 7. [`Last`]
+/// 
+/// **FixedMain-Loop**:
+/// 
+/// 1. [`FixedFirst`]
+/// 2. [`FixedPreUpdate`]
+/// 3. [`FixedUpdate`]
+/// 4. [`FixedPostUpdate`]
+/// 5. [`FixedLast`]
+/// 
 /// This plugin also wires periodic message queue maintenance by running
 /// [`World::update_messages`] in [`First`] when both main and fixed phases have started.
 pub struct MainSchedulePlugin;
@@ -295,6 +341,7 @@ impl Plugin for MainSchedulePlugin {
             .init_schedule(SpawnScene)
             .init_schedule(First)
             .init_schedule(PreUpdate)
+            .init_schedule(RunFixedMainLoop)
             .init_schedule(Update)
             .init_schedule(PostUpdate)
             .init_schedule(Last)
@@ -332,32 +379,14 @@ impl Plugin for MainSchedulePlugin {
             sched.add_systems(FixedMain::run_fixed_main.after(fixed_main_begin));
         });
 
-        fn message_update_condition(
-            mut main_reader: MessageReader<MainBegin>,
-            mut fixed_main_reader: MessageReader<FixedMainBegin>,
-            mut main_ran: Local<bool>,
-            mut fixed_main_ran: Local<bool>,
-        ) -> bool {
-            if !main_reader.is_empty() {
-                *main_ran = true;
-                main_reader.clear();
-            }
-            if !fixed_main_reader.is_empty() {
-                *fixed_main_ran = true;
-                fixed_main_reader.clear();
-            }
-
-            if *main_ran && *fixed_main_ran {
-                *main_ran = false;
-                *fixed_main_ran = false;
-                true
-            } else {
-                false
-            }
-        }
-
         sub.edit_schedule(First, |sched| {
             sched.add_systems(World::update_messages.run_if(message_update_condition));
+        });
+
+        sub.edit_schedule(RunFixedMainLoop, |sched| {
+            use RunFixedMainLoopSystems::*;
+            sched.config(BeforeFixedMainLoop.end().before_set(FixedMainLoop));
+            sched.config(FixedMainLoop.end().before_set(AfterFixedMainLoop));
         });
     }
 
@@ -366,4 +395,36 @@ impl Plugin for MainSchedulePlugin {
         // added during App::new, should not be added repeatedly.
         DuplicateStrategy::Panic
     }
+}
+
+
+fn message_update_condition(
+    mut main_reader: MessageReader<MainBegin>,
+    mut fixed_main_reader: MessageReader<FixedMainBegin>,
+    mut main_ran: Local<bool>,
+    mut fixed_main_ran: Local<bool>,
+    enable_fixed: Option<Res<EnableFixedMain>>,
+) -> bool {
+    if !main_reader.is_empty() {
+        *main_ran = true;
+        main_reader.clear();
+    }
+
+    if enable_fixed.is_some() {
+        if !fixed_main_reader.is_empty() {
+            *fixed_main_ran = true;
+            fixed_main_reader.clear();
+        }
+        if *main_ran && *fixed_main_ran {
+            *main_ran = false;
+            *fixed_main_ran = false;
+            return true;
+        }
+    } else {
+        if *main_ran {
+            *main_ran = false;
+            return true;
+        }
+    }
+    false
 }

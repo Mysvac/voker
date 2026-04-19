@@ -64,7 +64,7 @@ define_label!(
 );
 
 /// A shorthand for interned `SystemSet` labels.
-pub type InternedScheduleSet = Interned<dyn SystemSet>;
+pub type InternedSystemSet = Interned<dyn SystemSet>;
 
 // -----------------------------------------------------------------------------
 // SystemSetBegin & SystemSetEnd

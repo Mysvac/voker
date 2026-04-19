@@ -1,0 +1,95 @@
+//! Time utilities and scheduling support
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![forbid(unsafe_code)]
+#![no_std]
+
+
+#[cfg(feature = "std")]
+extern crate std;
+extern crate alloc;
+
+pub mod conditions;
+mod fixed;
+mod real;
+mod stopwatch;
+mod time;
+mod timer;
+mod virt;
+
+pub use fixed::*;
+pub use real::*;
+pub use stopwatch::*;
+pub use time::*;
+pub use timer::*;
+pub use virt::*;
+
+pub mod prelude {
+    #[doc(hidden)]
+    pub use crate::{Fixed, Real, Time, TimePlugin, TimeUpdateStrategy, Timer, TimerMode, Virtual};
+}
+
+
+
+use core::time::Duration;
+
+use voker_app::{EnableFixedMain, RunFixedMainLoop, prelude::*};
+use voker_ecs::borrow::{Res, ResMut};
+use voker_ecs::resource::Resource;
+use voker_ecs::schedule::{IntoSystemConfig, SystemSet};
+use voker_os::time::Instant;
+use voker_reflect::Reflect;
+
+
+#[derive(Default)]
+pub struct TimePlugin;
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash, SystemSet)]
+pub struct TimeSystems;
+
+#[derive(Resource, Default, Reflect, Clone, Debug)]
+#[reflect(Resource, Default, Clone, Debug)]
+pub enum TimeUpdateStrategy {
+    #[default]
+    Automatic,
+    ManualInstant(Instant),
+    ManualDuration(Duration),
+    FixedTimesteps(u32),
+}
+
+impl Plugin for TimePlugin {
+    fn build(&self, app: &mut App) {
+        use RunFixedMainLoopSystems::FixedMainLoop;
+
+        app.init_resource::<Time>()
+            .init_resource::<Time<Real>>()
+            .init_resource::<Time<Virtual>>()
+            .init_resource::<Time<Fixed>>()
+            .init_resource::<TimeUpdateStrategy>()
+            .init_resource::<EnableFixedMain>();
+
+        app.register_type::<TimeUpdateStrategy>();
+
+        app.add_systems(First, time_system.in_set(TimeSystems));
+        app.add_systems(RunFixedMainLoop, run_fixed_main_schedule.in_set(FixedMainLoop));
+    }
+}
+
+pub fn time_system(
+    mut real_time: ResMut<Time<Real>>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+    fixed_time: Res<Time<Fixed>>,
+    mut time: ResMut<Time>,
+    update_strategy: Res<TimeUpdateStrategy>,
+) {
+    match update_strategy.as_ref() {
+        TimeUpdateStrategy::Automatic => real_time.update_with_instant(Instant::now()),
+        TimeUpdateStrategy::ManualInstant(instant) => real_time.update_with_instant(*instant),
+        TimeUpdateStrategy::ManualDuration(duration) => real_time.update_with_duration(*duration),
+        TimeUpdateStrategy::FixedTimesteps(factor) => {
+            real_time.update_with_duration(*factor * fixed_time.timestep());
+        }
+    }
+
+    update_virtual_time(&mut time, &mut virtual_time, &real_time);
+}
+

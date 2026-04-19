@@ -2,6 +2,32 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_quote};
 
+#[derive(Default)]
+struct SystemSetAttrs {
+    typed: bool,
+}
+
+fn parse_system_set_attrs(attrs: &[syn::Attribute]) -> syn::Result<SystemSetAttrs> {
+    let mut parsed = SystemSetAttrs::default();
+
+    for attr in attrs {
+        if !attr.path().is_ident("system_set") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("typed") {
+                parsed.typed = true;
+                return Ok(());
+            }
+
+            Err(meta.error("unsupported #[system_set(...)] option"))
+        })?;
+    }
+
+    Ok(parsed)
+}
+
 pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
     use crate::path::fp::{CloneFP, DebugFP, EqFP, HashFP, SendFP, SyncFP};
     let voker_ecs_path = crate::path::voker_ecs();
@@ -39,6 +65,11 @@ pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
 pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
     use crate::path::fp::{CloneFP, DebugFP, EqFP, HashFP, SendFP, SyncFP};
 
+    let attrs = match parse_system_set_attrs(&ast.attrs) {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
     let voker_ecs_path = crate::path::voker_ecs();
     let system_set_ = crate::path::system_set_(&voker_ecs_path);
     let system_ = crate::path::system_(&voker_ecs_path);
@@ -63,85 +94,112 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
     }
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let begin_body = match &ast.data {
-        Data::Struct(item) => {
-            if !matches!(item.fields, Fields::Unit) {
+    let (begin_body, end_body) = if attrs.typed {
+        match &ast.data {
+            Data::Struct(_) | Data::Enum(_) => {}
+            _ => {
                 return syn::Error::new_spanned(
-                    &item.fields,
-                    "SystemSet derive only supports unit structs or enums with unit variants",
+                    &type_ident,
+                    "SystemSet derive only supports structs or enums",
                 )
                 .to_compile_error()
                 .into();
             }
+        }
 
+        (
             quote! {
                 #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
-            }
-        }
-        Data::Enum(item) => {
-            let mut arms = Vec::with_capacity(item.variants.len());
-
-            for (index, variant) in item.variants.iter().enumerate() {
-                if !matches!(variant.fields, Fields::Unit) {
+            },
+            quote! {
+                #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+            },
+        )
+    } else {
+        let begin_body = match &ast.data {
+            Data::Struct(item) => {
+                if !matches!(item.fields, Fields::Unit) {
                     return syn::Error::new_spanned(
-                        variant,
-                        "SystemSet derive for enums only supports unit variants",
+                        &item.fields,
+                        "SystemSet derive only supports unit structs or enums \
+                        with unit variants; use #[system_set(typed)] to enable typed mode",
                     )
                     .to_compile_error()
                     .into();
                 }
 
-                let variant_ident = &variant.ident;
-                let tag = index;
-                arms.push(quote! {
-                    Self::#variant_ident => {
-                        #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
-                    }
-                });
-            }
-
-            quote! {
-                match self {
-                    #(#arms),*
+                quote! {
+                    #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
                 }
             }
-        }
-        _ => {
-            return syn::Error::new_spanned(
-                &type_ident,
-                "SystemSet derive only supports unit structs or enums with unit variants",
-            )
-            .to_compile_error()
-            .into();
-        }
-    };
+            Data::Enum(item) => {
+                let mut arms = Vec::with_capacity(item.variants.len());
 
-    let end_body = match &ast.data {
-        Data::Struct(_) => {
-            quote! {
-                #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
-            }
-        }
-        Data::Enum(item) => {
-            let mut arms = Vec::with_capacity(item.variants.len());
-
-            for (index, variant) in item.variants.iter().enumerate() {
-                let variant_ident = &variant.ident;
-                let tag = index;
-                arms.push(quote! {
-                    Self::#variant_ident => {
-                        #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
+                for (index, variant) in item.variants.iter().enumerate() {
+                    if !matches!(variant.fields, Fields::Unit) {
+                        return syn::Error::new_spanned(
+                            variant,
+                            "SystemSet derive for enums only supports unit variants; \
+                            use #[system_set(typed)] to enable typed mode",
+                        )
+                        .to_compile_error()
+                        .into();
                     }
-                });
-            }
 
-            quote! {
-                match self {
-                    #(#arms),*
+                    let variant_ident = &variant.ident;
+                    let tag = index;
+                    arms.push(quote! {
+                        Self::#variant_ident => {
+                            #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
+                        }
+                    });
+                }
+
+                quote! {
+                    match self {
+                        #(#arms),*
+                    }
                 }
             }
-        }
-        _ => unreachable!(),
+            _ => {
+                return syn::Error::new_spanned(
+                    &type_ident,
+                    "SystemSet derive only supports unit structs or enums with unit variants; use #[system_set(typed)] to enable typed mode",
+                )
+                .to_compile_error()
+                .into();
+            }
+        };
+
+        let end_body = match &ast.data {
+            Data::Struct(_) => {
+                quote! {
+                    #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+                }
+            }
+            Data::Enum(item) => {
+                let mut arms = Vec::with_capacity(item.variants.len());
+
+                for (index, variant) in item.variants.iter().enumerate() {
+                    let variant_ident = &variant.ident;
+                    let tag = index;
+                    arms.push(quote! {
+                        Self::#variant_ident => {
+                            #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
+                        }
+                    });
+                }
+
+                quote! {
+                    match self {
+                        #(#arms),*
+                    }
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        (begin_body, end_body)
     };
 
     quote! {

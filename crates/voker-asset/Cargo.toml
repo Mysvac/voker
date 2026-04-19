@@ -21,6 +21,8 @@ ron = { version = "0.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["v4","serde"] }
+tracing = { version = "0.1", default-features = false }
+atomicow = { version = "1.2", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

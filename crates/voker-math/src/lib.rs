@@ -26,12 +26,12 @@ mod ray;
 mod rects;
 mod rotation2d;
 
-pub mod ops;
-pub mod primitives;
-pub mod cubic_splines;
 pub mod bounding;
 pub mod common_traits;
+pub mod cubic_splines;
 pub mod curve;
+pub mod ops;
+pub mod primitives;
 
 #[cfg(feature = "rand")]
 pub mod sampling;

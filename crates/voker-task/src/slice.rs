@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 ///
 /// All closures are required to implement `Clone + Send` because each worker
 /// receives its own cloned closure instance.
-/// 
+///
 /// [`ComputeTaskPool`]: crate::ComputeTaskPool
 pub trait ParallelSlice {
     type Item;

@@ -328,7 +328,7 @@ impl App {
 
     /// Ensures a schedule with `label` exists in the main world.
     pub fn init_schedule(&mut self, label: impl ScheduleLabel) -> &mut Self {
-        self.main_mut().init_schedule(label);
+        self.main_mut().init_schedule(label.intern());
         self
     }
 
@@ -338,13 +338,23 @@ impl App {
         self
     }
 
+    /// Returns a mutable reference to the schedule associated with label, if it exists.
+    pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
+        self.main_mut().get_schedule_mut(label.intern())
+    }
+
+    /// Returns a reference to the schedule associated with label, if it exists.
+    pub fn get_schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
+        self.main().get_schedule(label.intern())
+    }
+
     /// Edits the schedule identified by `label` in place.
     pub fn edit_schedule(
         &mut self,
         label: impl ScheduleLabel,
         f: impl FnMut(&mut Schedule),
     ) -> &mut Self {
-        self.main_mut().edit_schedule(label, f);
+        self.main_mut().edit_schedule(label.intern(), f);
         self
     }
 

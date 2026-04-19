@@ -58,7 +58,7 @@ pub use graph::{Direction, Graph, GraphNode, SccIterator, SccNodes};
 pub use label::{AnonymousSchedule, InternedScheduleLabel, ScheduleLabel};
 pub use schedule::{Schedule, SystemSchedule};
 pub use schedules::Schedules;
-pub use set::{AnonymousSystemSet, InternedScheduleSet};
+pub use set::{AnonymousSystemSet, InternedSystemSet};
 pub use set::{SystemSet, SystemSetBegin, SystemSetEnd};
 pub use system::{SystemKey, SystemObject};
 

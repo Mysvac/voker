@@ -1,1 +1,20 @@
+crate::derive::impl_reflect_opaque!(::uuid::Uuid(
+    Default,
+    Serialize,
+    Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    PartialOrd,
+    Hash
+));
 
+crate::derive::impl_reflect_opaque!(::uuid::NonNilUuid(
+    Serialize,
+    Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    PartialOrd,
+    Hash
+));

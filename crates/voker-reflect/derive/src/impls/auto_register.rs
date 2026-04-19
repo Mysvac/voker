@@ -9,8 +9,9 @@ pub(crate) fn get_auto_register_impl(meta: &ReflectMeta) -> TokenStream {
         return crate::utils::empty();
     }
 
-    // Invalid for generic types.
-    if meta.contains_generics() {
+    // Auto-register requires a concrete, non-generic type.
+    // This must also exclude lifetime-only generics like `Foo<'a>`.
+    if !meta.without_generics() {
         return crate::utils::empty();
     }
 

@@ -20,11 +20,13 @@ use alloc::boxed::Box;
 use voker_utils::hash::map::Entry;
 use voker_utils::hash::{HashSet, NoOpHashMap};
 
-use crate::schedule::{
-    ActionSystem, ConditionSystem, InternedScheduleSet, SystemSet, apply_deferred,
-};
-use crate::system::{IntoSystem, SystemId};
+use crate::schedule::{ActionSystem, ConditionSystem};
+use crate::schedule::{InternedSystemSet, SystemSet, apply_deferred};
+use crate::system::{IntoSystem, System, SystemId};
 use crate::utils::DebugLocation;
+
+// -----------------------------------------------------------------------------
+// SystemConfig
 
 pub(super) enum SystemNode {
     Action(ActionSystem),
@@ -34,7 +36,7 @@ pub(super) enum SystemNode {
 #[derive(Default)]
 pub struct SystemConfig {
     pub(super) idents: VecDeque<SystemId>,
-    pub(super) system_set: Option<InternedScheduleSet>,
+    pub(super) system_set: Option<InternedSystemSet>,
     pub(super) systems: NoOpHashMap<SystemId, SystemNode>,
     pub(super) deferred: NoOpHashMap<SystemId, ActionSystem>,
     pub(super) dependency: HashSet<(SystemId, SystemId)>,
@@ -54,6 +56,66 @@ impl SystemConfig {
         }
     }
 
+    fn with_boxed(boxed: ActionSystem) -> Self {
+        let ident = boxed.id();
+        Self {
+            idents: VecDeque::from([ident]),
+            system_set: None,
+            systems: NoOpHashMap::from([(ident, SystemNode::Action(boxed))]),
+            deferred: NoOpHashMap::new(),
+            dependency: HashSet::new(),
+            condition: HashSet::new(),
+        }
+    }
+
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn before_set_impl(mut self, set: InternedSystemSet) -> Self {
+        let node = set.begin();
+        let id = node.id();
+
+        let entry = self.systems.entry(id);
+        if matches!(&entry, Entry::Occupied(_)) {
+            let caller = DebugLocation::caller();
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.");
+        }
+
+        entry.insert(SystemNode::Action(node));
+
+        for &before in self.systems.keys() {
+            if before != id {
+                self.dependency.insert((before, id));
+            }
+        }
+
+        self.idents.push_back(id);
+
+        self
+    }
+
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn after_set_impl(mut self, set: InternedSystemSet) -> Self {
+        let node = set.end();
+        let id = node.id();
+
+        let entry = self.systems.entry(id);
+        if matches!(&entry, Entry::Occupied(_)) {
+            let caller = DebugLocation::caller();
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.");
+        }
+
+        entry.insert(SystemNode::Action(node));
+
+        for &after in self.systems.keys() {
+            if after != id {
+                self.dependency.insert((id, after));
+            }
+        }
+
+        self.idents.push_front(id);
+
+        self
+    }
+
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn before_impl<S, M>(mut self, system: S, ignore_deferred: bool) -> Self
     where
@@ -65,7 +127,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.");
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -125,7 +187,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.");
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -182,7 +244,7 @@ impl SystemConfig {
             let mut afters = iter.clone();
             if afters.any(|after| *after == *before) {
                 let caller = DebugLocation::caller();
-                log::error!("Duplicated systems `{before}`, may cause an infinite loop. {caller}.")
+                log::error!("Duplicated systems `{before}`, may cause an infinite loop. {caller}.");
             }
         }
 
@@ -222,7 +284,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.");
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -275,7 +337,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}`, may cause an infinite loop {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop {caller}.");
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -322,7 +384,7 @@ impl SystemConfig {
     }
 
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn in_set_impl(mut self, set: InternedScheduleSet) -> Self {
+    fn in_set_impl(mut self, set: InternedSystemSet) -> Self {
         if let Some(old_set) = self.system_set {
             let caller = DebugLocation::caller();
             log::error!(
@@ -343,6 +405,9 @@ impl SystemConfig {
         self
     }
 }
+
+// -----------------------------------------------------------------------------
+// IntoSystemConfig
 
 /// Converts values into a [`SystemConfig`] that can be inserted into a schedule.
 ///
@@ -368,6 +433,18 @@ pub trait IntoSystemConfig<Marker>: Sized {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn after<M>(self, s: impl IntoSystem<(), (), M>) -> SystemConfig {
         self.into_config().after_impl(s, false)
+    }
+
+    /// Require the target system to run before the specified system set.
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn before_set(self, s: impl SystemSet) -> SystemConfig {
+        self.into_config().before_set_impl(s.intern())
+    }
+
+    /// Require the target system to run after the specified system set.
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn after_set(self, s: impl SystemSet) -> SystemConfig {
+        self.into_config().after_set_impl(s.intern())
     }
 
     /// Adds chain dependencies between adjacent configured systems.
@@ -420,10 +497,27 @@ pub trait IntoSystemConfig<Marker>: Sized {
     }
 }
 
+// -----------------------------------------------------------------------------
+// IntoSystemConfig Implementation
+
 impl IntoSystemConfig<()> for SystemConfig {
     #[inline(always)]
     fn into_config(self) -> Self {
         self
+    }
+}
+
+impl IntoSystemConfig<()> for () {
+    #[inline]
+    fn into_config(self) -> SystemConfig {
+        SystemConfig::new()
+    }
+}
+
+impl IntoSystemConfig<()> for Box<dyn System<Input = (), Output = ()>> {
+    #[inline]
+    fn into_config(self) -> SystemConfig {
+        SystemConfig::with_boxed(self)
     }
 }
 
@@ -444,13 +538,6 @@ where
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn into_config(self) -> SystemConfig {
         SystemConfig::new().run_if_impl(self)
-    }
-}
-
-impl IntoSystemConfig<()> for () {
-    #[inline]
-    fn into_config(self) -> SystemConfig {
-        SystemConfig::new()
     }
 }
 
@@ -484,6 +571,9 @@ macro_rules! impl_tuple_into_system_config {
 }
 
 voker_utils::range_invoke2!(impl_tuple_into_system_config, 8);
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {
