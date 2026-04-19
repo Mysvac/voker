@@ -3,6 +3,10 @@ use crate::cfg;
 mod thread_executor;
 
 cfg::switch! {
+    crate::cfg::std => {
+        mod multi;
+        use multi as impls;
+    }
     _ => {
         mod fallback;
         use fallback as impls;

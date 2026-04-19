@@ -1,10 +1,12 @@
-use core::sync::atomic::{AtomicU8, Ordering};
-
 use voker_ecs::message::MessageWriter;
+use voker_os::sync::atomic::{AtomicU8, Ordering};
 
 use crate::{App, AppExit, Plugin, Update};
 
 pub use ctrlc;
+
+// -----------------------------------------------------------------------------
+// TerminalCtrlCHandlerPlugin
 
 /// Indicates that all [`App`]'s should exit.
 static SHOULD_EXIT: AtomicU8 = AtomicU8::new(0);
@@ -12,10 +14,10 @@ static SHOULD_EXIT: AtomicU8 = AtomicU8::new(0);
 /// Gracefully handles `Ctrl+C` by emitting an [`AppExit`] message.
 ///
 /// ```no_run
-/// # use voker_app::{App, NoopPluginGroup, PluginGroup, TerminalCtrlCHandlerPlugin};
+/// # use voker_app::*;
+///
 /// fn main() {
 ///     App::new()
-///         .add_plugins(NoopPluginGroup)
 ///         .add_plugins(TerminalCtrlCHandlerPlugin)
 ///         .run();
 /// }
@@ -24,8 +26,10 @@ static SHOULD_EXIT: AtomicU8 = AtomicU8::new(0);
 /// If you want to setup your own `Ctrl+C` handler, you should call the
 /// [`TerminalCtrlCHandlerPlugin::gracefully_exit`] function in your handler so
 /// the app still exits gracefully.
+///
 /// ```no_run
-/// # use voker_app::{App, NoopPluginGroup, PluginGroup, TerminalCtrlCHandlerPlugin, ctrlc};
+/// # use voker_app::*;
+///
 /// fn main() {
 ///     // Your own `Ctrl+C` handler
 ///     ctrlc::set_handler(move || {
@@ -35,12 +39,15 @@ static SHOULD_EXIT: AtomicU8 = AtomicU8::new(0);
 ///     });
 ///
 ///     App::new()
-///         .add_plugins(NoopPluginGroup)
+///         .add_plugins(TerminalCtrlCHandlerPlugin)
 ///         .run();
 /// }
 /// ```
 #[derive(Default)]
 pub struct TerminalCtrlCHandlerPlugin;
+
+// -----------------------------------------------------------------------------
+// Plugin Implementation
 
 impl TerminalCtrlCHandlerPlugin {
     /// When called the first time, it sends the [`AppExit`] event to all apps using
@@ -67,13 +74,16 @@ impl TerminalCtrlCHandlerPlugin {
 impl Plugin for TerminalCtrlCHandlerPlugin {
     fn build(&self, app: &mut App) {
         let result = ctrlc::try_set_handler(move || {
-            Self::gracefully_exit();
+            TerminalCtrlCHandlerPlugin::gracefully_exit();
         });
+
         match result {
             Ok(()) => {}
             Err(ctrlc::Error::MultipleHandlers) => {
                 log::info!(
-                    "Skipping installing `Ctrl+C` handler as one was already installed. Please call `TerminalCtrlCHandlerPlugin::gracefully_exit` in your own `Ctrl+C` handler if you still want graceful exit on `Ctrl+C`."
+                    "Skipping installing `Ctrl+C` handler as one was already installed. \
+                    Please call `TerminalCtrlCHandlerPlugin::gracefully_exit` in your own \
+                    `Ctrl+C` handler if you still want graceful exit on `Ctrl+C`."
                 );
             }
             Err(err) => log::warn!("Failed to set `Ctrl+C` handler: {err}"),

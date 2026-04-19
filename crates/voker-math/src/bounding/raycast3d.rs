@@ -1,10 +1,11 @@
 use super::{Aabb3d, BoundingSphere, IntersectsVolume};
-use crate::{
-    Dir3A, Ray3d, Vec3A,
-    ops::{self, FloatPow},
-};
+use crate::ops::{self, FloatPow};
+use crate::{Dir3A, Ray3d, Vec3A};
 
 use voker_reflect::Reflect;
+
+// -----------------------------------------------------------------------------
+// RayCast3d
 
 /// A raycast intersection test for 3D bounding volumes
 #[derive(Clone, Debug)]
@@ -100,6 +101,9 @@ impl IntersectsVolume<BoundingSphere> for RayCast3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// AabbCast3d
+
 /// An intersection test that casts an [`Aabb3d`] along a ray.
 #[derive(Clone, Debug)]
 #[derive(Reflect)]
@@ -146,6 +150,9 @@ impl IntersectsVolume<Aabb3d> for AabbCast3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// BoundingSphereCast
+
 /// An intersection test that casts a [`BoundingSphere`] along a ray.
 #[derive(Clone, Debug)]
 #[derive(Reflect)]
@@ -191,6 +198,9 @@ impl IntersectsVolume<BoundingSphere> for BoundingSphereCast {
         self.sphere_collision_at(*volume).is_some()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {

@@ -250,17 +250,14 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
                 }
             });
 
+            let mut event = Discard { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: data.as_slice(),
+                old_archetype: Some(old_arche),
+                new_archetype: Some(new_arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    DISCARD,
-                    &mut Discard { entity },
-                    &mut EntityComponentsTrigger {
-                        components: data.as_slice(),
-                        old_archetype: Some(old_arche),
-                        new_archetype: Some(new_arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(DISCARD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -286,17 +283,14 @@ fn remove_moved(this: &mut EntityOwned, new_arche_id: ArcheId, caller: DebugLoca
                 }
             });
 
+            let mut event = Remove { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: data.as_slice(),
+                old_archetype: Some(old_arche),
+                new_archetype: Some(new_arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    REMOVE,
-                    &mut Remove { entity },
-                    &mut EntityComponentsTrigger {
-                        components: data.as_slice(),
-                        old_archetype: Some(old_arche),
-                        new_archetype: Some(new_arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(REMOVE, &mut event, &mut trigger, caller);
             }
         }
     }

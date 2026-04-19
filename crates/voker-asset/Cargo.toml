@@ -1,0 +1,31 @@
+[package]
+name = "voker-asset"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+voker-app = { path = "../voker-app", default-features = false, features = ["std"]}
+voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-reflect = { path = "../voker-reflect", default-features = false, features = ["uuid"] }
+voker-diagnostic = { path = "../voker-diagnostic", default-features = false }
+voker-task = { path = "../voker-task", default-features = false }
+voker-utils = { path = "../voker-utils", default-features = false }
+voker-os = { path = "../voker-os", default-features = false, features = ["std"]}
+
+bitflags = { version = "2.10", default-features = false }
+ron = { version = "0.12", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+thiserror = { version = "2", default-features = false }
+uuid = { version = "1.23", default-features = false, features = ["v4","serde"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition", "--generate-macro-expansion"]
+all-features = true
+

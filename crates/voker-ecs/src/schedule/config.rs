@@ -20,7 +20,9 @@ use alloc::boxed::Box;
 use voker_utils::hash::map::Entry;
 use voker_utils::hash::{HashSet, NoOpHashMap};
 
-use crate::schedule::{ActionSystem, ConditionSystem, apply_deferred};
+use crate::schedule::{
+    ActionSystem, ConditionSystem, InternedScheduleSet, SystemSet, apply_deferred,
+};
 use crate::system::{IntoSystem, SystemId};
 use crate::utils::DebugLocation;
 
@@ -32,6 +34,7 @@ pub(super) enum SystemNode {
 #[derive(Default)]
 pub struct SystemConfig {
     pub(super) idents: VecDeque<SystemId>,
+    pub(super) system_set: Option<InternedScheduleSet>,
     pub(super) systems: NoOpHashMap<SystemId, SystemNode>,
     pub(super) deferred: NoOpHashMap<SystemId, ActionSystem>,
     pub(super) dependency: HashSet<(SystemId, SystemId)>,
@@ -39,6 +42,18 @@ pub struct SystemConfig {
 }
 
 impl SystemConfig {
+    #[inline]
+    const fn new() -> Self {
+        Self {
+            idents: VecDeque::new(),
+            system_set: None,
+            systems: NoOpHashMap::new(),
+            deferred: NoOpHashMap::new(),
+            dependency: HashSet::new(),
+            condition: HashSet::new(),
+        }
+    }
+
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn before_impl<S, M>(mut self, system: S, ignore_deferred: bool) -> Self
     where
@@ -50,7 +65,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}` {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -62,29 +77,39 @@ impl SystemConfig {
 
         entry.insert(SystemNode::Action(action));
 
-        self.idents.push_back(id);
+        #[inline(never)]
+        fn before_internal(
+            this: &mut SystemConfig,
+            id: SystemId,
+            deferred: Option<ActionSystem>,
+            ignore_deferred: bool,
+        ) {
+            this.idents.push_back(id);
 
-        for &before in self.systems.keys() {
-            if before != id {
-                self.dependency.insert((before, id));
-            }
-        }
-
-        if !ignore_deferred {
-            for &before in self.deferred.keys() {
+            for &before in this.systems.keys() {
                 if before != id {
-                    self.dependency.insert((before, id));
+                    this.dependency.insert((before, id));
                 }
             }
+
+            if !ignore_deferred {
+                for &before in this.deferred.keys() {
+                    if before != id {
+                        this.dependency.insert((before, id));
+                    }
+                }
+            }
+
+            if let Some(deferred) = deferred {
+                let deferred_id = deferred.id();
+                this.idents.push_back(deferred_id);
+                this.deferred.insert(deferred_id, deferred);
+                this.dependency.insert((id, deferred_id));
+                this.dependency.remove(&(deferred_id, id));
+            }
         }
 
-        if let Some(deferred) = deferred {
-            let deferred_id = deferred.id();
-            self.idents.push_back(deferred_id);
-            self.deferred.insert(deferred_id, deferred);
-            self.dependency.insert((id, deferred_id));
-            self.dependency.remove(&(deferred_id, id));
-        }
+        before_internal(&mut self, id, deferred, ignore_deferred);
 
         self
     }
@@ -100,7 +125,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}` {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -112,29 +137,39 @@ impl SystemConfig {
 
         entry.insert(SystemNode::Action(action));
 
-        for &after in self.systems.keys() {
-            if after != id {
-                self.dependency.insert((id, after));
+        #[inline(never)]
+        fn after_internal(
+            this: &mut SystemConfig,
+            id: SystemId,
+            deferred: Option<ActionSystem>,
+            ignore_deferred: bool,
+        ) {
+            for &after in this.systems.keys() {
+                if after != id {
+                    this.dependency.insert((id, after));
+                }
             }
-        }
 
-        if let Some(deferred) = deferred {
-            let deferred_id = deferred.id();
-            self.idents.push_front(deferred_id);
-            self.deferred.insert(deferred_id, deferred);
-            self.dependency.insert((id, deferred_id));
-            self.dependency.remove(&(deferred_id, id));
+            if let Some(deferred) = deferred {
+                let deferred_id = deferred.id();
+                this.idents.push_front(deferred_id);
+                this.deferred.insert(deferred_id, deferred);
+                this.dependency.insert((id, deferred_id));
+                this.dependency.remove(&(deferred_id, id));
 
-            if !ignore_deferred {
-                for &after in self.systems.keys() {
-                    if after != deferred_id && after != id {
-                        self.dependency.insert((deferred_id, after));
+                if !ignore_deferred {
+                    for &after in this.systems.keys() {
+                        if after != deferred_id && after != id {
+                            this.dependency.insert((deferred_id, after));
+                        }
                     }
                 }
             }
+
+            this.idents.push_front(id);
         }
 
-        self.idents.push_front(id);
+        after_internal(&mut self, id, deferred, ignore_deferred);
 
         self
     }
@@ -147,7 +182,7 @@ impl SystemConfig {
             let mut afters = iter.clone();
             if afters.any(|after| *after == *before) {
                 let caller = DebugLocation::caller();
-                log::error!("Duplicated systems `{before}` {caller}.")
+                log::error!("Duplicated systems `{before}`, may cause an infinite loop. {caller}.")
             }
         }
 
@@ -187,7 +222,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}` {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop. {caller}.")
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -199,27 +234,32 @@ impl SystemConfig {
 
         entry.insert(SystemNode::Condition(condition));
 
-        for &after in self.systems.keys() {
-            if after != id {
-                self.condition.insert((id, after));
-            }
-        }
-
-        if let Some(deferred) = deferred {
-            let deferred_id = deferred.id();
-            self.idents.push_front(deferred_id);
-            self.deferred.insert(deferred_id, deferred);
-            self.dependency.insert((id, deferred_id));
-            self.dependency.remove(&(deferred_id, id));
-
-            for &after in self.systems.keys() {
-                if after != deferred_id && after != id {
-                    self.dependency.insert((deferred_id, after));
+        #[inline(never)]
+        fn run_if_internal(this: &mut SystemConfig, id: SystemId, deferred: Option<ActionSystem>) {
+            for &after in this.systems.keys() {
+                if after != id {
+                    this.condition.insert((id, after));
                 }
             }
+
+            if let Some(deferred) = deferred {
+                let deferred_id = deferred.id();
+                this.idents.push_front(deferred_id);
+                this.deferred.insert(deferred_id, deferred);
+                this.dependency.insert((id, deferred_id));
+                this.dependency.remove(&(deferred_id, id));
+
+                for &after in this.systems.keys() {
+                    if after != deferred_id && after != id {
+                        this.dependency.insert((deferred_id, after));
+                    }
+                }
+            }
+
+            this.idents.push_front(id);
         }
 
-        self.idents.push_front(id);
+        run_if_internal(&mut self, id, deferred);
 
         self
     }
@@ -235,7 +275,7 @@ impl SystemConfig {
 
         if matches!(&entry, Entry::Occupied(_)) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated systems `{id}` {caller}.")
+            log::error!("Duplicated systems `{id}`, may cause an infinite loop {caller}.")
         }
 
         let mut deferred: Option<ActionSystem> = None;
@@ -247,28 +287,50 @@ impl SystemConfig {
 
         entry.insert(SystemNode::Action(action));
 
-        for &after in self.systems.keys() {
-            if after != id {
-                self.condition.insert((id, after));
-            }
-        }
-
-        if let Some(deferred) = deferred {
-            let deferred_id = deferred.id();
-            self.idents.push_front(deferred_id);
-            self.deferred.insert(deferred_id, deferred);
-            self.dependency.insert((id, deferred_id));
-            self.dependency.remove(&(deferred_id, id));
-
-            for &after in self.systems.keys() {
-                if after != deferred_id && after != id {
-                    self.dependency.insert((deferred_id, after));
+        #[inline(never)]
+        fn run_if_run_internal(
+            this: &mut SystemConfig,
+            id: SystemId,
+            deferred: Option<ActionSystem>,
+        ) {
+            for &after in this.systems.keys() {
+                if after != id {
+                    this.condition.insert((id, after));
                 }
             }
+
+            if let Some(deferred) = deferred {
+                let deferred_id = deferred.id();
+                this.idents.push_front(deferred_id);
+                this.deferred.insert(deferred_id, deferred);
+                this.dependency.insert((id, deferred_id));
+                this.dependency.remove(&(deferred_id, id));
+
+                for &after in this.systems.keys() {
+                    if after != deferred_id && after != id {
+                        this.dependency.insert((deferred_id, after));
+                    }
+                }
+            }
+
+            this.idents.push_front(id);
         }
 
-        self.idents.push_front(id);
+        run_if_run_internal(&mut self, id, deferred);
 
+        self
+    }
+
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn in_set_impl(mut self, set: InternedScheduleSet) -> Self {
+        if let Some(old_set) = self.system_set {
+            let caller = DebugLocation::caller();
+            log::error!(
+                "Duplicated system set configuration, old: `{old_set:?}`, \
+                new: `{set:?}`, the old is overwritten. {caller}"
+            );
+        }
+        self.system_set = Some(set);
         self
     }
 
@@ -343,9 +405,23 @@ pub trait IntoSystemConfig<Marker>: Sized {
     fn chain_ignore_deferred(self) -> SystemConfig {
         self.into_config().chain_impl(true)
     }
+
+    /// Add all internal systems to the target SystemSet.
+    ///
+    /// By default, the system will be added to the [`AnonymousSystemSet`].
+    ///
+    /// This function prohibits repeated calls.
+    /// We strongly recommend that any system belongs to only one system set.
+    ///
+    /// [`AnonymousSystemSet`]: super::AnonymousSystemSet
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    fn in_set(self, set: impl SystemSet) -> SystemConfig {
+        self.into_config().in_set_impl(set.intern())
+    }
 }
 
 impl IntoSystemConfig<()> for SystemConfig {
+    #[inline(always)]
     fn into_config(self) -> Self {
         self
     }
@@ -357,7 +433,7 @@ where
 {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn into_config(self) -> SystemConfig {
-        SystemConfig::default().before_impl(self, false)
+        SystemConfig::new().before_impl(self, false)
     }
 }
 
@@ -367,13 +443,14 @@ where
 {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn into_config(self) -> SystemConfig {
-        SystemConfig::default().run_if_impl(self)
+        SystemConfig::new().run_if_impl(self)
     }
 }
 
 impl IntoSystemConfig<()> for () {
+    #[inline]
     fn into_config(self) -> SystemConfig {
-        SystemConfig::default()
+        SystemConfig::new()
     }
 }
 

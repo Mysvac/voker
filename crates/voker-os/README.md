@@ -1,4 +1,4 @@
-# Rust Standard Library Abstraction Layer
+# Platform related extensions
 
 ## Architecture Overview
 

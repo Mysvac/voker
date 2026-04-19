@@ -1,5 +1,7 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, expect(internal_features, reason = "needed for fake_variadic"))]
 #![cfg_attr(docsrs, feature(doc_cfg, rustdoc_internals))]
+#![forbid(unsafe_code)]
 #![no_std]
 
 // -----------------------------------------------------------------------------
@@ -25,9 +27,6 @@ extern crate alloc;
 mod exit;
 mod label;
 
-pub use exit::AppExit;
-pub use label::{AppLabel, InternedAppLabel};
-
 mod app;
 mod plugin;
 mod sub_app;
@@ -37,8 +36,11 @@ mod panic_handler;
 mod schedule_runner;
 mod task_pool_plugin;
 
-#[cfg(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std"))]
-mod terminal_ctrl_c_handler;
+// -----------------------------------------------------------------------------
+// Exports
+
+pub use exit::AppExit;
+pub use label::{AppLabel, InternedAppLabel};
 
 pub use app::*;
 pub use main_schedule::*;
@@ -48,9 +50,29 @@ pub use schedule_runner::*;
 pub use sub_app::*;
 pub use task_pool_plugin::*;
 
-#[cfg(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std"))]
-pub use terminal_ctrl_c_handler::*;
+// -----------------------------------------------------------------------------
+// terminal_ctrl_c
 
+#[cfg(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std"))]
+mod terminal_ctrl_c_handler;
+
+#[cfg(not(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std")))]
+mod terminal_ctrl_c_handler {
+    #[derive(Default)]
+    /// No-op fallback when terminal Ctrl+C handling is unavailable.
+    pub struct TerminalCtrlCHandlerPlugin;
+
+    impl Plugin for TerminalCtrlCHandlerPlugin {
+        fn build(&self, _: &mut App) {}
+    }
+}
+
+pub use terminal_ctrl_c_handler::TerminalCtrlCHandlerPlugin;
+
+// -----------------------------------------------------------------------------
+// Exports
+
+/// Includes the most common types in this crate.
 pub mod prelude {
     #[doc(hidden)]
     pub use crate::{

@@ -125,17 +125,17 @@ impl FilterParam {
     /// query branches as non-overlapping even when they access the same
     /// component ids mutably.
     pub fn is_disjoint(&self, other: &Self) -> bool {
-        use core::mem::transmute;
-        // `SliceContains` has SIMD optimization for u32
-        let x_without = unsafe { transmute::<&[ComponentId], &[u32]>(self.without()) };
-        let y_without = unsafe { transmute::<&[ComponentId], &[u32]>(other.without()) };
-        let x_with = unsafe { transmute::<&[ComponentId], &[u32]>(self.with()) };
-        let y_with = unsafe { transmute::<&[ComponentId], &[u32]>(other.with()) };
+        use crate::utils::contains_component;
+
+        let x_without = self.without();
+        let y_without = other.without();
+        let x_with = self.with();
+        let y_with = other.with();
 
         // Although the slice is sorted, we assume the params
         // is usually small, so the `contains` is faster.
-        x_without.iter().any(|id| y_with.contains(id))
-            || y_without.iter().any(|id| x_with.contains(id))
+        x_without.iter().any(|&id| contains_component(id, y_with))
+            || y_without.iter().any(|&id| contains_component(id, x_with))
     }
 }
 

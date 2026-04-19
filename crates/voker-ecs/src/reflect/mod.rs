@@ -138,8 +138,8 @@ pub fn from_reflect_with_fallback<T: Reflect + TypePath>(
         }
 
         panic!(
-            "Couldn't create an instance of `{}` using the reflected `Clone` `FromReflect`,\
-            `Default`, or `FromWorld` traits. Are you perhaps missing a `#[reflect(Default)]`\
+            "Couldn't create an instance of `{}` using the reflected `Clone` `FromReflect`, \
+            `Default`, or `FromWorld` traits. Are you perhaps missing a `#[reflect(Default)]` \
             or `#[reflect(FromWorld)]`?",
             type_path(),
         );

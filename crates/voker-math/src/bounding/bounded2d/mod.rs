@@ -7,6 +7,9 @@ use super::{BoundingVolume, IntersectsVolume};
 use crate::prelude::{Mat2, Rot2, Vec2};
 use crate::{FloatPow, Isometry2d, ops};
 
+// -----------------------------------------------------------------------------
+// point_cloud_2d_center
+
 /// Computes the geometric center of the given set of points.
 #[inline]
 fn point_cloud_2d_center(points: &[Vec2]) -> Vec2 {
@@ -19,6 +22,9 @@ fn point_cloud_2d_center(points: &[Vec2]) -> Vec2 {
     points.iter().fold(Vec2::ZERO, |acc, point| acc + *point) * denom
 }
 
+// -----------------------------------------------------------------------------
+// Bounded2d
+
 /// A trait with methods that return 2D bounding volumes for a shape.
 pub trait Bounded2d {
     /// Get an axis-aligned bounding box for the shape translated and rotated by the given isometry.
@@ -26,6 +32,9 @@ pub trait Bounded2d {
     /// Get a bounding circle for the shape translated and rotated by the given isometry.
     fn bounding_circle(&self, isometry: impl Into<Isometry2d>) -> BoundingCircle;
 }
+
+// -----------------------------------------------------------------------------
+// Aabb2d
 
 /// A 2D axis-aligned bounding box, or bounding rectangle
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -253,6 +262,9 @@ impl IntersectsVolume<BoundingCircle> for Aabb2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Test1
+
 #[cfg(test)]
 mod aabb2d_tests {
     use approx::assert_relative_eq;
@@ -455,12 +467,14 @@ mod aabb2d_tests {
     }
 }
 
+// -----------------------------------------------------------------------------
+// BoundingCircle
+
 use crate::primitives::Circle;
 
 /// A bounding circle
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[derive(Reflect)]
-#[derive(Serialize, Deserialize)]
+#[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BoundingCircle {
     /// The center of the bounding circle
@@ -619,6 +633,9 @@ impl IntersectsVolume<Aabb2d> for BoundingCircle {
         aabb.intersects(self)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Test2
 
 #[cfg(test)]
 mod bounding_circle_tests {

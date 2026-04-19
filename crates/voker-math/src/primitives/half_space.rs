@@ -30,6 +30,7 @@ use voker_reflect::Reflect;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[repr(transparent)]
 pub struct HalfSpace {
     normal_d: Vec4,
 }

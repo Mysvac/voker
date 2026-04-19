@@ -62,7 +62,11 @@ mod native;
 mod vc_os;
 mod vc_utils;
 
+#[cfg(feature = "glam")]
 mod glam;
+
+#[cfg(feature = "uuid")]
+mod uuid;
 
 crate::cfg::std! { mod std; }
 

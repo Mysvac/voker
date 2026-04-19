@@ -1,4 +1,4 @@
-# A refreshingly simple task executor for voker
+# Asynchronous task pool
 
 This is a lightweight threadpool implementation with minimal dependencies, designed specifically
 for voker as a lighter alternative to `rayon` for fork-join parallelism patterns.

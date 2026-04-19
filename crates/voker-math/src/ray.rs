@@ -1,8 +1,11 @@
+use serde::{Deserialize, Serialize};
+use voker_reflect::Reflect;
+
 use crate::primitives::{InfinitePlane3d, Plane2d};
 use crate::{Dir2, Dir3, Vec2, Vec3, ops};
 
-use serde::{Deserialize, Serialize};
-use voker_reflect::Reflect;
+// -----------------------------------------------------------------------------
+// Ray2d
 
 /// An infinite half-line starting at `origin` and going in `direction` in 2D space.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,6 +55,9 @@ impl Ray2d {
             .map(|distance| self.get_point(distance))
     }
 }
+
+// -----------------------------------------------------------------------------
+// Ray3d
 
 /// An infinite half-line starting at `origin` and going in `direction` in 3D space.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -105,6 +111,9 @@ impl Ray3d {
             .map(|distance| self.get_point(distance))
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {

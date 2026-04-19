@@ -1,4 +1,4 @@
-# Runtime reflection system for Rust.
+# Runtime reflection system
 
 This library implements a dynamic reflection system in Rust, designed to provide
 comprehensive runtime type information and data manipulation capabilities.

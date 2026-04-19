@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 
-use voker_app::prelude::*;
+use voker_app::{DuplicateStrategy, prelude::*};
 use voker_ecs::borrow::Res;
 use voker_ecs::world::World;
 use voker_ecs::{borrow::ResMut, derive::Resource};
@@ -34,6 +34,10 @@ impl Plugin for EntityCountPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EntityCount>();
         app.add_system(PreUpdate, count_entities);
+    }
+
+    fn duplicate_strategy(&self) -> DuplicateStrategy {
+        DuplicateStrategy::Skip
     }
 }
 
@@ -72,6 +76,10 @@ impl EntityCountDiagnosticsPlugin {
 
 impl Plugin for EntityCountDiagnosticsPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<EntityCountPlugin>() {
+            app.add_plugins(EntityCountPlugin);
+        }
+
         app.register_diagnostic(
             Diagnostic::new(Self::ENTITY_COUNT).with_max_history_length(self.max_history_length),
         )

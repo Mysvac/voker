@@ -18,14 +18,14 @@ impl World {
     ///
     /// If a schedule with the same label already exists, it will be replaced.
     pub fn remove_schedule(&mut self, label: impl ScheduleLabel) -> Option<Schedule> {
-        self.schedules.remove(label)
+        self.schedules.remove(label.intern())
     }
 
     /// Returns a mutable reference to the schedule with the given label.
     ///
     /// Initializes a new empty schedule if it doesn't exist.
     pub fn schedule_entry(&mut self, label: impl ScheduleLabel) -> &mut Schedule {
-        self.schedules.entry(label)
+        self.schedules.entry(label.intern())
     }
 
     /// Executes a closure with exclusive access to a schedule and the world.
@@ -49,7 +49,7 @@ impl World {
 
         if old.is_some() {
             log::warn!(
-                "Schedule `{label:?}` was inserted during a call to\
+                "Schedule `{label:?}` was inserted during a call to \
                 `World::schedule_scope`: its value has been overwritten"
             );
         }

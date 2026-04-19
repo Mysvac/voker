@@ -484,7 +484,6 @@ impl Worker {
     #[inline]
     fn wake(&self) {
         /// Wakes this worker (Sleeping → Working or Waking → Working).
-        #[cold]
         #[inline(never)]
         fn wake_internal(this: &Worker) {
             // debug_assert!( !self.working.get() );
@@ -562,8 +561,7 @@ impl Worker {
 
         loop {
             for _ in 0..RUN_BATCH {
-                let runnable = self.runnable().await;
-                runnable.run();
+                self.runnable().await.run();
             }
             futures_lite::future::yield_now().await;
         }

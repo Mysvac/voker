@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 
-use voker_app::prelude::*;
+use voker_app::{DuplicateStrategy, prelude::*};
 use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::resource::Resource;
 use voker_ecs::system::Local;
@@ -33,6 +33,10 @@ impl Plugin for FrameCountPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FrameCount>();
         app.add_system(Last, count_frame);
+    }
+
+    fn duplicate_strategy(&self) -> DuplicateStrategy {
+        DuplicateStrategy::Skip
     }
 }
 
@@ -99,6 +103,10 @@ impl FrameCountDiagnosticsPlugin {
 
 impl Plugin for FrameCountDiagnosticsPlugin {
     fn build(&self, app: &mut App) {
+        if app.is_plugin_added::<FrameCountPlugin>() {
+            app.add_plugins(FrameCountPlugin);
+        }
+
         app.register_diagnostic(
             Diagnostic::new(Self::FRAME_TIME)
                 .with_suffix("ms")

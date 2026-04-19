@@ -41,14 +41,15 @@ use alloc::vec::Vec;
 use core::any::TypeId;
 use core::ptr::NonNull;
 
+use voker_ptr::{OwningPtr, Ptr, PtrMut};
+use voker_utils::vec::SmallVec;
+
 use crate::component::ComponentId;
 use crate::entity::{Entity, EntityHashMap, EntityMapper};
 use crate::prelude::Component;
 use crate::relationship::{Relationship, RelationshipSourceSet, RelationshipTarget};
 use crate::utils::{DebugLocation, DebugName, ForgetEntityOnPanic};
 use crate::world::{UnsafeWorld, World};
-use voker_ptr::{OwningPtr, Ptr, PtrMut};
-use voker_utils::vec::SmallVec;
 
 // -----------------------------------------------------------------------------
 // CloneSource & CloneTarget & CloneValue
@@ -199,10 +200,10 @@ impl CloneValue<'_> {
 /// This exposes source/target entities and provides deferred operations for
 /// entity remapping and post-clone mutation.
 pub struct CloneContext {
-    id: ComponentId,
-    type_id: TypeId,
     name: DebugName,
     linked_clone: bool,
+    id: ComponentId,
+    type_id: TypeId,
     source: Entity,
     target: Entity,
     deferred: Vec<Entity>,
@@ -282,7 +283,7 @@ impl CloneContext {
     /// Schedules deferred entity-remapping for component type `C`.
     ///
     /// This calls [`Component::map_entities`] for the cloned component.
-    pub fn defer_remap<C: Component>(&mut self) {
+    pub fn defer_map_entities<C: Component>(&mut self) {
         self.assert_type::<C>();
         let wrapper = move |mut value: CloneValue, mapper: &mut CloneEntityMapper| {
             value.mutate::<C>(|c| Component::map_entities(c, mapper))
@@ -360,7 +361,7 @@ impl ComponentCloner {
                 }
 
                 if !C::NO_ENTITY {
-                    ctx.defer_remap::<C>();
+                    ctx.defer_map_entities::<C>();
                 }
             },
         }
@@ -388,7 +389,7 @@ impl ComponentCloner {
                 }
 
                 if !C::NO_ENTITY {
-                    ctx.defer_remap::<C>();
+                    ctx.defer_map_entities::<C>();
                 }
             },
         }
@@ -423,7 +424,7 @@ impl ComponentCloner {
                     dst.write(value);
                 }
 
-                ctx.defer_remap::<R>();
+                ctx.defer_map_entities::<R>();
             },
         }
     }
@@ -442,7 +443,7 @@ impl ComponentCloner {
 
                 dst.write::<R>(src.read::<R>().clone());
 
-                ctx.defer_remap::<R>();
+                ctx.defer_map_entities::<R>();
             },
         }
     }

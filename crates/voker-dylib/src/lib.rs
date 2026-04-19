@@ -1,3 +1,4 @@
+//! Dynamic linking support
 #![no_std]
 
 #[expect(unused_imports, reason = "Force dynamic linking main crate.")]

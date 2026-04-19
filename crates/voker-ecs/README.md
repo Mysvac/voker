@@ -1,5 +1,5 @@
 
-# ECS
+# Entiy-Component-System
 
 > README is modified from bevy_ecs.
 

@@ -123,7 +123,9 @@ impl Storages {
         } = self;
         let now = check.tick();
 
-        if let Some(task_pool) = ComputeTaskPool::try_get() {
+        if voker_task::cfg::multi_threaded!()
+            && let Some(task_pool) = ComputeTaskPool::try_get()
+        {
             task_pool.scope(|scope| {
                 scope.spawn(async move {
                     res_set.check_ticks(now);

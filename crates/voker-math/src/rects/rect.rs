@@ -32,6 +32,7 @@ impl Rect {
         max: Vec2::NEG_INFINITY,
         min: Vec2::INFINITY,
     };
+
     /// Create a new rectangle from two corner points.
     ///
     /// The two points do not need to be the minimum and/or maximum corners.

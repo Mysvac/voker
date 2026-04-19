@@ -1,4 +1,4 @@
-//! Compilation control macros for conditional code inclusion.
+//! Compile control macros
 //!
 //! This crate provides macros to manage conditional compilation in
 //! a more flexible and readable way, similar to [`cfg`] attributes

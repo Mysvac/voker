@@ -6,10 +6,41 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["std", "rand"]
+
+std = [
+  "glam/std",
+  "derive_more/std",
+  "itertools/use_std",
+  "serde/std",
+  "approx?/std",
+  "rand?/std",
+  "rand_distr?/std",
+  "voker-reflect/std",
+]
+
+# Enable approx for glam types to approximate floating point equality comparisons and assertions
+approx = ["dep:approx", "glam/approx"]
+# Enable interoperation of glam types with mint-compatible libraries
+mint = ["glam/mint"]
+# Enable libm mathematical functions for glam types to ensure consistent outputs
+# across platforms at the cost of losing hardware-level optimization using intrinsics
+libm = ["dep:libm", "glam/libm"]
+# Enable assertions to check the validity of parameters passed to glam
+glam_assert = ["glam/glam-assert"]
+# Enable assertions in debug builds to check the validity of parameters passed to glam
+debug_glam_assert = ["glam/debug-glam-assert"]
+# Enable the rand dependency for shape_sampling
+rand = ["dep:rand", "dep:rand_distr", "glam/rand"]
+# Enable libm mathematical functions as a fallback for no_std environments.
+# Can be overridden with std feature.
+nostd-libm = ["dep:libm", "glam/nostd-libm"]
+
 [dependencies]
 
 voker-utils = { path = "../voker-utils", default-features = false }
-voker-reflect = { path = "../voker-reflect", default-features = false }
+voker-reflect = { path = "../voker-reflect", default-features = false, features = ["glam"] }
 
 glam = { version = "0.32.0", default-features = false, features = ["bytemuck", "serde"] }
 thiserror = { version = "2", default-features = false }
@@ -37,37 +68,6 @@ chacha20 = { version = "0.10.0", default-features = false, features = ["rng"] }
 voker-math = { path = ".", default-features = false, features = ["approx"] }
 glam = { version = "0.32.0", default-features = false, features = ["approx"] }
 
-[features]
-default = ["std", "rand", "curve"]
-std = [
-  "glam/std",
-  "derive_more/std",
-  "itertools/use_std",
-  "serde/std",
-  "approx?/std",
-  "rand?/std",
-  "rand_distr?/std",
-  "voker-reflect/std",
-]
-
-# Enable approx for glam types to approximate floating point equality comparisons and assertions
-approx = ["dep:approx", "glam/approx"]
-# Enable interoperation of glam types with mint-compatible libraries
-mint = ["glam/mint"]
-# Enable libm mathematical functions for glam types to ensure consistent outputs
-# across platforms at the cost of losing hardware-level optimization using intrinsics
-libm = ["dep:libm", "glam/libm"]
-# Enable assertions to check the validity of parameters passed to glam
-glam_assert = ["glam/glam-assert"]
-# Enable assertions in debug builds to check the validity of parameters passed to glam
-debug_glam_assert = ["glam/debug-glam-assert"]
-# Enable the rand dependency for shape_sampling
-rand = ["dep:rand", "dep:rand_distr", "glam/rand"]
-# Include code related to the Curve trait
-curve = []
-# Enable libm mathematical functions as a fallback for no_std environments.
-# Can be overridden with std feature.
-nostd-libm = ["dep:libm", "glam/nostd-libm"]
 
 [lints]
 workspace = true

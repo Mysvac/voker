@@ -177,6 +177,7 @@ fn despawn_internal(
     let arche = unsafe { world.archetypes.get_unchecked_mut(arche_id) };
 
     {
+        // Trigger all hook and events
         let mut world: DeferredWorld = unsafe { unsafe_world.deferred() };
         arche.trigger_on_despawn(entity, world.reborrow(), caller);
         arche.trigger_on_discard(entity, world.reborrow(), caller);

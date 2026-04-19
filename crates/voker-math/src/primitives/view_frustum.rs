@@ -1,4 +1,4 @@
-use crate::{Mat4, Vec3, Vec4, primitives::HalfSpace};
+use crate::{Mat4, Vec3, primitives::HalfSpace};
 
 use serde::{Deserialize, Serialize};
 use voker_reflect::Reflect;
@@ -22,17 +22,24 @@ impl ViewFrustum {
     pub const NEAR_PLANE_IDX: usize = 4;
     /// The index for the far plane in `half_spaces`
     pub const FAR_PLANE_IDX: usize = 5;
-    /// Vec4 representing an inactive half space.
-    /// The bisecting plane's unit normal is set to (0, 0, 0).
-    /// The signed distance along the normal from the plane to the origin is set to `f32::INFINITY`.
-    const INACTIVE_HALF_SPACE: Vec4 = Vec4::new(0.0, 0.0, 0.0, f32::INFINITY);
 
     /// Returns a view frustum derived from `clip_from_world`.
     #[inline]
     pub fn from_clip_from_world(clip_from_world: &Mat4) -> Self {
-        let mut frustum = ViewFrustum::from_clip_from_world_no_far(clip_from_world);
-        frustum.half_spaces[Self::FAR_PLANE_IDX] = HalfSpace::new(clip_from_world.row(2));
-        frustum
+        let row0 = clip_from_world.row(0);
+        let row1 = clip_from_world.row(1);
+        let row2 = clip_from_world.row(2);
+        let row3 = clip_from_world.row(3);
+        Self {
+            half_spaces: [
+                HalfSpace::new(row3 + row0),
+                HalfSpace::new(row3 - row0),
+                HalfSpace::new(row3 + row1),
+                HalfSpace::new(row3 - row1),
+                HalfSpace::new(row2),
+                HalfSpace::new(row3 - row2),
+            ],
+        }
     }
 
     /// Returns a view frustum derived from `clip_from_world`,
@@ -44,11 +51,22 @@ impl ViewFrustum {
         view_backward: &Vec3,
         far: f32,
     ) -> Self {
-        let mut frustum = ViewFrustum::from_clip_from_world_no_far(clip_from_world);
+        let row0 = clip_from_world.row(0);
+        let row1 = clip_from_world.row(1);
+        let row2 = clip_from_world.row(2);
+        let row3 = clip_from_world.row(3);
         let far_center = *view_translation - far * *view_backward;
-        frustum.half_spaces[Self::FAR_PLANE_IDX] =
-            HalfSpace::new(view_backward.extend(-view_backward.dot(far_center)));
-        frustum
+        let far = view_backward.extend(-view_backward.dot(far_center));
+        Self {
+            half_spaces: [
+                HalfSpace::new(row3 + row0),
+                HalfSpace::new(row3 - row0),
+                HalfSpace::new(row3 + row1),
+                HalfSpace::new(row3 - row1),
+                HalfSpace::new(row2),
+                HalfSpace::new(far),
+            ],
+        }
     }
 
     /// Calculates the corners of this frustum. Returns `None` if the frustum isn't properly defined.
@@ -72,29 +90,6 @@ impl ViewFrustum {
             HalfSpace::intersection_point(bottom, left, far)?,
         ])
     }
-
-    // NOTE: This approach of extracting the frustum half-space from the view
-    // projection matrix is from Foundations of Game Engine Development 2
-    // Rendering by Lengyel.
-    /// Returns a view frustum derived from `view_projection`,
-    /// without a far plane.
-    fn from_clip_from_world_no_far(clip_from_world: &Mat4) -> Self {
-        let row0 = clip_from_world.row(0);
-        let row1 = clip_from_world.row(1);
-        let row2 = clip_from_world.row(2);
-        let row3 = clip_from_world.row(3);
-
-        Self {
-            half_spaces: [
-                HalfSpace::new(row3 + row0),
-                HalfSpace::new(row3 - row0),
-                HalfSpace::new(row3 + row1),
-                HalfSpace::new(row3 - row1),
-                HalfSpace::new(row3 + row2),
-                HalfSpace::new(Self::INACTIVE_HALF_SPACE),
-            ],
-        }
-    }
 }
 
 #[cfg(test)]
@@ -104,7 +99,51 @@ mod view_frustum_tests {
     use approx::assert_relative_eq;
 
     use super::ViewFrustum;
-    use crate::{Vec3, Vec4, primitives::HalfSpace};
+    use crate::{Mat4, Vec3, Vec4, primitives::HalfSpace};
+
+    #[test]
+    fn test_from_clip_from_world() {
+        let mut clip_from_world = Mat4::perspective_rh(60.0_f32.to_radians(), 1.0, 1.0, 10.0);
+        clip_from_world.y_axis = -clip_from_world.y_axis; // Flip the Y axis downwards.
+        let frustum = ViewFrustum::from_clip_from_world(&clip_from_world);
+
+        // Left
+        assert_relative_eq!(
+            frustum.half_spaces[0].normal_d(),
+            Vec4::new(0.8660254, 0., -0.5, 0.),
+            epsilon = 2e-5
+        );
+        // Right
+        assert_relative_eq!(
+            frustum.half_spaces[1].normal_d(),
+            Vec4::new(-0.8660254, 0., -0.5, 0.),
+            epsilon = 2e-5
+        );
+        // Top
+        assert_relative_eq!(
+            frustum.half_spaces[2].normal_d(),
+            Vec4::new(0., -0.8660254, -0.5, 0.),
+            epsilon = 2e-5
+        );
+        // Bottem
+        assert_relative_eq!(
+            frustum.half_spaces[3].normal_d(),
+            Vec4::new(0., 0.8660254, -0.5, 0.),
+            epsilon = 2e-5
+        );
+        // Near
+        assert_relative_eq!(
+            frustum.half_spaces[4].normal_d(),
+            Vec4::new(0., 0., -1., -1.),
+            epsilon = 2e-5
+        );
+        // Far
+        assert_relative_eq!(
+            frustum.half_spaces[5].normal_d(),
+            Vec4::new(0., 0., 1., 10.),
+            epsilon = 2e-5
+        );
+    }
 
     #[test]
     fn cuboid_frustum_corners() {
@@ -201,7 +240,7 @@ mod view_frustum_tests {
                 // near: xz plane at origin (y = 0)
                 HalfSpace::new(Vec4::new(0., 1., 0., 0.)),
                 // far
-                HalfSpace::new(ViewFrustum::INACTIVE_HALF_SPACE),
+                HalfSpace::new(Vec4::new(0., 1., 0., f32::INFINITY)),
             ],
         };
         let corners = no_far.corners().unwrap();

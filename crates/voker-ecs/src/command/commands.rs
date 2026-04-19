@@ -420,6 +420,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// Triggers the given [`Event`], which will run any [`Observer`]s watching for it.
     ///
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn trigger<'a>(&mut self, event: impl Event<Trigger<'a>: Default>) {
         self.push(super::trigger(event));
@@ -429,6 +430,7 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// [`Trigger`]: crate::event::Trigger
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn trigger_with<E: Event<Trigger<'static>: Send + Sync>>(
         &mut self,
@@ -443,6 +445,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// The observer will run when matching events are triggered.
     ///
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     pub fn add_observer<M>(&mut self, observer: impl IntoObserver<M>) {
         self.push(super::add_observer(observer));
     }

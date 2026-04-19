@@ -15,6 +15,8 @@ std = [
     "voker-os/std",
 ]
 
+dynlib = []
+
 sysinfo_plugin = ["std", "dep:sysinfo"]
 
 [dependencies]

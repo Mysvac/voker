@@ -19,6 +19,9 @@ std = [
     "erased-serde/std",
 ]
 
+glam = ["dep:glam"]
+uuid = ["dep:uuid"]
+
 reflect_docs = [ "voker-reflect-derive/reflect_docs" ]
 
 [dependencies]
@@ -35,7 +38,9 @@ voker-os = { path = "../voker-os", default-features = false }
 serde_core = { version = "1", default-features = false, features = ["alloc"] }
 erased-serde = { version = "0.4", default-features = false, features = ["alloc"] }
 
-glam = { version = "0.32.0", default-features = false, features = ["serde"] }
+# optional
+glam = { version = "0.32.0", default-features = false, features = ["serde"], optional = true }
+uuid = { version = "1.23", default-features = false, features = ["v4","serde"], optional = true }
 
 [dev-dependencies]
 ron = "0.12"

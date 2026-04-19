@@ -1,21 +1,22 @@
+use alloc::vec::Vec;
 use core::f32::consts::{FRAC_PI_3, PI};
-
-use super::{Circle, Measured2d, Measured3d, Primitive2d, Primitive3d};
-use crate::{
-    Dir3, InvalidDirectionError, Isometry3d, Mat3, Ray3d, Vec2, Vec3,
-    ops::{self, FloatPow},
-};
 
 use glam::Quat;
 use serde::{Deserialize, Serialize};
 use voker_reflect::Reflect;
 
-use alloc::vec::Vec;
+use super::{Circle, Measured2d, Measured3d, Primitive2d, Primitive3d};
+use crate::ops::{self, FloatPow};
+use crate::{Dir3, InvalidDirectionError, Isometry3d, Mat3, Ray3d, Vec2, Vec3};
+
+// -----------------------------------------------------------------------------
+// Sphere
 
 /// A sphere primitive, representing the set of all points some distance from the origin
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[repr(transparent)]
 pub struct Sphere {
     /// The radius of the sphere
     pub radius: f32,
@@ -76,6 +77,9 @@ impl Measured3d for Sphere {
         4.0 * FRAC_PI_3 * self.radius.cubed()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Plane3d
 
 /// A bounded plane in 3D space. It forms a surface starting from the origin with a defined height and width.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -140,6 +144,7 @@ impl Plane3d {
         )
     }
 }
+
 impl Measured2d for Plane3d {
     #[inline]
     fn area(&self) -> f32 {
@@ -151,6 +156,9 @@ impl Measured2d for Plane3d {
         self.half_size.element_sum() * 4.0
     }
 }
+
+// -----------------------------------------------------------------------------
+// InfinitePlane3d
 
 /// An unbounded plane in 3D space. It forms a separating surface through the origin,
 /// stretching infinitely far
@@ -318,6 +326,9 @@ impl InfinitePlane3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Line3d
+
 /// An infinite line going through the origin along a direction in 3D space.
 ///
 /// For a finite line: [`Segment3d`]
@@ -330,6 +341,9 @@ pub struct Line3d {
 }
 
 impl Primitive3d for Line3d {}
+
+// -----------------------------------------------------------------------------
+// Segment3d
 
 /// A line segment defined by two endpoints in 3D space.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -570,6 +584,9 @@ impl From<(Vec3, Vec3)> for Segment3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Polyline3d
+
 /// A series of connected line segments in 3D space.
 #[derive(Clone, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -616,6 +633,9 @@ impl Polyline3d {
         Self { vertices }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Cuboid
 
 /// A cuboid primitive, which is like a cube, except that the x, y, and z dimensions are not
 /// required to be the same.
@@ -703,6 +723,9 @@ impl Measured3d for Cuboid {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Cylinder
+
 /// A cylinder primitive centered on the origin
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -773,6 +796,9 @@ impl Measured3d for Cylinder {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Capsule3d
+
 /// A 3D capsule primitive centered on the origin
 /// A three-dimensional capsule is defined as a surface at a distance (radius) from a line
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -834,6 +860,9 @@ impl Measured3d for Capsule3d {
         PI * self.radius * diameter * (diameter / 3.0 + self.half_length)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Cone
 
 /// A cone primitive centered on the midpoint between the tip of the cone and the center of its base.
 ///
@@ -909,6 +938,9 @@ impl Measured3d for Cone {
         (self.base_area() * self.height) / 3.0
     }
 }
+
+// -----------------------------------------------------------------------------
+// ConicalFrustum
 
 /// A conical frustum primitive.
 /// A conical frustum can be created
@@ -998,6 +1030,9 @@ impl Measured3d for ConicalFrustum {
         self.bottom_base_area() + self.top_base_area() + self.lateral_area()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Torus
 
 /// The type of torus determined by the minor and major radii
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1121,6 +1156,9 @@ impl Measured3d for Torus {
         2.0 * PI.squared() * self.major_radius * self.minor_radius.squared()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Triangle3d
 
 /// A 3D triangle primitive.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1311,6 +1349,9 @@ impl Measured2d for Triangle3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Tetrahedron
+
 /// A tetrahedron primitive.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -1411,6 +1452,9 @@ impl Measured3d for Tetrahedron {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Extrusion
+
 /// A 3D shape representing an extruded 2D `base_shape`.
 ///
 /// Extruding a shape effectively "thickens" a 2D shapes,
@@ -1451,6 +1495,9 @@ impl<T: Primitive2d + Measured2d> Measured3d for Extrusion<T> {
         2. * self.base_shape.area() * self.half_depth
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {

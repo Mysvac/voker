@@ -8,6 +8,9 @@ use voker_utils::hash::HashMap;
 
 use crate::DEFAULT_MAX_HISTORY_LENGTH;
 
+// -----------------------------------------------------------------------------
+// DiagnosticPath
+
 /// Unique diagnostic path, separated by `/`.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct DiagnosticPath(Cow<'static, str>);
@@ -47,7 +50,7 @@ impl DiagnosticPath {
     }
 
     /// Creates a path from slash-joined components.
-    pub fn from_iter<'a>(components: impl IntoIterator<Item = &'a str>) -> Self {
+    pub fn from_components<'a>(components: impl IntoIterator<Item = &'a str>) -> Self {
         let mut buf = String::new();
 
         for (i, component) in components.into_iter().enumerate() {
@@ -61,7 +64,7 @@ impl DiagnosticPath {
     }
 
     /// Iterates path components.
-    pub fn iter(&self) -> impl Iterator<Item = &str> + '_ {
+    pub fn components(&self) -> impl Iterator<Item = &str> + '_ {
         self.0.split('/')
     }
 }
@@ -78,6 +81,9 @@ impl core::fmt::Display for DiagnosticPath {
     }
 }
 
+// -----------------------------------------------------------------------------
+// DiagnosticMeasurement
+
 /// A single sampled value at a point in time.
 #[derive(Debug)]
 pub struct DiagnosticMeasurement {
@@ -86,6 +92,9 @@ pub struct DiagnosticMeasurement {
     /// Sample value.
     pub value: f64,
 }
+
+// -----------------------------------------------------------------------------
+// Diagnostic
 
 /// A timeline of sampled values for a single diagnostic metric.
 #[derive(Debug)]
@@ -245,6 +254,9 @@ impl Diagnostic {
     }
 }
 
+// -----------------------------------------------------------------------------
+// DiagnosticsStore
+
 /// Global diagnostic registry and measurement storage.
 #[derive(Debug, Default, Resource)]
 pub struct DiagnosticsStore {
@@ -312,6 +324,9 @@ impl DiagnosticsStore {
     }
 }
 
+// -----------------------------------------------------------------------------
+// RegisterDiagnostic
+
 /// Extends app builders with `register_diagnostic`.
 pub trait RegisterDiagnostic {
     /// Registers a diagnostic in the app's [`DiagnosticsStore`].
@@ -333,6 +348,9 @@ impl RegisterDiagnostic for App {
         self
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {

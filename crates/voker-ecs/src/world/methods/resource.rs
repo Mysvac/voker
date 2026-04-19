@@ -37,6 +37,27 @@ fn uninitialized_resource(name: DebugName) -> ! {
 }
 
 impl World {
+    /// Returns whether a resource of type `T` is present and active.
+    ///
+    /// This only checks registration + active storage state. It does not create
+    /// the resource and does not borrow it.
+    ///
+    /// Unlike methods such as `get_resource`, this function does not require
+    /// `T: Send` / `T: Sync`, because it never returns a typed reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::resource::Resource;
+    /// # use voker_ecs::world::World;
+    /// # let mut world = World::alloc();
+    /// #[derive(Resource)]
+    /// struct Counter(u32);
+    ///
+    /// assert!(!world.contains_resource::<Counter>());
+    /// world.insert_resource(Counter(1));
+    /// assert!(world.contains_resource::<Counter>());
+    /// ```
     pub fn contains_resource<T: Resource>(&self) -> bool {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get(id)
@@ -47,6 +68,28 @@ impl World {
         }
     }
 
+    /// Returns whether a main-thread resource of type `T` is present and active.
+    ///
+    /// This check is metadata-only and does not enforce the main-thread access
+    /// assertion used by `get_non_send`/`non_send`.
+    ///
+    /// In this storage model, `contains_resource` and `contains_non_send`
+    /// inspect the same underlying resource slot and therefore currently report
+    /// the same presence result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::resource::Resource;
+    /// # use voker_ecs::world::World;
+    /// # let mut world = World::alloc();
+    /// #[derive(Resource)]
+    /// struct LocalOnly;
+    ///
+    /// assert!(!world.contains_non_send::<LocalOnly>());
+    /// world.insert_non_send(LocalOnly);
+    /// assert!(world.contains_non_send::<LocalOnly>());
+    /// ```
     pub fn contains_non_send<T: Resource>(&self) -> bool {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
             && let Some(data) = self.storages.res_set.get(id)

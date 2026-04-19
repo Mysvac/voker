@@ -1,19 +1,19 @@
-use crate::{
-    Quat, Rot2, Vec2, Vec3, Vec3A, Vec4,
-    primitives::{Primitive2d, Primitive3d},
-};
-
 use core::f32::consts::FRAC_1_SQRT_2;
 use core::fmt;
-use derive_more::derive::Into;
 
+use derive_more::derive::Into;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use voker_reflect::Reflect;
+
+use crate::primitives::{Primitive2d, Primitive3d};
+use crate::{Quat, Rot2, Vec2, Vec3, Vec3A, Vec4};
 
 #[cfg(all(debug_assertions, feature = "std"))]
 use std::eprintln;
 
-use thiserror::Error;
+// -----------------------------------------------------------------------------
+// InvalidDirectionError
 
 /// An error indicating that a direction is invalid.
 #[derive(Debug, PartialEq, Error)]
@@ -77,12 +77,17 @@ fn assert_is_normalized(message: &str, length_squared: f32) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Dir2
+
 /// A normalized vector pointing in a direction in 2D space
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[doc(alias = "Direction2d")]
+#[repr(transparent)]
 pub struct Dir2(Vec2);
+
 impl Primitive2d for Dir2 {}
 
 impl Dir2 {
@@ -379,12 +384,17 @@ impl approx::UlpsEq for Dir2 {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Dir3
+
 /// A normalized vector pointing in a direction in 3D space
 #[derive(Clone, Copy, Debug, PartialEq, Into)]
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[doc(alias = "Direction3d")]
+#[repr(transparent)]
 pub struct Dir3(Vec3);
+
 impl Primitive3d for Dir3 {}
 
 impl Dir3 {
@@ -771,6 +781,9 @@ impl approx::UlpsEq for Dir3 {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Dir3A
+
 /// A normalized SIMD vector pointing in a direction in 3D space.
 ///
 /// This type stores a 16 byte aligned [`Vec3A`].
@@ -779,6 +792,7 @@ impl approx::UlpsEq for Dir3 {
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[doc(alias = "Direction3dA")]
+#[repr(transparent)]
 pub struct Dir3A(Vec3A);
 impl Primitive3d for Dir3A {}
 
@@ -1015,11 +1029,15 @@ impl approx::UlpsEq for Dir3A {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Dir4
+
 /// A normalized vector pointing in a direction in 4D space
 #[derive(Clone, Copy, Debug, PartialEq, Into)]
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[doc(alias = "Direction4d")]
+#[repr(transparent)]
 pub struct Dir4(Vec4);
 
 impl Dir4 {
@@ -1200,6 +1218,9 @@ impl approx::UlpsEq for Dir4 {
         self.as_ref().ulps_eq(other.as_ref(), epsilon, max_ulps)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 #[cfg(feature = "approx")]

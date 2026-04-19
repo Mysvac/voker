@@ -6,9 +6,13 @@ use thiserror::Error;
 
 use voker_reflect::Reflect;
 
+// -----------------------------------------------------------------------------
+// AspectRatio
+
 /// An `AspectRatio` is the ratio of width to height.
 #[derive(Reflect, Copy, Clone, Debug, PartialEq, PartialOrd, Into)]
 #[reflect(Debug, Clone, PartialEq, PartialOrd)]
+#[repr(transparent)]
 pub struct AspectRatio(f32);
 
 impl AspectRatio {
@@ -82,6 +86,9 @@ impl TryFrom<Vec2> for AspectRatio {
         Self::try_new(value.x, value.y)
     }
 }
+
+// -----------------------------------------------------------------------------
+// AspectRatioError
 
 /// An Error type for when [`AspectRatio`](`super::AspectRatio`) is provided invalid width or height values
 #[derive(Error, Debug, PartialEq, Eq, Clone, Copy)]

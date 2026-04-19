@@ -1,5 +1,4 @@
-//! Static-constructor-based auto registration for metadata collection in
-//! reflection and ECS scenarios.
+//! CTOR based metadata collector.
 //!
 //! > Modified from <https://docs.rs/inventory/latest/inventory/>.
 //! >

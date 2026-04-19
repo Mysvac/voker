@@ -18,7 +18,7 @@ impl World {
         if self.archetypes.iter().any(|a| a.contains_component(id)) {
             voker_utils::cold_path();
             panic! {
-                "ComponentHook cannot be modified if the component\
+                "ComponentHook cannot be modified if the component \
                 already exists in an archetype {} .",
                 DebugName::type_name::<C>()
             }

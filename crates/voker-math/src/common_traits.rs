@@ -1,7 +1,3 @@
-//! This module contains abstract mathematical traits shared by types used in `voker_math`.
-
-use crate::{DVec2, DVec3, DVec4, Dir2, Dir3, Dir3A, Quat, Rot2, Vec2, Vec3, Vec3A, Vec4, ops};
-
 use core::convert::Infallible;
 use core::fmt::Debug;
 use core::ops::{Add, Div, Mul, Neg, Sub};
@@ -10,7 +6,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use voker_reflect::Reflect;
 
+use crate::{DVec2, DVec3, DVec4, Dir2, Dir3, Dir3A};
+use crate::{Quat, Rot2, Vec2, Vec3, Vec3A, Vec4, ops};
+
+// -----------------------------------------------------------------------------
+// VectorSpace
+
 /// A type that supports the mathematical operations of a real vector space, irrespective of dimension.
+///
 /// In particular, this means that the implementing type supports:
 /// - Scalar multiplication and division on the right by elements of `Self::Scalar`
 /// - Negation
@@ -99,7 +102,12 @@ impl<T: ScalarField> VectorSpace for T {
     const ZERO: Self = Self::ZERO;
 }
 
-/// A type that supports the operations of a scalar field. An implementation should support:
+// -----------------------------------------------------------------------------
+// ScalarField
+
+/// A type that supports the operations of a scalar field.
+///
+/// An implementation should support:
 /// - Addition and subtraction
 /// - Multiplication and division
 /// - Negation
@@ -147,6 +155,9 @@ impl ScalarField for f64 {
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
 }
+
+// -----------------------------------------------------------------------------
+// Sum
 
 /// A type consisting of formal sums of elements from `V` and `W`. That is,
 /// each value `Sum(v, w)` is thought of as `v + w`, with no available
@@ -233,8 +244,13 @@ where
     const ZERO: Self = Sum(V::ZERO, W::ZERO);
 }
 
-/// A type that supports the operations of a normed vector space; i.e. a norm operation in addition
-/// to those of [`VectorSpace`]. Specifically, the implementor must guarantee that the following
+// -----------------------------------------------------------------------------
+// NormedVectorSpace
+
+/// A type that supports the operations of a normed vector space;
+/// i.e. a norm operation in addition to those of [`VectorSpace`].
+///
+/// Specifically, the implementor must guarantee that the following
 /// relationships hold, within the limitations of floating point arithmetic:
 /// - (Nonnegativity) For all `v: Self`, `v.norm() >= 0.0`.
 /// - (Positive definiteness) For all `v: Self`, `v.norm() == 0.0` implies `v == Self::ZERO`.
@@ -372,6 +388,9 @@ impl NormedVectorSpace for f64 {
         libm::fabs(self)
     }
 }
+
+// -----------------------------------------------------------------------------
+// StableInterpolate
 
 /// A type with a natural interpolation that provides strong subdivision guarantees.
 ///
@@ -520,6 +539,8 @@ impl StableInterpolate for Dir3A {
 macro_rules! impl_stable_interpolate_tuple {
     (0: []) => {};
     (1 : [ $index:tt : $name:ident ]) => {
+        #[cfg_attr(docsrs, doc(fake_variadic))]
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
         impl<P0: StableInterpolate> StableInterpolate for (P0, ) {
             fn interpolate_stable(&self, other: &Self, t: f32) -> Self {
                 ( <P0 as StableInterpolate>::interpolate_stable(&self.0, &other.0, t), )
@@ -527,6 +548,7 @@ macro_rules! impl_stable_interpolate_tuple {
         }
     };
     ($num:literal : [$($index:tt : $name:ident),*]) => {
+        #[cfg_attr(docsrs, doc(hidden))]
         impl<$($name: StableInterpolate),*> StableInterpolate for ($($name,)*) {
             fn interpolate_stable(&self, other: &Self, t: f32) -> Self {
                 (
@@ -539,17 +561,24 @@ macro_rules! impl_stable_interpolate_tuple {
     };
 }
 
-voker_utils::range_invoke!(impl_stable_interpolate_tuple, 11);
+voker_utils::range_invoke!(impl_stable_interpolate_tuple, 12);
+
+// -----------------------------------------------------------------------------
+// MismatchedUnitsError
 
 /// Error produced when the values to be interpolated are not in the same units.
 #[derive(Clone, Debug, Error)]
 #[error("cannot interpolate between two values of different units")]
 pub struct MismatchedUnitsError;
 
-/// A trait that indicates that a value _may_ be interpolable via [`StableInterpolate`]. An
-/// interpolation may fail if the values have different units - for example, attempting to
-/// interpolate between [`Val::Px`] and [`Val::Percent`] will fail,
-/// even though they are the same Rust type.
+// -----------------------------------------------------------------------------
+// TryStableInterpolate
+
+/// A trait that indicates that a value _may_ be interpolable via [`StableInterpolate`].
+///
+/// An interpolation may fail if the values have different units - for example, attempting
+/// to interpolate between [`Val::Px`] and [`Val::Percent`] will fail, even though they are
+/// the same Rust type.
 ///
 /// Fallible interpolation can be used for animated transitions, which can be set up to fail
 /// gracefully if the values cannot be interpolated. For example, a transition could smoothly
@@ -590,6 +619,9 @@ impl<T: StableInterpolate> TryStableInterpolate for T {
         Ok(self.interpolate_stable(other, t))
     }
 }
+
+// -----------------------------------------------------------------------------
+// HasTangent & WithDerivative
 
 /// A type that has tangents.
 pub trait HasTangent {

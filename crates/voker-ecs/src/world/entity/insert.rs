@@ -166,17 +166,14 @@ fn insert_local(
         });
 
         if arche.has_on_discard_observer() {
+            let mut event = Discard { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: bundle.components(),
+                old_archetype: Some(arche),
+                new_archetype: Some(arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    DISCARD,
-                    &mut Discard { entity },
-                    &mut EntityComponentsTrigger {
-                        components: bundle.components(),
-                        old_archetype: Some(arche),
-                        new_archetype: Some(arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(DISCARD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -204,17 +201,14 @@ fn insert_local(
         });
 
         if arche.has_on_insert_observer() {
+            let mut event = Insert { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: bundle.components(),
+                old_archetype: Some(arche),
+                new_archetype: Some(arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    INSERT,
-                    &mut Insert { entity },
-                    &mut EntityComponentsTrigger {
-                        components: bundle.components(),
-                        old_archetype: Some(arche),
-                        new_archetype: Some(arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(INSERT, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -273,17 +267,14 @@ fn insert_moved(
                     data.push(id);
                 }
             });
+            let mut event = Discard { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: data.as_slice(),
+                old_archetype: Some(old_arche),
+                new_archetype: Some(new_arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    DISCARD,
-                    &mut Discard { entity },
-                    &mut EntityComponentsTrigger {
-                        components: data.as_slice(),
-                        old_archetype: Some(old_arche),
-                        new_archetype: Some(new_arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(DISCARD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -359,18 +350,14 @@ fn insert_moved(
                     data.push(id);
                 }
             });
-
+            let mut event = Add { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: data.as_slice(),
+                old_archetype: Some(old_arche),
+                new_archetype: Some(new_arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    ADD,
-                    &mut Add { entity },
-                    &mut EntityComponentsTrigger {
-                        components: data.as_slice(),
-                        old_archetype: Some(old_arche),
-                        new_archetype: Some(new_arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(ADD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -395,18 +382,14 @@ fn insert_moved(
                     data.push(id);
                 }
             });
-
+            let mut event = Insert { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: data.as_slice(),
+                old_archetype: Some(old_arche),
+                new_archetype: Some(new_arche),
+            };
             unsafe {
-                world.trigger_raw(
-                    INSERT,
-                    &mut Insert { entity },
-                    &mut EntityComponentsTrigger {
-                        components: data.as_slice(),
-                        old_archetype: Some(old_arche),
-                        new_archetype: Some(new_arche),
-                    },
-                    caller,
-                );
+                world.trigger_raw(INSERT, &mut event, &mut trigger, caller);
             }
         }
     }

@@ -27,7 +27,7 @@ impl Observer {
         assert!(
             !system.is_exclusive(),
             "Exclusive system `{}` can not be used as observer.\n\
-            Instead of `&mut World`, use either `DeferredWorld` if\
+            Instead of `&mut World`, use either `DeferredWorld` if \
             you do not need structural changes, or `Commands` if you do.",
             system.id().name()
         );

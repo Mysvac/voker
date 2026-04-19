@@ -49,6 +49,7 @@ pub struct SystemInfo {
 
 #[cfg(all(
     feature = "std",
+    not(feature = "dynlib"),
     any(
         target_os = "linux",
         target_os = "windows",
@@ -200,6 +201,7 @@ mod internal {
 
 #[cfg(not(all(
     feature = "std",
+    not(feature = "dynlib"),
     any(
         target_os = "linux",
         target_os = "windows",

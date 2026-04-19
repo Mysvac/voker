@@ -63,6 +63,7 @@ fn xy_order(a: Vec2, b: Vec2) -> Ordering {
 struct EventQueue {
     events: Vec<SweepLineEvent>,
 }
+
 impl EventQueue {
     /// Initialize a new `EventQueue` with all events from the polygon represented by `vertices`.
     ///
@@ -153,6 +154,7 @@ struct SweepLine<'a> {
     vertices: &'a [Vec2],
     tree: BTreeMap<Segment, SegmentOrder>,
 }
+
 impl<'a> SweepLine<'a> {
     const fn new(vertices: &'a [Vec2]) -> Self {
         Self {

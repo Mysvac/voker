@@ -71,8 +71,8 @@ pub trait Relationship: Component + Sized {
         if !Self::ALLOW_SELF_REFERENTIAL && target_entity == entity {
             voker_utils::cold_path();
             log::warn!(
-                "{}The {}({target_entity:?}) relationship on entity {entity:?} points to itself. This invalid\
-                relationship has been removed.\nIf this is intended behavior self-referential relations can\
+                "{}The {}({target_entity:?}) relationship on entity {entity:?} points to itself. This invalid \
+                relationship has been removed.\nIf this is intended behavior self-referential relations can \
                 be enabled with the allow_self_referential attribute: #[relationship(allow_self_referential)]",
                 context.caller,
                 DebugName::type_name::<Self>(),
@@ -108,7 +108,7 @@ pub trait Relationship: Component + Sized {
         } else {
             voker_utils::cold_path();
             log::warn!(
-                "{}The {}({target_entity:?}) linked on entity {entity:?} relates to an entity\
+                "{}The {}({target_entity:?}) linked on entity {entity:?} relates to an entity \
                 that does not exist. This invalid link has been removed.",
                 context.caller,
                 DebugName::type_name::<Self>(),

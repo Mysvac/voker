@@ -31,49 +31,70 @@ pub enum PluginsState {
     Cleaned,
 }
 
+/// The behavior when repeatedly inserting components.
+///
+/// The default is to log a warning and skip it.
+#[derive(Default, PartialEq, Eq, Debug, Clone, Copy)]
+pub enum DuplicateStrategy {
+    Skip,
+    #[default]
+    Warn,
+    Panic,
+}
+
 // -----------------------------------------------------------------------------
 // Plugin
 
+/// A pluggable unit that configures an [`App`].
 pub trait Plugin: Any + Send + Sync {
     /// Configures the [`App`] to which this plugin is added.
+    ///
+    /// Note that in this parse, the dependent plugins can be added.
     fn build(&self, app: &mut App);
 
-    /// Has the plugin finished its setup? This can be useful for plugins that need something
-    /// asynchronous to happen before they can finish their setup, like the initialization of a renderer.
-    /// Once the plugin is ready, [`finish`](Plugin::finish) should be called.
+    /// Chech whether the plugin finished its setup.
+    ///
+    /// This can be useful for plugins that need something asynchronous
+    /// to happen before they can finish their setup, like the initialization
+    /// of a renderer. Once the plugin is ready, [`finish`](Plugin::finish)
+    /// should be called.
     fn ready(&self, _app: &App) -> bool {
         true
     }
 
-    /// Finish adding this plugin to the [`App`], once all plugins registered are ready. This can
-    /// be useful for plugins that depends on another plugin asynchronous setup, like the renderer.
+    /// Finish adding this plugin to the [`App`], once all plugins
+    /// registered are ready.
+    ///
+    /// This can be useful for plugins that depends on another plugin
+    /// asynchronous setup, like the renderer.
     fn finish(&self, _app: &mut App) {
         // do nothing
     }
 
-    /// Runs after all plugins are built and finished, but before the app schedule is executed.
-    /// This can be useful if you have some resource that other plugins need during their build step,
-    /// but after build you want to remove it and send it to another thread.
+    /// Runs after all plugins are built and finished, but before
+    /// the app schedule is executed.
+    ///
+    /// This can be useful if you have some resource that other
+    /// plugins need during their build step, but after build you
+    /// want to remove it and send it to another thread.
     fn cleanup(&self, _app: &mut App) {
         // do nothing
     }
 
-    /// Configures a name for the [`Plugin`] which is primarily used for checking plugin
-    /// uniqueness and debugging.
-    fn name(&self) -> &str {
+    /// Configures a name for the [`Plugin`] which is primarily
+    /// used for checking plugin uniqueness and debugging.
+    ///
+    /// Users should not modify this implementation, as it may
+    /// lead to logical errors.
+    fn name(&self) -> &'static str {
         core::any::type_name::<Self>()
     }
 
-    /// If the plugin can be meaningfully instantiated several times in an [`App`],
-    /// override this method to return `false`.
-    fn is_unique(&self) -> bool {
-        true
-    }
-}
-
-impl<T: Fn(&mut App) + Send + Sync + 'static> Plugin for T {
-    fn build(&self, app: &mut App) {
-        self(app);
+    /// The behavior when repeatedly inserting components.
+    ///
+    /// The default is to log a warning and skip it.
+    fn duplicate_strategy(&self) -> DuplicateStrategy {
+        DuplicateStrategy::default()
     }
 }
 
@@ -86,19 +107,11 @@ impl<T: Fn(&mut App) + Send + Sync + 'static> Plugin for T {
 /// while still allowing users to enable/disable or reorder members.
 pub trait PluginGroup: Sized {
     /// Configures the plugins that belong to this group.
-    fn build(self) -> PluginGroupBuilder;
+    fn builder(self) -> PluginGroupBuilder;
 
     /// Returns the group name used in diagnostics.
     fn name() -> &'static str {
         core::any::type_name::<Self>()
-    }
-
-    /// Sets an existing plugin value in this group.
-    ///
-    /// # Panics
-    /// Panics if the plugin type is not present in the group.
-    fn set<T: Plugin>(self, plugin: T) -> PluginGroupBuilder {
-        self.build().set(plugin)
     }
 }
 
@@ -108,7 +121,7 @@ struct PluginEntry {
 }
 
 impl PluginGroup for PluginGroupBuilder {
-    fn build(self) -> PluginGroupBuilder {
+    fn builder(self) -> PluginGroupBuilder {
         self
     }
 }
@@ -125,8 +138,8 @@ impl PluginGroupBuilder {
     pub fn start<PG: PluginGroup>() -> Self {
         Self {
             group_name: PG::name(),
-            plugins: Default::default(),
-            order: Default::default(),
+            plugins: TypeIdMap::new(),
+            order: Vec::new(),
         }
     }
 
@@ -193,7 +206,7 @@ impl PluginGroupBuilder {
     pub fn add_group(mut self, group: impl PluginGroup) -> Self {
         let Self {
             mut plugins, order, ..
-        } = group.build();
+        } = group.builder();
 
         for plugin_id in order {
             let entry = plugins.remove(plugin_id).expect("Plugin id missing in group order.");
@@ -321,17 +334,31 @@ impl PluginGroupBuilder {
     /// # Panics
     /// Panics if one plugin is already present in the application.
     #[track_caller]
-    pub fn finish(mut self, app: &mut App) {
+    pub fn build(mut self, app: &mut App) {
         for ty in &self.order {
             if let Some(entry) = self.plugins.remove(*ty)
                 && entry.enabled
-                && let Err(plugin) = app.add_boxed_plugin(entry.plugin)
+                && let Err(plugins) = app.add_boxed_plugin(entry.plugin)
             {
-                let plugin_name = plugin.name();
-                panic!(
-                    "Error adding plugin {} in group {}: plugin was already added in application",
-                    plugin_name, self.group_name,
-                );
+                let name = plugins.name();
+                let group = self.group_name;
+                match plugins.duplicate_strategy() {
+                    DuplicateStrategy::Skip => {
+                        log::trace!(
+                            "Plugin `{name}` in group `{group}` already added, skipping duplicate."
+                        );
+                    }
+                    DuplicateStrategy::Warn => {
+                        log::warn!(
+                            "Plugin `{name}` in group `{group}` already added, skipping duplicate."
+                        );
+                    }
+                    DuplicateStrategy::Panic => {
+                        panic!(
+                            "Adding plugin `{name}`(in group `{group}`) that was already added in application"
+                        );
+                    }
+                }
             }
         }
     }
@@ -351,6 +378,7 @@ impl PluginGroupBuilder {
         );
     }
 
+    #[inline(never)]
     fn upsert_plugin_entry_state(
         &mut self,
         key: TypeId,
@@ -359,18 +387,17 @@ impl PluginGroupBuilder {
     ) {
         if let Some(entry) = self.plugins.insert(key, plugin) {
             if entry.enabled {
-                log::warn!(
-                    "You are replacing plugin '{}' that was not disabled.",
-                    entry.plugin.name()
-                );
+                let name = entry.plugin.name();
+                log::warn!("You are replacing plugin '{name}' that was not disabled.");
             }
-            if let Some(to_remove) = self
+
+            let to_remove = self
                 .order
                 .iter()
                 .enumerate()
-                .find(|(idx, ty)| *idx != added_at_index && **ty == key)
-                .map(|(idx, _)| idx)
-            {
+                .position(|(idx, ty)| idx != added_at_index && *ty == key);
+
+            if let Some(to_remove) = to_remove {
                 self.order.remove(to_remove);
             }
         }
@@ -384,7 +411,7 @@ impl PluginGroupBuilder {
 pub struct NoopPluginGroup;
 
 impl PluginGroup for NoopPluginGroup {
-    fn build(self) -> PluginGroupBuilder {
+    fn builder(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
     }
 }
@@ -392,6 +419,9 @@ impl PluginGroup for NoopPluginGroup {
 // -----------------------------------------------------------------------------
 // Plugins
 
+/// Marker trait for values that can be added to an [`App`] via [`App::add_plugins`](crate::App::add_plugins).
+///
+/// Implemented for individual plugins, plugin groups, and tuples of plugin-like values.
 pub trait Plugins<Marker>: sealed::Plugins<Marker> {}
 
 impl<Marker, T> Plugins<Marker> for T where T: sealed::Plugins<Marker> {}
@@ -401,8 +431,8 @@ mod sealed {
 
     use voker_utils::range_invoke2;
 
-    use crate::App;
     use crate::plugin::{Plugin, PluginGroup};
+    use crate::{App, DuplicateStrategy};
 
     pub trait Plugins<Marker> {
         fn add_to_app(self, app: &mut App);
@@ -413,19 +443,27 @@ mod sealed {
     pub struct PluginsTupleMarker;
 
     impl<P: Plugin> Plugins<PluginMarker> for P {
-        #[track_caller]
         fn add_to_app(self, app: &mut App) {
             if let Err(plugins) = app.add_boxed_plugin(Box::new(self)) {
                 let name = plugins.name();
-                panic!("Error adding plugin {name}: plugin was already added in application");
+                match plugins.duplicate_strategy() {
+                    DuplicateStrategy::Skip => {
+                        log::trace!("Plugin {name} already added, skipping duplicate.");
+                    }
+                    DuplicateStrategy::Warn => {
+                        log::warn!("Plugin {name} already added, skipping duplicate.");
+                    }
+                    DuplicateStrategy::Panic => {
+                        panic!("Adding plugin {name} that was already added in application");
+                    }
+                }
             }
         }
     }
 
     impl<P: PluginGroup> Plugins<PluginGroupMarker> for P {
-        #[track_caller]
         fn add_to_app(self, app: &mut App) {
-            self.build().finish(app);
+            self.builder().build(app);
         }
     }
 

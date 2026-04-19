@@ -13,10 +13,12 @@ use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMa
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
-use crate::schedule::{AnonymousSchedule, ToposortError};
-use crate::schedule::{IntoSystemConfig, SystemConfig, SystemNode};
+use crate::prelude::IntoSystemConfig;
+use crate::schedule::{
+    AnonymousSchedule, AnonymousSystemSet, InternedScheduleSet, SystemConfig, SystemNode,
+    SystemSet, ToposortError,
+};
 use crate::system::{IntoSystem, SystemId};
-use crate::utils::DebugCheckedUnwrap;
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -95,11 +97,16 @@ pub struct Schedule {
     ordering: OrderingGraph,
     conflict: ConflictGraph,
     schedule: SystemSchedule,
-    set_anchors: NoOpHashSet<SystemId>,
+    system_sets: SystemSets,
     executor: Box<dyn SystemExecutor>,
     executor_initialized: bool,
     is_changed: bool,
 }
+
+// -----------------------------------------------------------------------------
+// SystemSets
+
+type SystemSets = HashMap<InternedScheduleSet, NoOpHashSet<SystemId>>;
 
 // -----------------------------------------------------------------------------
 // Allocator
@@ -256,16 +263,8 @@ impl SystemSchedule {
 // Allocator Implementation
 
 impl Allocator {
-    fn iter(&self) -> impl ExactSizeIterator<Item = (SystemId, SystemKey)> + '_ {
-        self.idents.iter().map(|(&x, &y)| (x, y))
-    }
-
     fn len(&self) -> usize {
         self.idents.len()
-    }
-
-    fn contains(&self, id: SystemId) -> bool {
-        self.idents.contains_key(&id)
     }
 
     fn get_key(&self, id: SystemId) -> Option<SystemKey> {
@@ -491,7 +490,7 @@ impl Schedule {
         // ---------------------------------------------------------------
         // Update conflict graph
         uninit.iter().for_each(|&a| {
-            let obj = unsafe { buffer.get_system(a).debug_checked_unwrap() };
+            let obj = buffer.get_system(a).unwrap();
 
             let a_access = match obj {
                 Action { system, access } => {
@@ -734,11 +733,11 @@ impl Schedule {
             executor_initialized: false,
             is_changed: false,
             allocator: Default::default(),
+            system_sets: Default::default(),
             buffer: Default::default(),
             ordering: Default::default(),
             conflict: Default::default(),
             schedule: Default::default(),
-            set_anchors: Default::default(),
         }
     }
 
@@ -750,11 +749,11 @@ impl Schedule {
         Self {
             label: label.intern(),
             allocator: Default::default(),
+            system_sets: Default::default(),
             buffer: Default::default(),
             ordering: Default::default(),
             conflict: Default::default(),
             schedule: Default::default(),
-            set_anchors: Default::default(),
             executor: Box::new(executor),
             executor_initialized: false,
             is_changed: Default::default(),
@@ -766,16 +765,37 @@ impl Schedule {
         self.label
     }
 
-    /// Returns `true` if a system with `name` exists in this schedule.
-    pub fn contains(&self, name: SystemId) -> bool {
-        self.allocator.contains(name)
+    /// Iterates all registered system ids in this schedule.
+    ///
+    /// This includes set boundary marker systems (`begin`/`end`) created by
+    /// [`SystemSet`] integration.
+    pub fn systems(&self) -> impl ExactSizeIterator<Item = SystemId> + '_ {
+        self.allocator.idents.keys().copied()
     }
 
-    /// Inserts or replaces a system under `SystemId`.
+    /// Iterates all currently known system sets.
     ///
-    /// Returns `true` if this is a new insertion, `false` if an existing system
-    /// with the same Id was replaced.
-    pub fn insert_action(&mut self, system: ActionSystem) -> bool {
+    /// A set exists once it is explicitly initialized or when at least one
+    /// system is inserted with that set.
+    pub fn system_sets(&self) -> impl ExactSizeIterator<Item = InternedScheduleSet> + '_ {
+        self.system_sets.keys().copied()
+    }
+
+    /// Returns `true` if a system id is registered.
+    pub fn contains_system(&self, name: SystemId) -> bool {
+        self.allocator.idents.contains_key(&name)
+    }
+
+    /// Returns `true` if a system set has internal state in this schedule.
+    pub fn contains_system_set(&self, name: InternedScheduleSet) -> bool {
+        self.system_sets.contains_key(&name)
+    }
+
+    /// Inserts (or replaces) an action system and associates it with `set`.
+    ///
+    /// This also ensures the set boundary marker systems exist and wires
+    /// run-condition edges so the system executes within `set` boundaries.
+    pub fn insert_action(&mut self, system: ActionSystem, set: InternedScheduleSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -783,35 +803,52 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        if let Some(key) = self.allocator.get_key(id) {
-            self.buffer.remove(key);
-            self.buffer.insert_action(key, system);
-            let len = self.allocator.len();
-            assert!(
-                len <= u32::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            false
-        } else {
+        let system_key = self.allocator.get_key(id).unwrap_or_else(|| {
             let key = self.allocator.insert(id);
             self.buffer.insert_action(key, system);
             self.ordering.insert_node(key);
-            let len = self.allocator.len();
-            assert!(
-                len <= u32::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            true
-        }
+            key
+        });
+
+        let sets = self.system_sets.entry(set).or_default();
+        sets.insert(id);
+
+        let begin_system = set.begin();
+        let begin_id = begin_system.id();
+        let begin = self.allocator.get_key(begin_id).unwrap_or_else(|| {
+            let key = self.allocator.insert(begin_id);
+            self.buffer.insert_action(key, begin_system);
+            self.ordering.insert_node(key);
+            sets.insert(begin_id);
+            key
+        });
+        self.ordering.insert_condition(system_key, begin);
+
+        let end_system = set.end();
+        let end_id = end_system.id();
+        let end = self.allocator.get_key(end_id).unwrap_or_else(|| {
+            let key = self.allocator.insert(end_id);
+            self.buffer.insert_action(key, end_system);
+            self.ordering.insert_node(key);
+            sets.insert(end_id);
+            key
+        });
+        self.ordering.insert_condition(end, system_key);
+        self.ordering.insert_condition(end, begin);
+
+        assert!(
+            self.allocator.len() <= u32::MAX as usize,
+            "too many systems in schedule {:?}",
+            self.label
+        );
     }
 
-    /// Inserts or replaces a system under `SystemId`.
+    /// Inserts (or replaces) a condition system and associates it with `set`.
     ///
-    /// Returns `true` if this is a new insertion, `false` if an existing system
-    /// with the same Id was replaced.
-    pub fn insert_condition(&mut self, system: ConditionSystem) -> bool {
+    /// This also ensures the set boundary marker systems exist and wires
+    /// run-condition edges so the condition is evaluated within `set`
+    /// boundaries.
+    pub fn insert_condition(&mut self, system: ConditionSystem, set: InternedScheduleSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -819,27 +856,90 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        if let Some(key) = self.allocator.get_key(id) {
-            self.buffer.remove(key);
-            self.buffer.insert_condition(key, system);
-            let len = self.allocator.len();
-            assert!(
-                len <= u32::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            false
-        } else {
+        let system_key = self.allocator.get_key(id).unwrap_or_else(|| {
             let key = self.allocator.insert(id);
             self.buffer.insert_condition(key, system);
             self.ordering.insert_node(key);
-            let len = self.allocator.len();
-            assert!(
-                len <= u32::MAX as usize,
-                "too many systems in schedule {:?}",
-                self.label
-            );
-            true
+            key
+        });
+
+        let sets = self.system_sets.entry(set).or_default();
+        sets.insert(id);
+
+        let begin_system = set.begin();
+        let begin_id = begin_system.id();
+        let begin = self.allocator.get_key(begin_id).unwrap_or_else(|| {
+            let key = self.allocator.insert(begin_id);
+            self.buffer.insert_action(key, begin_system);
+            self.ordering.insert_node(key);
+            sets.insert(begin_id);
+            key
+        });
+        self.ordering.insert_condition(system_key, begin);
+
+        let end_system = set.end();
+        let end_id = end_system.id();
+        let end = self.allocator.get_key(end_id).unwrap_or_else(|| {
+            let key = self.allocator.insert(end_id);
+            self.buffer.insert_action(key, end_system);
+            self.ordering.insert_node(key);
+            sets.insert(end_id);
+            key
+        });
+        self.ordering.insert_condition(end, system_key);
+        self.ordering.insert_condition(end, begin);
+
+        assert!(
+            self.allocator.len() <= u32::MAX as usize,
+            "too many systems in schedule {:?}",
+            self.label
+        );
+    }
+
+    /// Ensures `set` exists in this schedule.
+    ///
+    /// If absent, this inserts the set's begin/end markers and a direct
+    /// `begin -> end` condition edge.
+    pub fn init_system_set(&mut self, set: InternedScheduleSet) {
+        if !self.system_sets.contains_key(&set) {
+            if !self.is_changed {
+                self.recycle_schedule();
+                self.is_changed = true;
+            }
+
+            let sets = self.system_sets.entry(set).or_default();
+
+            let begin_system = set.begin();
+            let begin_id = begin_system.id();
+            let begin = self.allocator.get_key(begin_id).unwrap_or_else(|| {
+                let key = self.allocator.insert(begin_id);
+                self.buffer.insert_action(key, begin_system);
+                self.ordering.insert_node(key);
+                sets.insert(begin_id);
+                key
+            });
+
+            let end_system = set.end();
+            let end_id = end_system.id();
+            let end = self.allocator.get_key(end_id).unwrap_or_else(|| {
+                let key = self.allocator.insert(end_id);
+                self.buffer.insert_action(key, end_system);
+                self.ordering.insert_node(key);
+                sets.insert(end_id);
+                key
+            });
+            self.ordering.insert_condition(end, begin);
+        }
+    }
+
+    /// Removes `set` and all systems currently tracked inside it.
+    ///
+    /// This includes set boundary marker systems.
+    pub fn remove_system_set(&mut self, set: InternedScheduleSet) {
+        if let Some(sets) = self.system_sets.remove(&set) {
+            for id in sets {
+                self.remove(id);
+            }
         }
     }
 
@@ -859,7 +959,9 @@ impl Schedule {
         self.buffer.remove(key);
         self.ordering.remove_node(key);
         self.conflict.remove(key);
-        self.set_anchors.remove(&name);
+        self.system_sets.values_mut().for_each(|set| {
+            set.remove(&name);
+        });
 
         true
     }
@@ -954,11 +1056,6 @@ impl Schedule {
         self.allocator.get_id(key)
     }
 
-    /// Iterates over all registered systems as `(name, key)` pairs.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (SystemId, SystemKey)> + '_ {
-        self.allocator.iter()
-    }
-
     /// Returns the explicit dependency graph.
     pub fn dependency_graph(&self) -> &Dag<SystemKey> {
         &self.ordering.dependency
@@ -976,7 +1073,9 @@ impl Schedule {
     where
         S: IntoSystem<(), (), M>,
     {
-        self.insert_action(Box::new(IntoSystem::into_system(system)));
+        let system = Box::new(IntoSystem::into_system(system));
+        let set = AnonymousSystemSet.intern();
+        self.insert_action(system, set);
         self
     }
 
@@ -994,7 +1093,9 @@ impl Schedule {
     where
         S: IntoSystem<(), bool, M>,
     {
-        self.insert_condition(Box::new(IntoSystem::into_system(system)));
+        let system = Box::new(IntoSystem::into_system(system));
+        let set = AnonymousSystemSet.intern();
+        self.insert_condition(system, set);
         self
     }
 
@@ -1004,6 +1105,21 @@ impl Schedule {
         S: IntoSystem<(), bool, M>,
     {
         self.remove(system.system_id());
+        self
+    }
+
+    /// Creates `set` markers if needed.
+    ///
+    /// This is useful when external code wants a stable ordering anchor before
+    /// any concrete systems are inserted.
+    pub fn add_system_set(&mut self, set: impl SystemSet) -> &mut Self {
+        self.init_system_set(set.intern());
+        self
+    }
+
+    /// Removes `set` and all tracked members.
+    pub fn del_system_set(&mut self, set: impl SystemSet) -> &mut Self {
+        self.remove_system_set(set.intern());
         self
     }
 
@@ -1062,26 +1178,25 @@ impl Schedule {
             deferred,
             dependency,
             condition,
+            system_set,
             ..
         } = config.into_config();
 
-        for (id, node) in systems {
-            if !self.contains(id) {
-                match node {
-                    SystemNode::Action(system) => {
-                        self.insert_action(system);
-                    }
-                    SystemNode::Condition(system) => {
-                        self.insert_condition(system);
-                    }
+        let system_set = system_set.unwrap_or(AnonymousSystemSet.intern());
+
+        for (_, node) in systems {
+            match node {
+                SystemNode::Action(system) => {
+                    self.insert_action(system, system_set);
+                }
+                SystemNode::Condition(system) => {
+                    self.insert_condition(system, system_set);
                 }
             }
         }
 
-        for (id, apply_deferred) in deferred {
-            if !self.contains(id) {
-                self.insert_action(apply_deferred);
-            }
+        for (_, apply_deferred) in deferred {
+            self.insert_action(apply_deferred, system_set);
         }
 
         for (before, after) in dependency {

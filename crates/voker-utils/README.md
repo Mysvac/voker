@@ -1,4 +1,4 @@
-# voker-utils
+# Platform independent extensions
 
 Platform-agnostic utility crate for collection primitives,
 hashing helpers, index containers, and small no_std-friendly helpers.

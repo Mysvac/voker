@@ -49,9 +49,8 @@ impl<'a> BundleSpawner<'a> {
         let unsafe_world = self.world;
         let world = unsafe { unsafe_world.full_mut() };
 
-        if ::core::cfg!(debug_assertions) {
-            world.entities.can_spawn(entity).unwrap();
-        }
+        #[cfg(debug_assertions)]
+        world.entities.can_spawn(entity).unwrap();
 
         let maps = &mut world.storages.maps;
         let arche = unsafe { self.arche.as_mut() };

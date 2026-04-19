@@ -127,6 +127,8 @@ impl World {
 // Tick
 
 impl World {
+    /// An incremental trigger counter used to prevent observers
+    /// from triggering repeatedly at the same time.
     #[inline]
     pub fn last_trigger(&self) -> u32 {
         self.last_trigger
@@ -183,6 +185,7 @@ impl World {
             let checker = CheckTicks::new(this_run);
             self.storages.check_ticks(checker);
             self.last_check = this_run;
+            self.trigger(checker);
             return Some(checker);
         }
 

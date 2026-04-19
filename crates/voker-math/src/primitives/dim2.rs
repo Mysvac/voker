@@ -8,14 +8,13 @@ use voker_reflect::Reflect;
 
 use super::polygon::is_polygon_simple;
 use super::{Measured2d, Primitive2d, WindingOrder};
-use crate::Dir2;
 use crate::InvalidDirectionError;
-use crate::Isometry2d;
-use crate::Ray2d;
-use crate::Rot2;
-use crate::Vec2;
 use crate::ops::{self, FloatPow};
 use crate::primitives::Inset;
+use crate::{Dir2, Isometry2d, Ray2d, Rot2, Vec2};
+
+// -----------------------------------------------------------------------------
+// Circle
 
 /// A circle primitive, representing the set of points some distance from the origin
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -82,6 +81,9 @@ impl Measured2d for Circle {
         2.0 * PI * self.radius
     }
 }
+
+// -----------------------------------------------------------------------------
+// Arc2d
 
 /// A primitive representing an arc between two points on a circle.
 ///
@@ -250,6 +252,9 @@ impl Arc2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// CircularSector
+
 /// A primitive representing a circular sector: a pie slice of a circle.
 ///
 /// The segment is positioned so that it always includes [`Vec2::Y`] and is vertically symmetrical.
@@ -392,6 +397,9 @@ impl CircularSector {
     }
 }
 
+// -----------------------------------------------------------------------------
+// CircularSegment
+
 /// A primitive representing a circular segment:
 /// the area enclosed by the arc of a circle and its chord (the line between its endpoints).
 ///
@@ -531,6 +539,9 @@ impl CircularSegment {
         self.arc.sagitta()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests1
 
 #[cfg(test)]
 mod arc_tests {
@@ -757,6 +768,9 @@ mod arc_tests {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Ellipse
+
 /// An ellipse primitive, which is like a circle, but the width and height can be different
 ///
 /// Ellipse does not implement [`Inset`] as concentric ellipses do not have parallel curves:
@@ -903,6 +917,9 @@ impl Measured2d for Ellipse {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Annulus
+
 /// A primitive shape formed by the region between two circles, also known as a ring.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -992,6 +1009,9 @@ impl Measured2d for Annulus {
         2.0 * PI * (self.outer_circle.radius + self.inner_circle.radius)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Rhombus
 
 /// A rhombus primitive, also known as a diamond shape.
 /// A four sided polygon, centered on the origin, where opposite sides are parallel but without
@@ -1123,6 +1143,9 @@ impl Measured2d for Rhombus {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Plane2d
+
 /// An unbounded plane in 2D space. It forms a separating surface through the origin,
 /// stretching infinitely far
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1156,6 +1179,9 @@ impl Plane2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Line2d
+
 /// An infinite line going through the origin along a direction in 2D space.
 ///
 /// For a finite line: [`Segment2d`]
@@ -1169,6 +1195,9 @@ pub struct Line2d {
 }
 
 impl Primitive2d for Line2d {}
+
+// -----------------------------------------------------------------------------
+// Segment2d
 
 /// A line segment defined by two endpoints in 2D space.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1473,6 +1502,9 @@ impl From<(Vec2, Vec2)> for Segment2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Polyline2d
+
 /// A series of connected line segments in 2D space.
 #[derive(Clone, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -1521,6 +1553,9 @@ impl Polyline2d {
         Self { vertices }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Triangle2d
 
 /// A triangle in 2D space
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1688,6 +1723,9 @@ impl Measured2d for Triangle2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Rectangle
+
 /// A rectangle primitive, which is like a square, except that the width and height can be different
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -1772,6 +1810,9 @@ impl Measured2d for Rectangle {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Polygon
+
 /// A polygon with N vertices.
 #[derive(Clone, Debug, PartialEq)]
 #[derive(Reflect, Serialize, Deserialize)]
@@ -1813,6 +1854,9 @@ impl From<ConvexPolygon> for Polygon {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// ConvexPolygon
 
 /// A convex polygon with `N` vertices.
 #[derive(Clone, Debug, PartialEq)]
@@ -1887,6 +1931,9 @@ impl TryFrom<Polygon> for ConvexPolygon {
         ConvexPolygon::new(val.vertices)
     }
 }
+
+// -----------------------------------------------------------------------------
+// RegularPolygon
 
 /// A polygon centered on the origin where all vertices lie on a circle, equally far apart.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2025,6 +2072,9 @@ impl Measured2d for RegularPolygon {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Capsule2d
+
 /// A 2D capsule primitive, also known as a stadium or pill shape.
 ///
 /// A two-dimensional capsule is defined as a neighborhood of points at a distance (radius) from a line
@@ -2083,6 +2133,9 @@ impl Measured2d for Capsule2d {
         2.0 * PI * self.radius + 4.0 * self.half_length
     }
 }
+
+// -----------------------------------------------------------------------------
+// Ring
 
 /// A 2D shape representing the ring version of a base shape.
 ///
@@ -2160,6 +2213,9 @@ where
         Ring::from_primitive_and_thickness(self, thickness)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests2
 
 #[cfg(test)]
 mod tests {

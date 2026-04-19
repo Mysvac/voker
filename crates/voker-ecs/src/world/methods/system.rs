@@ -16,6 +16,7 @@ type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
 ///
 /// The generic parameters (`I`, `O`) partition caches by system input/output
 /// signature so ids do not collide across incompatible system types.
+#[repr(transparent)]
 struct SystemResource<I: SystemInput, O> {
     mapper: NoOpHashMap<SystemId, Option<BoxedSystem<I, O>>>,
 }
@@ -97,10 +98,9 @@ impl World {
         I: SystemInput + 'static,
         O: 'static,
     {
-        let res = self.resource_mut_or_init::<SystemResource<I, O>>();
-        let res = res.into_inner();
+        let mut res = self.resource_mut_or_init::<SystemResource<I, O>>();
         let id = system.system_id();
-        if matches!(res.mapper.get_mut(&id), Some(Some(_))) {
+        if matches!(res.mapper.get(&id), Some(Some(_))) {
             return;
         }
         res.mapper.insert(id, Some(Box::new(IntoSystem::into_system(system))));

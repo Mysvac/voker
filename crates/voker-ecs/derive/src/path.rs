@@ -95,6 +95,41 @@ pub(crate) fn schedule_label_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
+pub(crate) fn system_set_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::schedule::SystemSet
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::System
+    }
+}
+
+#[inline(always)]
+pub(crate) fn into_system_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::system::IntoSystem
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_set_begin_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::schedule::SystemSetBegin
+    }
+}
+
+#[inline(always)]
+pub(crate) fn system_set_end_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::schedule::SystemSetEnd
+    }
+}
+
+#[inline(always)]
 pub(crate) fn game_error_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::error::GameError

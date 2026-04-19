@@ -93,7 +93,7 @@ impl Children {
     fn cloner(src: CloneSource, mut dst: CloneTarget, ctx: &mut CloneContext) {
         if ctx.linked_clone() {
             dst.write::<Self>(Self(src.read::<Self>().0.clone()));
-            ctx.defer_remap::<Self>();
+            ctx.defer_map_entities::<Self>();
         } else {
             dst.write::<Self>(Self(Vec::new()));
         }

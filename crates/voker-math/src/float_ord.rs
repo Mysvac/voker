@@ -1,10 +1,11 @@
-use core::{
-    cmp::Ordering,
-    hash::{Hash, Hasher},
-    ops::Neg,
-};
+use core::cmp::Ordering;
+use core::hash::{Hash, Hasher};
+use core::ops::Neg;
 
 use voker_reflect::Reflect;
+
+// -----------------------------------------------------------------------------
+// FloatOrd
 
 /// A wrapper for floats that implements [`Ord`], [`Eq`], and [`Hash`] traits.
 ///
@@ -18,6 +19,7 @@ use voker_reflect::Reflect;
 #[derive(Debug, Copy, Clone)]
 #[derive(Reflect)]
 #[reflect(Debug, Clone, PartialEq, PartialOrd, Hash)]
+#[repr(transparent)]
 pub struct FloatOrd(pub f32);
 
 impl PartialOrd for FloatOrd {

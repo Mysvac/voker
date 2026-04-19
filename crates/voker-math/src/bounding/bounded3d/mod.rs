@@ -12,6 +12,9 @@ use crate::{Isometry3d, Quat, Vec3A};
 
 pub use extrusion::BoundedExtrusion;
 
+// -----------------------------------------------------------------------------
+// point_cloud_3d_center
+
 /// Computes the geometric center of the given set of points.
 #[inline]
 fn point_cloud_3d_center(points: impl Iterator<Item = impl Into<Vec3A>>) -> Vec3A {
@@ -26,6 +29,9 @@ fn point_cloud_3d_center(points: impl Iterator<Item = impl Into<Vec3A>>) -> Vec3
     acc / len as f32
 }
 
+// -----------------------------------------------------------------------------
+// Bounded3d
+
 /// A trait with methods that return 3D bounding volumes for a shape.
 pub trait Bounded3d {
     /// Get an axis-aligned bounding box for the shape translated and rotated by the given isometry.
@@ -33,6 +39,9 @@ pub trait Bounded3d {
     /// Get a bounding sphere for the shape translated and rotated by the given isometry.
     fn bounding_sphere(&self, isometry: impl Into<Isometry3d>) -> BoundingSphere;
 }
+
+// -----------------------------------------------------------------------------
+// Aabb3d
 
 /// A 3D axis-aligned bounding box
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -275,6 +284,9 @@ impl IntersectsVolume<BoundingSphere> for Aabb3d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Test1
+
 #[cfg(test)]
 mod aabb3d_tests {
     use approx::assert_relative_eq;
@@ -481,12 +493,14 @@ mod aabb3d_tests {
     }
 }
 
+// -----------------------------------------------------------------------------
+// BoundingSphere
+
 use crate::primitives::Sphere;
 
 /// A bounding sphere
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[derive(Reflect)]
-#[derive(Serialize, Deserialize)]
+#[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BoundingSphere {
     /// The center of the bounding sphere
@@ -669,6 +683,9 @@ impl IntersectsVolume<Aabb3d> for BoundingSphere {
         aabb.intersects(self)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Test2
 
 #[cfg(test)]
 mod bounding_sphere_tests {

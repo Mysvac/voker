@@ -616,7 +616,7 @@ fn relationship_target_tokens(
     if related_field.vis != syn::Visibility::Inherited {
         return Err(syn::Error::new(
             related_field.span(),
-            "The SourceSet in RelationshipTarget must be private to\
+            "The SourceSet in RelationshipTarget must be private to \
             prevent users from directly mutating it, which could \
             invalidate the correctness of link.",
         ));

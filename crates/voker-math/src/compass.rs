@@ -1,8 +1,12 @@
-use crate::Dir2;
 use core::ops::Neg;
 use glam::Vec2;
 use serde::{Deserialize, Serialize};
 use voker_reflect::Reflect;
+
+use crate::Dir2;
+
+// -----------------------------------------------------------------------------
+// CompassQuadrant
 
 /// A compass enum with 4 directions.
 /// ```text
@@ -102,6 +106,9 @@ impl CompassQuadrant {
         to_candidate.dot(*dir) > 0.0
     }
 }
+
+// -----------------------------------------------------------------------------
+// CompassOctant
 
 /// A compass enum with 8 directions.
 /// ```text
@@ -299,6 +306,9 @@ impl Neg for CompassOctant {
         self.opposite()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod test_compass_quadrant {

@@ -1,15 +1,6 @@
-//! This module provides panic handlers for apps, and automatically configures platform specifics (i.e. Wasm or Android).
-//!
-//! You can add [`PanicHandlerPlugin`] directly, or include it via your own
-//! [`PluginGroup`](crate::PluginGroup).
-
 use crate::{App, Plugin};
 
 /// Adds sensible panic handlers to apps. Adding
-/// this plugin will setup a panic hook appropriate to your target platform:
-/// * On Wasm, uses [`console_error_panic_hook`](https://crates.io/crates/console_error_panic_hook), logging
-///   to the browser console.
-/// * Other platforms are currently not setup.
 ///
 /// ```no_run
 /// # use voker_app::{App, NoopPluginGroup, PanicHandlerPlugin};
@@ -28,13 +19,13 @@ use crate::{App, Plugin};
 /// #
 /// # struct BasePlugins;
 /// # impl PluginGroup for BasePlugins {
-/// #     fn build(self) -> PluginGroupBuilder {
+/// #     fn builder(self) -> PluginGroupBuilder {
 /// #         PluginGroupBuilder::start::<Self>().add(PanicHandlerPlugin)
 /// #     }
 /// # }
 /// fn main() {
 ///     App::new()
-///         .add_plugins(BasePlugins.build().disable::<PanicHandlerPlugin>())
+///         .add_plugins(BasePlugins.builder().disable::<PanicHandlerPlugin>())
 ///         .run();
 /// }
 /// ```

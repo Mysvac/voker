@@ -1,7 +1,7 @@
-//! Logging facilities and configuration for voker apps.
+//! Logging facilities and configuration
 //!
 //! This crate re-exports macros from [`tracing`](https://docs.rs/tracing) and provides
-//! [`LogPlugin`](crate::LogPlugin) to initialize a process-wide subscriber.
+//! [`LogPlugin`] to initialize a process-wide subscriber.
 //! Platform-specific integrations are configured automatically:
 //! - Android: routed through Android system log.
 //! - iOS: routed through OSLog.

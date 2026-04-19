@@ -125,14 +125,14 @@ pub trait ShapeSample {
     }
 }
 
+/// A wrapper struct that allows interior sampling from a [`ShapeSample`]
+/// type directly as a [`Distribution`].
 #[derive(Clone, Copy)]
-/// A wrapper struct that allows interior sampling from a [`ShapeSample`] type directly as
-/// a [`Distribution`].
 pub struct InteriorOf<T: ShapeSample>(pub T);
 
+/// A wrapper struct that allows boundary sampling from a [`ShapeSample`]
+/// type directly as a [`Distribution`].
 #[derive(Clone, Copy)]
-/// A wrapper struct that allows boundary sampling from a [`ShapeSample`] type directly as
-/// a [`Distribution`].
 pub struct BoundaryOf<T: ShapeSample>(pub T);
 
 impl<T: ShapeSample> Distribution<<T as ShapeSample>::Output> for InteriorOf<T> {

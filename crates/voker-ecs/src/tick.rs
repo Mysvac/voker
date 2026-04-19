@@ -183,7 +183,7 @@ impl core::fmt::Debug for Tick {
 /// after wrap-around.
 ///
 /// [`World::reset_last_run`]: crate::world::World::reset_last_run
-#[derive(Debug, Clone, Copy)]
+#[derive(Event, Debug, Clone, Copy)]
 pub struct CheckTicks(Tick);
 
 impl CheckTicks {
@@ -234,6 +234,7 @@ pub trait DetectChanges {
 // -----------------------------------------------------------------------------
 // TicksBorrow
 
+use voker_ecs_derive::Event;
 use voker_ptr::{ThinSlice, ThinSliceMut};
 use voker_reflect::Reflect;
 

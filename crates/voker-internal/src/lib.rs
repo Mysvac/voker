@@ -1,7 +1,8 @@
+//! Features integration layer
 #![no_std]
 
 pub use voker_cfg as cfg;
-
+pub use voker_asset as asset;
 pub use voker_ecs as ecs;
 pub use voker_inventory as inventory;
 pub use voker_math as math;

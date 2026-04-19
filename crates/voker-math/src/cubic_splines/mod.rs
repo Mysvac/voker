@@ -1,6 +1,5 @@
 //! Provides types for building cubic splines for rendering curves and use with animation easing.
 
-#[cfg(feature = "curve")]
 mod curve_impls;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -1057,11 +1056,9 @@ impl CubicSegment<Vec2> {
     ///
     /// ```
     /// # use voker_math::prelude::*;
-    /// #     /// # {
     /// let cubic_bezier = CubicSegment::new_bezier_easing((0.25, 0.1), (0.25, 1.0));
     /// assert_eq!(cubic_bezier.ease(0.0), 0.0);
     /// assert_eq!(cubic_bezier.ease(1.0), 1.0);
-    /// # }
     /// ```
     ///
     /// # How cubic easing works

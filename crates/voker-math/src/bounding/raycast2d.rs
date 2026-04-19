@@ -1,10 +1,11 @@
 use super::{Aabb2d, BoundingCircle, IntersectsVolume};
-use crate::{
-    Dir2, Ray2d, Vec2,
-    ops::{self, FloatPow},
-};
+use crate::ops::{self, FloatPow};
+use crate::{Dir2, Ray2d, Vec2};
 
 use voker_reflect::Reflect;
+
+// -----------------------------------------------------------------------------
+// RayCast2d
 
 /// A raycast intersection test for 2D bounding volumes
 #[derive(Clone, Debug)]
@@ -76,8 +77,7 @@ impl RayCast2d {
         let projected = offset.dot(*self.ray.direction);
         let cross = offset.perp_dot(*self.ray.direction);
         let distance_squared = circle.radius().squared() - cross.squared();
-        if distance_squared < 0.
-            || ops::copysign(projected.squared(), -projected) < -distance_squared
+        if distance_squared < 0. || ops::copysign(projected.squared(), projected) > distance_squared
         {
             None
         } else {
@@ -102,6 +102,9 @@ impl IntersectsVolume<BoundingCircle> for RayCast2d {
         self.circle_intersection_at(volume).is_some()
     }
 }
+
+// -----------------------------------------------------------------------------
+// AabbCast2d
 
 /// An intersection test that casts an [`Aabb2d`] along a ray.
 #[derive(Clone, Debug)]
@@ -142,6 +145,9 @@ impl IntersectsVolume<Aabb2d> for AabbCast2d {
     }
 }
 
+// -----------------------------------------------------------------------------
+// BoundingCircleCast
+
 /// An intersection test that casts a [`BoundingCircle`] along a ray.
 #[derive(Clone, Debug)]
 #[derive(Reflect)]
@@ -180,6 +186,9 @@ impl IntersectsVolume<BoundingCircle> for BoundingCircleCast {
         self.circle_collision_at(*volume).is_some()
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 mod tests {

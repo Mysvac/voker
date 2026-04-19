@@ -9,6 +9,7 @@ impl World {
     /// Registers a fully-built [`Observer`] into this world and returns its [`ObserverId`].
     #[inline(never)]
     pub(crate) fn register_observer(&mut self, observer: Observer) -> ObserverId {
+        // Update archetypes infomation
         if let Some(flags) = observer.flags() {
             if observer.observed_components.is_empty() {
                 for arche in self.archetypes.iter_mut() {

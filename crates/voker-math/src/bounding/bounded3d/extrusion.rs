@@ -3,11 +3,10 @@ use core::f32::consts::FRAC_PI_2;
 use glam::{Vec2, Vec3A, Vec3Swizzles};
 
 use super::{Aabb3d, Bounded3d, BoundingSphere};
-use crate::ops;
 use crate::primitives::{Capsule2d, Circle, Cuboid, Cylinder, Ellipse, Extrusion};
 use crate::primitives::{Line2d, Polygon, Polyline2d, Primitive2d, Rectangle};
 use crate::primitives::{RegularPolygon, Ring, Segment2d, Triangle2d};
-use crate::{Isometry2d, Isometry3d, Quat, Rot2};
+use crate::{Isometry2d, Isometry3d, Quat, Rot2, ops};
 use crate::{bounding::Bounded2d, bounding::BoundingCircle, bounding::BoundingVolume};
 
 impl BoundedExtrusion for Circle {

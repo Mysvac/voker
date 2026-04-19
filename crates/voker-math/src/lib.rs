@@ -1,6 +1,6 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, expect(internal_features, reason = "needed for fake_variadic"))]
 #![cfg_attr(docsrs, feature(doc_cfg, rustdoc_internals))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![no_std]
 
@@ -17,21 +17,20 @@ extern crate alloc;
 
 mod affine3;
 mod aspect_ratio;
-pub mod bounding;
-pub mod common_traits;
 mod compass;
-pub mod cubic_splines;
 mod direction;
 mod float_ord;
 mod isometry;
 mod mat3;
-pub mod ops;
-pub mod primitives;
 mod ray;
 mod rects;
 mod rotation2d;
 
-#[cfg(feature = "curve")]
+pub mod ops;
+pub mod primitives;
+pub mod cubic_splines;
+pub mod bounding;
+pub mod common_traits;
 pub mod curve;
 
 #[cfg(feature = "rand")]
@@ -50,7 +49,6 @@ pub use ray::{Ray2d, Ray3d};
 pub use rects::*;
 pub use rotation2d::Rot2;
 
-#[cfg(feature = "curve")]
 pub use curve::Curve;
 
 #[cfg(feature = "rand")]
@@ -74,7 +72,6 @@ pub mod prelude {
     };
 
     #[doc(hidden)]
-    #[cfg(feature = "curve")]
     pub use crate::curve::*;
 
     #[doc(hidden)]

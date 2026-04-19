@@ -1,6 +1,4 @@
 //! Isometry types for expressing rigid motions in two and three dimensions.
-
-use crate::{Affine2, Affine3, Affine3A, Dir2, Dir3, Mat3, Mat3A, Quat, Rot2, Vec2, Vec3, Vec3A};
 use core::ops::Mul;
 
 #[cfg(feature = "approx")]
@@ -8,6 +6,12 @@ use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 
 use serde::{Deserialize, Serialize};
 use voker_reflect::Reflect;
+
+use crate::{Affine2, Affine3, Affine3A, Dir2, Dir3};
+use crate::{Mat3, Mat3A, Quat, Rot2, Vec2, Vec3, Vec3A};
+
+// -----------------------------------------------------------------------------
+// Isometry2d
 
 /// An isometry in two dimensions, representing a rotation followed by a translation.
 /// This can often be useful for expressing relative positions and transformations from one position to another.
@@ -270,6 +274,9 @@ impl UlpsEq for Isometry2d {
             && self.translation.ulps_eq(&other.translation, epsilon, max_ulps)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Isometry3d
 
 /// An isometry in three dimensions, representing a rotation followed by a translation.
 /// This can often be useful for expressing relative positions and transformations from one position to another.
@@ -563,6 +570,9 @@ impl UlpsEq for Isometry3d {
             && self.translation.ulps_eq(&other.translation, epsilon, max_ulps)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
 
 #[cfg(test)]
 #[cfg(feature = "approx")]

@@ -331,6 +331,20 @@ pub fn derive_schedule_label(input: TokenStream) -> TokenStream {
     schedule::impl_derive_schedule_label(ast)
 }
 
+/// Derives the `SystemSet` trait implementation.
+///
+/// Supported input forms:
+/// - unit structs,
+/// - enums with unit variants only.
+///
+/// For enums, generated begin/end marker systems use the variant index as
+/// `TAG`, so each variant gets a distinct pair.
+#[proc_macro_derive(SystemSet)]
+pub fn derive_system_set(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    schedule::impl_derive_system_set(ast)
+}
+
 /// Derives the `Message` trait implementation.
 ///
 /// This macro implements `Message` for the annotated type.
