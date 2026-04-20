@@ -27,10 +27,6 @@ pub(crate) fn voker_reflect() -> syn::Path {
     voker_macro_utils::crate_path!(voker_reflect)
 }
 
-pub(crate) fn voker_ecs() -> syn::Path {
-    voker_macro_utils::crate_path!(voker_ecs)
-}
-
 pub(crate) use voker_macro_utils::full_path as fp;
 
 // -----------------------------------------------------------------------------

@@ -73,7 +73,7 @@ pub fn derive_sub_states(input: TokenStream) -> TokenStream {
     let ident: Ident = ast.ident;
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
-    let Some((source_ty, source_value)) = source_attr.map(|(source, value)| (source, value)) else {
+    let Some((source_ty, source_value)) = source_attr else {
         return syn::Error::new(
             Span::call_site(),
             "missing #[source(SourceType = value)] on SubStates derive",

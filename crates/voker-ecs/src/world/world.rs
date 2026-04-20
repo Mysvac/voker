@@ -3,9 +3,9 @@
 use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::sync::atomic::Ordering;
-use voker_os::utils::CachePadded;
 
 use voker_os::sync::atomic::AtomicU32;
+use voker_os::utils::CachePadded;
 
 use super::WorldId;
 use crate::archetype::Archetypes;

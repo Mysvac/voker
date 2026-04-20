@@ -2,7 +2,7 @@ use crate::derive::{impl_reflect, impl_reflect_opaque};
 use glam::*;
 
 impl_reflect!(
-    #[reflect(type_path = "glam::IVec2")]
+    #[type_path = "glam::IVec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct IVec2 {
         x: i32,
@@ -10,7 +10,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::IVec3")]
+    #[type_path = "glam::IVec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct IVec3 {
         x: i32,
@@ -19,7 +19,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::IVec4")]
+    #[type_path = "glam::IVec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct IVec4 {
         x: i32,
@@ -30,7 +30,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I8Vec2")]
+    #[type_path = "glam::I8Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I8Vec2 {
         x: i8,
@@ -39,7 +39,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I8Vec3")]
+    #[type_path = "glam::I8Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I8Vec3 {
         x: i8,
@@ -49,7 +49,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I8Vec4")]
+    #[type_path = "glam::I8Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I8Vec4 {
         x: i8,
@@ -60,7 +60,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I16Vec2")]
+    #[type_path = "glam::I16Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I16Vec2 {
         x: i16,
@@ -69,7 +69,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I16Vec3")]
+    #[type_path = "glam::I16Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I16Vec3 {
         x: i16,
@@ -79,7 +79,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I16Vec4")]
+    #[type_path = "glam::I16Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I16Vec4 {
         x: i16,
@@ -90,7 +90,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I64Vec2")]
+    #[type_path = "glam::I64Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I64Vec2 {
         x: i64,
@@ -99,7 +99,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I64Vec3")]
+    #[type_path = "glam::I64Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I64Vec3 {
         x: i64,
@@ -109,7 +109,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::I64Vec4")]
+    #[type_path = "glam::I64Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct I64Vec4 {
         x: i64,
@@ -120,7 +120,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::UVec2")]
+    #[type_path = "glam::UVec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct UVec2 {
         x: u32,
@@ -128,7 +128,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::UVec3")]
+    #[type_path = "glam::UVec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct UVec3 {
         x: u32,
@@ -137,7 +137,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::UVec4")]
+    #[type_path = "glam::UVec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct UVec4 {
         x: u32,
@@ -148,7 +148,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::U8Vec2")]
+    #[type_path = "glam::U8Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U8Vec2 {
         x: u8,
@@ -156,7 +156,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U8Vec3")]
+    #[type_path = "glam::U8Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U8Vec3 {
         x: u8,
@@ -165,7 +165,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U8Vec4")]
+    #[type_path = "glam::U8Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U8Vec4 {
         x: u8,
@@ -176,7 +176,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::U16Vec2")]
+    #[type_path = "glam::U16Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U16Vec2 {
         x: u16,
@@ -184,7 +184,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U16Vec3")]
+    #[type_path = "glam::U16Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U16Vec3 {
         x: u16,
@@ -193,7 +193,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U16Vec4")]
+    #[type_path = "glam::U16Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U16Vec4 {
         x: u16,
@@ -204,7 +204,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::U64Vec2")]
+    #[type_path = "glam::U64Vec2"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U64Vec2 {
         x: u64,
@@ -212,7 +212,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U64Vec3")]
+    #[type_path = "glam::U64Vec3"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U64Vec3 {
         x: u64,
@@ -221,7 +221,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::U64Vec4")]
+    #[type_path = "glam::U64Vec4"]
     #[reflect(Clone, Debug, Hash, PartialEq, Default, Deserialize, Serialize)]
     struct U64Vec4 {
         x: u64,
@@ -232,7 +232,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::Vec2")]
+    #[type_path = "glam::Vec2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Vec2 {
         x: f32,
@@ -240,7 +240,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Vec3")]
+    #[type_path = "glam::Vec3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Vec3 {
         x: f32,
@@ -249,7 +249,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Vec3A")]
+    #[type_path = "glam::Vec3A"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Vec3A {
         x: f32,
@@ -258,7 +258,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Vec4")]
+    #[type_path = "glam::Vec4"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Vec4 {
         x: f32,
@@ -269,7 +269,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::BVec2")]
+    #[type_path = "glam::BVec2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct BVec2 {
         x: bool,
@@ -277,7 +277,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::BVec3")]
+    #[type_path = "glam::BVec3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct BVec3 {
         x: bool,
@@ -286,7 +286,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::BVec4")]
+    #[type_path = "glam::BVec4"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct BVec4 {
         x: bool,
@@ -297,7 +297,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::DVec2")]
+    #[type_path = "glam::DVec2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DVec2 {
         x: f64,
@@ -305,7 +305,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DVec3")]
+    #[type_path = "glam::DVec3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DVec3 {
         x: f64,
@@ -314,7 +314,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DVec4")]
+    #[type_path = "glam::DVec4"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DVec4 {
         x: f64,
@@ -325,7 +325,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::Mat2")]
+    #[type_path = "glam::Mat2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Mat2 {
         x_axis: Vec2,
@@ -333,7 +333,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Mat3")]
+    #[type_path = "glam::Mat3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Mat3 {
         x_axis: Vec3,
@@ -342,7 +342,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Mat3A")]
+    #[type_path = "glam::Mat3A"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Mat3A {
         x_axis: Vec3A,
@@ -351,7 +351,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Mat4")]
+    #[type_path = "glam::Mat4"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Mat4 {
         x_axis: Vec4,
@@ -362,7 +362,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::DMat2")]
+    #[type_path = "glam::DMat2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DMat2 {
         x_axis: DVec2,
@@ -370,7 +370,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DMat3")]
+    #[type_path = "glam::DMat3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DMat3 {
         x_axis: DVec3,
@@ -379,7 +379,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DMat4")]
+    #[type_path = "glam::DMat4"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DMat4 {
         x_axis: DVec4,
@@ -390,7 +390,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::Affine2")]
+    #[type_path = "glam::Affine2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Affine2 {
         matrix2: Mat2,
@@ -398,7 +398,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Affine3")]
+    #[type_path = "glam::Affine3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Affine3 {
         matrix3: Mat3,
@@ -406,7 +406,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::Affine3A")]
+    #[type_path = "glam::Affine3A"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Affine3A {
         matrix3: Mat3A,
@@ -415,7 +415,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::DAffine2")]
+    #[type_path = "glam::DAffine2"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DAffine2 {
         matrix2: DMat2,
@@ -423,7 +423,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DAffine3")]
+    #[type_path = "glam::DAffine3"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DAffine3 {
         matrix3: DMat3,
@@ -432,7 +432,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::Quat")]
+    #[type_path = "glam::Quat"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct Quat {
         x: f32,
@@ -442,7 +442,7 @@ impl_reflect!(
     }
 );
 impl_reflect!(
-    #[reflect(type_path = "glam::DQuat")]
+    #[type_path = "glam::DQuat"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     struct DQuat {
         x: f64,
@@ -453,7 +453,7 @@ impl_reflect!(
 );
 
 impl_reflect!(
-    #[reflect(type_path = "glam::EulerRot")]
+    #[type_path = "glam::EulerRot"]
     #[reflect(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
     enum EulerRot {
         ZYX,

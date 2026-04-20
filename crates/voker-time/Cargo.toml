@@ -19,6 +19,7 @@ std = [
 
 [dependencies]
 voker-cfg = { path = "../voker-cfg" }
+voker-utils = { path = "../voker-utils", default-features = false }
 voker-os = { path = "../voker-os", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
 voker-app = { path = "../voker-app", default-features = false }

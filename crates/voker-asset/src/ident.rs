@@ -203,7 +203,7 @@ pub enum AssetId<A: Asset> {
         index: AssetIndex,
         /// A marker to store the type information of the asset.
         #[serde(skip)]
-        #[reflect(skip_serde)]
+        #[reflect(ignore, clone, default)]
         marker: PhantomData<fn() -> A>,
     },
     /// A stable-across-runs / const asset identifier. This will only be used if an asset is explicitly registered in [`Assets`]
@@ -575,7 +575,6 @@ pub(crate) struct ErasedAssetIndex {
     pub(crate) type_id: TypeId,
 }
 
-
 impl ErasedAssetIndex {
     pub(crate) const fn new(index: AssetIndex, type_id: TypeId) -> Self {
         Self { index, type_id }
@@ -615,4 +614,3 @@ impl From<ErasedAssetIndex> for UntypedAssetId {
         }
     }
 }
-

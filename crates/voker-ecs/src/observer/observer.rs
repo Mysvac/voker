@@ -58,8 +58,8 @@ pub struct Observer {
     pub(crate) system: Box<dyn NamedSystem>,
     pub(crate) runner: ObserverRunner,
     pub(crate) error_handler: Option<ErrorHandler>,
-    pub(crate) observed_components: Vec<ComponentId>,
-    pub(crate) observed_entities: SparseHashSet<Entity>,
+    pub(crate) components: Vec<ComponentId>,
+    pub(crate) entities: SparseHashSet<Entity>,
 }
 
 impl Debug for Observer {
@@ -76,29 +76,29 @@ impl Observer {
 
     /// Restricts this observer to a single target entity.
     pub fn with_entity(mut self, entity: Entity) -> Self {
-        self.observed_entities.insert(entity);
+        self.entities.insert(entity);
         self
     }
 
     /// Restricts this observer to multiple target entities.
     pub fn with_entities<I: IntoIterator<Item = Entity>>(mut self, entities: I) -> Self {
-        self.observed_entities.extend(entities);
+        self.entities.extend(entities);
         self
     }
 
     /// Restricts this observer to a specific component target.
     pub fn with_component(mut self, component: ComponentId) -> Self {
-        self.observed_components.push(component);
-        self.observed_components.sort();
-        self.observed_components.dedup();
+        self.components.push(component);
+        self.components.sort();
+        self.components.dedup();
         self
     }
 
     /// Restricts this observer to multiple component targets.
     pub fn with_components<I: IntoIterator<Item = ComponentId>>(mut self, components: I) -> Self {
-        self.observed_components.extend(components);
-        self.observed_components.sort();
-        self.observed_components.dedup();
+        self.components.extend(components);
+        self.components.sort();
+        self.components.dedup();
         self
     }
 

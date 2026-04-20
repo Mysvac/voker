@@ -96,7 +96,7 @@ pub trait Relationship: Component + Sized {
         }
 
         if let Ok(mut entity_commands) = world.commands().try_with_entity(target_entity) {
-            entity_commands.push(move |mut owned: EntityOwned| {
+            entity_commands.queue(move |mut owned: EntityOwned| {
                 if let Some(target) = owned.get_mut::<Self::RelationshipTarget>() {
                     RelationshipTarget::raw_sources_mut(target.into_inner()).insert(entity);
                 } else {
@@ -132,7 +132,7 @@ pub trait Relationship: Component + Sized {
         {
             RelationshipTarget::raw_sources_mut(target.deref_mut()).remove(entity);
             if target.is_empty() {
-                world.commands().with_entity(target_entity).push_silenced(
+                world.commands().with_entity(target_entity).queue_silenced(
                     move |mut e: EntityOwned| {
                         if e.get::<Self::RelationshipTarget>()
                             .is_some_and(RelationshipTarget::is_empty)

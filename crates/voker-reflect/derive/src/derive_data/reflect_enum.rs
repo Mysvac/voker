@@ -42,7 +42,7 @@ impl<'a> EnumVariant<'a> {
 
     /// Get an iterator of fields which are exposed to the reflection API
     pub fn active_fields(&self) -> impl Iterator<Item = &StructField<'a>> {
-        self.fields().iter()
+        self.fields().iter().filter(|f| !f.is_ignore())
     }
 
     /// Generates a `TokenStream` for `VariantInfo` construction.
@@ -73,12 +73,12 @@ impl<'a> EnumVariant<'a> {
             }
         };
 
-        // See [`CustomAttributes::get_expression_with`]
+        // See [`CustomAttributes::get_with_expression`]
         let with_custom_attributes =
-            self.attrs.custom_attributes.get_expression_with(voker_reflect_path);
-        // See [`ReflectDocs::get_expression_with`]
+            self.attrs.custom_attributes.get_with_expression(voker_reflect_path);
+        // See [`ReflectDocs::get_with_expression`]
         // If feature is diabled, this function will return a empty TokenStream, so it's safe.
-        let with_docs = self.attrs.docs.get_expression_with();
+        let with_docs = self.attrs.docs.get_with_expression();
 
         quote! {
             #variant_info_path::#variant_info_kind(
@@ -129,9 +129,9 @@ impl<'a> ReflectEnum<'a> {
             .iter()
             .map(|variant| variant.variant_info_tokens(voker_reflect_path));
 
-        // See [`CustomAttributes::get_expression_with`]
+        // See [`CustomAttributes::get_with_expression`]
         let with_custom_attributes = self.meta.with_custom_attributes_expression();
-        // See [`ReflectDocs::get_expression_with`]
+        // See [`ReflectDocs::get_with_expression`]
         // If feature is diabled, this function will return a empty TokenStream, so it's safe.
         let with_docs = self.meta.with_docs_expression();
         // See [`ReflectMeta::with_generics_expression`]

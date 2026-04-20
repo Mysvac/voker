@@ -70,9 +70,7 @@ impl World {
         func: impl FnOnce(&mut World, &mut Schedule) -> R,
     ) -> Option<R> {
         let label = label.intern();
-        let Some(mut schedule) = self.schedules.remove(label) else {
-            return None;
-        };
+        let mut schedule = self.schedules.remove(label)?;
 
         let value = func(self, &mut schedule);
 

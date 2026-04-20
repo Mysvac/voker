@@ -106,7 +106,7 @@ pub struct MainBegin;
 pub struct FixedMainBegin;
 
 /// A flag indicating that the fixed loop is enabled.
-/// 
+///
 /// The `TimePlugin` is required for enabling.
 #[derive(Resource, Debug, Default, Clone, Copy)]
 pub struct EnableFixedMain;
@@ -241,7 +241,7 @@ impl FixedMainScheduleOrder {
 // Order
 
 /// Set enum for the systems that want to run inside [`RunFixedMainLoop`],
-/// 
+///
 /// but before or after the fixed update logic. Systems in this set will
 /// run exactly once per frame, regardless of the number of fixed updates.
 /// They will also run under a variable timestep.
@@ -297,17 +297,17 @@ impl FixedMain {
 // MainSchedulePlugin
 
 /// Built-in scheduler plugin automatically added by [`App::new`](crate::App::new).
-/// 
+///
 /// Default order:
-/// 
+///
 /// **Main-Startup**: (run_once)
-/// 
+///
 /// 1. [`PreStartup`]
 /// 2. [`Startup`]
 /// 3. [`PostStartup`]
-/// 
+///
 /// **Main-Loop**:
-/// 
+///
 /// 1. [`First`]
 /// 2. [`PreUpdate`]
 /// 3. [`RunFixedMainLoop`]
@@ -316,15 +316,15 @@ impl FixedMain {
 /// 5. [`SpawnScene`]
 /// 6. [`PostUpdate`]
 /// 7. [`Last`]
-/// 
+///
 /// **FixedMain-Loop**:
-/// 
+///
 /// 1. [`FixedFirst`]
 /// 2. [`FixedPreUpdate`]
 /// 3. [`FixedUpdate`]
 /// 4. [`FixedPostUpdate`]
 /// 5. [`FixedLast`]
-/// 
+///
 /// This plugin also wires periodic message queue maintenance by running
 /// [`World::update_messages`] in [`First`] when both main and fixed phases have started.
 pub struct MainSchedulePlugin;
@@ -396,7 +396,6 @@ impl Plugin for MainSchedulePlugin {
         DuplicateStrategy::Panic
     }
 }
-
 
 fn message_update_condition(
     mut main_reader: MessageReader<MainBegin>,

@@ -21,7 +21,7 @@ pub(crate) fn impl_trait_typed(
     let trait_typed_ = crate::path::typed_(voker_reflect_path);
     let type_info_ = crate::path::type_info_(voker_reflect_path);
 
-    let inner_cell_tokens = if meta.contains_generics() {
+    let inner_cell_tokens = if meta.has_type_const_generics() {
         let info_cell = crate::path::generic_type_info_cell_(voker_reflect_path);
         quote! {
             static CELL: #info_cell = #info_cell::new();

@@ -7,6 +7,9 @@ use voker_reflect::Reflect;
 
 use crate::{Time, Virtual};
 
+// -----------------------------------------------------------------------------
+// Fixed
+
 #[derive(Debug, Copy, Clone, Reflect, Serialize, Deserialize)]
 #[reflect(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Fixed {

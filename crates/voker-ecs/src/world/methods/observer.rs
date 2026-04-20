@@ -11,12 +11,12 @@ impl World {
     pub(crate) fn register_observer(&mut self, observer: Observer) -> ObserverId {
         // Update archetypes infomation
         if let Some(flags) = observer.flags() {
-            if observer.observed_components.is_empty() {
+            if observer.components.is_empty() {
                 for arche in self.archetypes.iter_mut() {
                     arche.merge_observer_flags(flags);
                 }
             } else {
-                let slice = observer.observed_components.as_slice();
+                let slice = observer.components.as_slice();
                 if voker_task::cfg::multi_threaded!() && self.archetypes.len() > 2400 {
                     use voker_task::ParallelSlice;
                     self.archetypes.as_mut_slice().par_each_mut(|arche| {
@@ -34,7 +34,7 @@ impl World {
             }
         }
 
-        let entity_based = !observer.observed_entities.is_empty();
+        let entity_based = !observer.entities.is_empty();
 
         let observer_id = self.observers.register(observer);
 
@@ -44,20 +44,20 @@ impl World {
             let entity_world = unsafe { unsafe_world.full_mut() };
             let observer = unsafe { self.observers.get_unchecked(observer_id) };
 
-            for entity in observer.observed_entities.clone() {
+            for entity in observer.entities.clone() {
                 let mut owned = match entity_world.get_entity_owned(entity) {
                     Ok(val) => val,
                     Err(e) => unsafe {
                         let observer = observers.get_unchecked_mut(observer_id);
 
-                        observer.observed_entities.remove(&entity);
+                        observer.entities.remove(&entity);
                         let name = observer.system_name();
 
                         log::warn!(
                             "Observer `{name}` try to observe a despawned entity, the target has been removed. {e}"
                         );
 
-                        if observer.observed_entities.is_empty() {
+                        if observer.entities.is_empty() {
                             observers.observers.remove(observer_id);
                             return observer_id;
                         }

@@ -1,4 +1,5 @@
-use crate::utils::StringExpr;
+use crate::string_expr::StringExpr;
+use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{GenericParam, Generics, Ident, LitStr, Path};
 use syn::{punctuated::Punctuated, spanned::Spanned};
@@ -7,7 +8,7 @@ use syn::{punctuated::Punctuated, spanned::Spanned};
 ///
 /// The container will only be a part of [`ReflectMeta`](crate::derive_data::ReflectMeta),
 /// so no interfaces will be exposed.
-pub(crate) enum TypeParser<'a> {
+pub(crate) enum TypeSignature<'a> {
     /// Types without a crate/module that can be named from any scope (e.g. `bool`).
     Primitive(&'a Ident),
     /// The type must be able to be reached with just its ident.
@@ -27,14 +28,14 @@ pub(crate) enum TypeParser<'a> {
     },
 }
 
-impl<'a> TypeParser<'a> {
+impl<'a> TypeSignature<'a> {
     /// See [`ReflectDerive::from_input`](crate::derive_data::ReflectDerive::from_input)
     pub(crate) fn new_local(
         ident: &'a Ident,
         custom_path: Option<Path>,
         generics: &'a Generics,
-    ) -> TypeParser<'a> {
-        TypeParser::Local {
+    ) -> TypeSignature<'a> {
+        TypeSignature::Local {
             ident,
             custom_path,
             generics,
@@ -47,11 +48,11 @@ impl<'a> TypeParser<'a> {
         path: &'a Path,
         custom_path: Option<Path>,
         generics: &'a Generics,
-    ) -> TypeParser<'a> {
+    ) -> TypeSignature<'a> {
         if custom_path.is_none() && path.leading_colon.is_none() {
-            TypeParser::Primitive(ident)
+            TypeSignature::Primitive(ident)
         } else {
-            TypeParser::Foreign {
+            TypeSignature::Foreign {
                 path,
                 custom_path,
                 generics,
@@ -75,7 +76,7 @@ impl<'a> TypeParser<'a> {
     }
 
     /// Whether an implementation of `Typed` or `TypePath` should be generic.
-    pub(super) fn contains_generics(&self) -> bool {
+    pub(super) fn has_type_const_generics(&self) -> bool {
         // exist non-lifecycle generic parameters
         self.generics()
             .params
@@ -84,12 +85,12 @@ impl<'a> TypeParser<'a> {
     }
 
     /// Whether an implementation of `Typed` or `TypePath` should be generic.
-    pub(super) fn without_generics(&self) -> bool {
+    pub(super) fn no_generics(&self) -> bool {
         self.generics().params.is_empty()
     }
 
     /// This name is used in `impl ... for #real_ident {...}`.
-    pub(super) fn real_ident(&self) -> proc_macro2::TokenStream {
+    pub(super) fn real_ident(&self) -> TokenStream {
         match self {
             Self::Local { ident, .. } | Self::Primitive(ident) => ident.to_token_stream(),
             Self::Foreign { path, .. } => path.to_token_stream(),
@@ -194,8 +195,8 @@ impl<'a> TypeParser<'a> {
             Self::Local { generics, .. } | Self::Foreign { generics, .. } => {
                 let type_ident = self.type_ident();
 
-                if self.contains_generics() {
-                    let generics = TypeParser::reduce_generics(generics, voker_reflect_path);
+                if self.has_type_const_generics() {
+                    let generics = TypeSignature::reduce_generics(generics, voker_reflect_path);
 
                     StringExpr::from_iter(
                         [
@@ -225,8 +226,8 @@ impl<'a> TypeParser<'a> {
                     .module_path()
                     .expect("Non-Primitive type, try to parse type_path but get module_path fail.");
 
-                if self.contains_generics() {
-                    let generics = TypeParser::reduce_generics(generics, voker_reflect_path);
+                if self.has_type_const_generics() {
+                    let generics = TypeSignature::reduce_generics(generics, voker_reflect_path);
 
                     StringExpr::from_iter(
                         [

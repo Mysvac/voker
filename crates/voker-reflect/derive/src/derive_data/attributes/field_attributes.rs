@@ -10,6 +10,9 @@ use crate::REFLECT_ATTRIBUTE;
 mod kw {
     syn::custom_keyword!(doc);
     syn::custom_keyword!(skip_serde);
+    syn::custom_keyword!(ignore);
+    syn::custom_keyword!(clone);
+    syn::custom_keyword!(default);
 }
 
 #[derive(Default)]
@@ -20,6 +23,9 @@ pub(crate) struct FieldAttributes {
     pub docs: ReflectDocs,
     /// Determines how this field should be skipped during reflect (de)serialization.
     pub skip_serde: Option<Span>,
+    pub ignore: Option<Span>,
+    pub clone: Option<Span>,
+    pub default: Option<Span>,
 }
 
 impl FieldAttributes {
@@ -77,6 +83,12 @@ impl FieldAttributes {
             self.parse_docs(input)
         } else if lookahead.peek(kw::skip_serde) {
             self.parse_skip_serde(input)
+        } else if lookahead.peek(kw::ignore) {
+            self.parse_ignore(input)
+        } else if lookahead.peek(kw::clone) {
+            self.parse_clone(input)
+        } else if lookahead.peek(kw::default) {
+            self.parse_default(input)
         } else {
             Err(lookahead.error())
         }
@@ -97,6 +109,24 @@ impl FieldAttributes {
     fn parse_skip_serde(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::skip_serde>()?.span;
         self.skip_serde = Some(s);
+        Ok(())
+    }
+
+    fn parse_ignore(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::ignore>()?.span;
+        self.ignore = Some(s);
+        Ok(())
+    }
+
+    fn parse_clone(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::clone>()?.span;
+        self.clone = Some(s);
+        Ok(())
+    }
+
+    fn parse_default(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::default>()?.span;
+        self.default = Some(s);
         Ok(())
     }
 }

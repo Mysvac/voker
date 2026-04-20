@@ -56,7 +56,7 @@ impl Stopwatch {
     pub fn reset(&mut self) {
         self.elapsed = Default::default();
     }
-    
+
     #[inline]
     pub fn tick(&mut self, delta: Duration) -> &Self {
         if !self.is_paused {

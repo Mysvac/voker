@@ -11,6 +11,7 @@
 /.github/agents
 /.github/skills
 /.github/instructions
+/claude.md
 
 # Custom
 /temp

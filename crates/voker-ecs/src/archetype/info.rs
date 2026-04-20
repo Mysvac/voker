@@ -633,36 +633,43 @@ impl Archetype {
     ///
     /// This is used when registering observers so trigger paths can skip
     /// expensive event dispatch for event kinds with no listeners.
+    #[inline(always)]
     pub(crate) fn merge_observer_flags(&mut self, flags: ObserverFlags) {
         self.observers = self.observers.union(flags);
     }
 
     /// Returns `true` if there is any `Add` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_add_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::ADD)
     }
 
     /// Returns `true` if there is any `Clone` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_clone_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::CLONE)
     }
 
     /// Returns `true` if there is any `Insert` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_insert_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::INSERT)
     }
 
     /// Returns `true` if there is any `Remove` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_remove_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::REMOVE)
     }
 
     /// Returns `true` if there is any `Discard` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_discard_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DISCARD)
     }
 
     /// Returns `true` if there is any `Despawn` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_despawn_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DESPAWN)
     }

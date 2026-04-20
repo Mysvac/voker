@@ -48,18 +48,32 @@ impl Default for TraitImplSwitches {
     }
 }
 
+impl TraitImplSwitches {
+    pub fn empty() -> Self {
+        Self {
+            impl_type_path: false,
+            impl_typed: false,
+            impl_reflect: false,
+            impl_get_type_meta: false,
+            impl_from_reflect: false,
+            impl_struct: false,
+            impl_tuple_struct: false,
+            impl_tuple: false,
+            impl_enum: false,
+        }
+    }
+}
+
 /// A struct used to record whether the specified trait is available.
 #[derive(Default)]
 pub(crate) struct TraitAvailableFlags {
     pub default: Option<Span>,
     pub clone: Option<Span>,
+    pub not_cloneable: Option<Span>,
     pub debug: Option<Span>,
     pub hash: Option<Span>,
     pub partial_eq: Option<Span>,
     pub partial_ord: Option<Span>,
     pub serialize: Option<Span>,
     pub deserialize: Option<Span>,
-    pub component: Option<Span>,
-    pub resource: Option<Span>,
-    pub from_world: Option<Span>,
 }

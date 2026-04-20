@@ -3,18 +3,22 @@
 #![forbid(unsafe_code)]
 #![no_std]
 
-
+extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
-extern crate alloc;
 
-pub mod conditions;
+// -----------------------------------------------------------------------------
+// Modules
+
 mod fixed;
 mod real;
 mod stopwatch;
 mod time;
 mod timer;
 mod virt;
+
+// -----------------------------------------------------------------------------
+// Exports
 
 pub use fixed::*;
 pub use real::*;
@@ -23,22 +27,32 @@ pub use time::*;
 pub use timer::*;
 pub use virt::*;
 
+pub mod conditions;
+pub mod delayed;
+
 pub mod prelude {
     #[doc(hidden)]
-    pub use crate::{Fixed, Real, Time, TimePlugin, TimeUpdateStrategy, Timer, TimerMode, Virtual};
+    pub use crate::{
+        DelayedCommandsExt, Fixed, Real, Time, TimePlugin, TimeUpdateStrategy, Timer, TimerMode,
+        Virtual,
+    };
 }
 
-
+// -----------------------------------------------------------------------------
+// Plugin
 
 use core::time::Duration;
 
 use voker_app::{EnableFixedMain, RunFixedMainLoop, prelude::*};
 use voker_ecs::borrow::{Res, ResMut};
+use voker_ecs::reflect::ReflectResource;
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{IntoSystemConfig, SystemSet};
 use voker_os::time::Instant;
 use voker_reflect::Reflect;
 
+pub use crate::delayed::DelayedCommandsExt;
+use crate::delayed::{DelayedCommandQueues, check_delayed_command_queues};
 
 #[derive(Default)]
 pub struct TimePlugin;
@@ -47,7 +61,8 @@ pub struct TimePlugin;
 pub struct TimeSystems;
 
 #[derive(Resource, Default, Reflect, Clone, Debug)]
-#[reflect(Resource, Default, Clone, Debug)]
+#[reflect(Default, Clone, Debug)]
+#[type_data(ReflectResource)]
 pub enum TimeUpdateStrategy {
     #[default]
     Automatic,
@@ -65,12 +80,17 @@ impl Plugin for TimePlugin {
             .init_resource::<Time<Virtual>>()
             .init_resource::<Time<Fixed>>()
             .init_resource::<TimeUpdateStrategy>()
-            .init_resource::<EnableFixedMain>();
+            .init_resource::<EnableFixedMain>()
+            .init_resource::<DelayedCommandQueues>();
 
         app.register_type::<TimeUpdateStrategy>();
 
         app.add_systems(First, time_system.in_set(TimeSystems));
-        app.add_systems(RunFixedMainLoop, run_fixed_main_schedule.in_set(FixedMainLoop));
+        app.add_systems(PreUpdate, check_delayed_command_queues);
+        app.add_systems(
+            RunFixedMainLoop,
+            run_fixed_main_schedule.in_set(FixedMainLoop),
+        );
     }
 }
 
@@ -92,4 +112,3 @@ pub fn time_system(
 
     update_virtual_time(&mut time, &mut virtual_time, &real_time);
 }
-

@@ -434,7 +434,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
 /// # use voker_reflect::ops::DynamicStruct;
 /// #
 /// #[derive(Reflect, PartialEq, Debug)]
-/// #[reflect(type_path = "my_crate::MyStruct")]
+/// #[type_path = "my_crate::MyStruct"]
 /// struct MyStruct {
 ///   value: i32
 /// }

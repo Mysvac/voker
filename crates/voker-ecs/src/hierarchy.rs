@@ -37,6 +37,7 @@ use crate::clone::{CloneContext, CloneSource, CloneTarget};
 use crate::command::EntityCommands;
 use crate::component::Component;
 use crate::entity::Entity;
+use crate::reflect::{ReflectComponent, ReflectFromWorld};
 use crate::relationship::{RelatedSpawner, RelatedSpawnerCommands};
 use crate::world::{EntityOwned, FromWorld, World};
 
@@ -50,8 +51,8 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// With `linked_lifecycle = true`, despawning a parent recursively despawns children.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[derive(Reflect, Component, Serialize, Deserialize)]
-#[reflect(Component, FromWorld, Clone, Debug)]
-#[reflect(PartialEq, Serialize, Deserialize)]
+#[reflect(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[type_data(ReflectComponent, ReflectFromWorld)]
 #[relationship(relationship_target = Children)]
 pub struct ChildOf(#[related] pub Entity);
 
@@ -78,7 +79,8 @@ impl FromWorld for ChildOf {
 /// instead so both sides of the relationship remain synchronized.
 #[derive(Reflect, Component, Default, Debug, PartialEq, Eq)]
 #[component(cloner = Children::cloner)]
-#[reflect(Component, FromWorld, Default, Debug, PartialEq)]
+#[reflect(Default, Debug, PartialEq)]
+#[type_data(ReflectComponent, ReflectFromWorld)]
 #[relationship_target(relationship = ChildOf, linked_lifecycle)]
 pub struct Children(#[related] Vec<Entity>);
 

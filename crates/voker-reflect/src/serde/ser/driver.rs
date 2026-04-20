@@ -293,7 +293,7 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
 /// # use voker_reflect::prelude::{TypeRegistry, ReflectSerializeDriver, Reflect};
 /// #
 /// #[derive(Reflect)]
-/// #[reflect(type_path = "my_crate::MyStruct")]
+/// #[type_path = "my_crate::MyStruct"]
 /// struct MyStruct {
 ///   value: i32
 /// }

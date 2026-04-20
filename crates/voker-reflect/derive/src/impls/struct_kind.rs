@@ -17,21 +17,21 @@ pub(crate) fn impl_struct(info: &ReflectStruct) -> TokenStream {
     let type_path_trait_tokens = if meta.attrs().impl_switchs.impl_type_path {
         impl_trait_type_path(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Typed
     let typed_trait_tokens = if meta.attrs().impl_switchs.impl_typed {
         impl_trait_typed(meta, info.type_info_tokens(false), false, false)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Struct
     let struct_trait_tokens = if meta.attrs().impl_switchs.impl_struct {
         impl_trait_struct(info)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Reflect
@@ -57,21 +57,21 @@ pub(crate) fn impl_struct(info: &ReflectStruct) -> TokenStream {
             false,
         )
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
         impl_trait_get_type_meta(meta, get_registry_dependencies(info))
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: FromReflect
     let get_from_reflect_tokens = if meta.attrs().impl_switchs.impl_from_reflect {
         impl_struct_from_reflect(info, false)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // featuer: auto_resiter

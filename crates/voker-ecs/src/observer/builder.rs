@@ -42,8 +42,8 @@ impl Observer {
             system,
             runner: observer_system_runner::<E, B, S::System>,
             error_handler: None,
-            observed_components: Vec::from(idents),
-            observed_entities: SparseHashSet::new(),
+            components: Vec::from(idents),
+            entities: SparseHashSet::new(),
         }
     }
 }

@@ -1,7 +1,7 @@
-use core::ops::Range;
-use core::fmt::{Debug, Display};
-use alloc::string::{String, ToString};
 use alloc::borrow::ToOwned;
+use alloc::string::{String, ToString};
+use core::fmt::{Debug, Display};
+use core::ops::Range;
 use std::path::{Path, PathBuf};
 
 use atomicow::CowArc;
@@ -43,7 +43,7 @@ pub(crate) fn normalize_path(path: &Path) -> PathBuf {
 // AssetPath
 
 #[derive(Default, Clone, PartialEq, Eq, Hash, Reflect)]
-#[reflect(Opaque, Debug, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[reflect(Opaque, Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub struct AssetPath<'a> {
     source: AssetSourceId<'a>,
     path: CowArc<'a, Path>,

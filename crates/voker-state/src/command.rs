@@ -30,7 +30,7 @@ pub trait CommandExt {
 
 impl CommandExt for Commands<'_, '_> {
     fn set_state<S: ManualStates>(&mut self, state: S) {
-        self.push(move |w: &mut World| {
+        self.queue(move |w: &mut World| {
             let mut next = w.resource_mut::<NextState<S>>();
             if let NextState::PendingIfNeq(prev) = &*next {
                 log::debug!("overwriting next state {prev:?} with {state:?}");
@@ -40,7 +40,7 @@ impl CommandExt for Commands<'_, '_> {
     }
 
     fn set_state_if_neq<S: ManualStates>(&mut self, state: S) {
-        self.push(move |w: &mut World| {
+        self.queue(move |w: &mut World| {
             let mut next = w.resource_mut::<NextState<S>>();
             if let NextState::PendingIfNeq(prev) = &*next
                 && *prev != state

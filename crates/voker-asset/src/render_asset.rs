@@ -1,5 +1,5 @@
-use voker_reflect::prelude::Reflect;
 use serde::{Deserialize, Serialize};
+use voker_reflect::prelude::Reflect;
 
 bitflags::bitflags! {
     /// Defines where the asset will be used.

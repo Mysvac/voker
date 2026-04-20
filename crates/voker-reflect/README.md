@@ -134,11 +134,13 @@ use core::marker::PhantomData;
 use voker_reflect::prelude::*;
 
 #[derive(Reflect, PartialEq, Debug)]
-#[reflect(type_path = "example::MyStruct")]
+#[type_path = "example::MyStruct"]
 struct MyStruct {
     value: i32,
     #[reflect(skip_serde)]
     _marker: PhantomData<i32>,
+    // or use `#[reflect(ignore, clone, default)]`
+    // for non-reflective.
 }
 
 let mut registry = TypeRegistry::new();

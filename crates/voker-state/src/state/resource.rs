@@ -1,6 +1,7 @@
 use core::ops::Deref;
 
 use voker_ecs::borrow::ResMut;
+use voker_ecs::reflect::ReflectResource;
 use voker_ecs::resource::Resource;
 use voker_ecs::world::{FromWorld, World};
 use voker_reflect::Reflect;
@@ -12,7 +13,8 @@ use crate::state::{ManualStates, States};
 
 /// The current value for state type `S`.
 #[derive(Reflect, Resource, Debug, PartialEq, Eq)]
-#[reflect(Resource, Debug, PartialEq)]
+#[reflect(Debug, PartialEq)]
+#[type_data(ReflectResource)]
 pub struct State<S: States>(pub(crate) S);
 
 impl<S: States> State<S> {
@@ -52,7 +54,8 @@ impl<S: States> Deref for State<S> {
 
 /// The previous value for state type `S`.
 #[derive(Reflect, Resource, Debug, Clone, PartialEq, Eq)]
-#[reflect(Resource, Debug, Clone, PartialEq)]
+#[reflect(Debug, Clone, PartialEq)]
+#[type_data(ReflectResource)]
 pub struct PreviousState<S: States>(pub(crate) S);
 
 impl<S: States> PreviousState<S> {
@@ -81,7 +84,8 @@ impl<S: States> Deref for PreviousState<S> {
 
 /// The queued transition for state type `S`.
 #[derive(Reflect, Resource, Debug, Clone, Default)]
-#[reflect(Resource, Default, Debug, Clone)]
+#[reflect(Default, Debug, Clone)]
+#[type_data(ReflectResource)]
 pub enum NextState<S: ManualStates> {
     /// No transition is queued.
     #[default]

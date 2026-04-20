@@ -1,11 +1,13 @@
 use core::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use voker_ecs::reflect::ReflectResource;
 use voker_ecs::resource::Resource;
 use voker_reflect::Reflect;
 
 #[derive(Resource, Debug, Copy, Clone, Reflect, Serialize, Deserialize)]
-#[reflect(Resource, Default)]
+#[reflect(Default)]
+#[type_data(ReflectResource)]
 pub struct Time<T: Default = ()> {
     context: T,
     wrap_period: Duration,

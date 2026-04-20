@@ -39,9 +39,7 @@ use super::CurveExt;
 /// A curve with a constant value over its domain.
 ///
 /// This is a curve that holds an inner value and always produces a clone of that value when sampled.
-#[derive(Clone, Copy, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Reflect)]
+#[derive(Clone, Copy, Debug, Reflect, Serialize, Deserialize)]
 pub struct ConstantCurve<T> {
     pub(crate) domain: Interval,
     pub(crate) value: T,
@@ -77,15 +75,13 @@ where
 ///
 /// This is a curve that holds an inner function `f` which takes numbers (`f32`) as input and produces
 /// output of type `T`. The value of this curve when sampled at time `t` is just `f(t)`.
-#[derive(Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Reflect)]
+#[derive(Clone, Reflect, Serialize, Deserialize)]
 #[reflect(FromReflect = false, TypePath = false)]
 pub struct FunctionCurve<T, F> {
     pub(crate) domain: Interval,
     pub(crate) f: F,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -171,7 +167,7 @@ pub struct MapCurve<S, T, C, F> {
     pub(crate) preimage: C,
     pub(crate) f: F,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<(fn() -> S, fn(S) -> T)>,
 }
 
@@ -257,7 +253,7 @@ pub struct ReparamCurve<T, C, F> {
     pub(crate) base: C,
     pub(crate) f: F,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -341,7 +337,7 @@ pub struct LinearReparamCurve<T, C> {
     /// Invariants: This interval must always be bounded.
     pub(crate) new_domain: Interval,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -369,7 +365,7 @@ pub struct CurveReparamCurve<T, C, D> {
     pub(crate) base: C,
     pub(crate) reparam_curve: D,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -396,7 +392,7 @@ where
 pub struct GraphCurve<T, C> {
     pub(crate) base: C,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -423,7 +419,7 @@ pub struct ZipCurve<S, T, C, D> {
     pub(crate) first: C,
     pub(crate) second: D,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> (S, T)>,
 }
 
@@ -458,7 +454,7 @@ pub struct ChainCurve<T, C, D> {
     pub(crate) first: C,
     pub(crate) second: D,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -502,7 +498,7 @@ where
 pub struct ReverseCurve<T, C> {
     pub(crate) curve: C,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -539,7 +535,7 @@ pub struct RepeatCurve<T, C> {
     pub(crate) domain: Interval,
     pub(crate) curve: C,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -592,7 +588,7 @@ where
 pub struct ForeverCurve<T, C> {
     pub(crate) curve: C,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -641,7 +637,7 @@ where
 pub struct PingPongCurve<T, C> {
     pub(crate) curve: C,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 
@@ -693,7 +689,7 @@ pub struct ContinuationCurve<T, C, D> {
     // cache the offset in the curve directly to prevent triple sampling for every sample we make
     pub(crate) offset: T,
     #[serde(skip)]
-    #[reflect(skip_serde)]
+    #[reflect(ignore, clone, default)]
     pub(crate) _phantom: PhantomData<fn() -> T>,
 }
 

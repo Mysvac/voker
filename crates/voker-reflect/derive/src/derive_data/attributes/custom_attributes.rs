@@ -35,9 +35,9 @@ impl CustomAttributes {
     /// ```
     ///
     /// The type path will be parsed before returning.
-    pub fn get_expression_with(&self, voker_reflect_path: &Path) -> TokenStream {
+    pub fn get_with_expression(&self, voker_reflect_path: &Path) -> TokenStream {
         if self.attributes.is_empty() {
-            return crate::utils::empty();
+            return TokenStream::new();
         }
 
         let capacity = self.attributes.len();

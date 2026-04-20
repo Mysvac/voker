@@ -11,13 +11,11 @@ use voker_utils::extra::PagePool;
 use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMap};
 
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
+use super::{AnonymousSchedule, AnonymousSystemSet, InternedSystemSet};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
+use super::{SystemConfig, SystemNode, SystemSet, ToposortError};
 use crate::prelude::IntoSystemConfig;
-use crate::schedule::{
-    AnonymousSchedule, AnonymousSystemSet, InternedSystemSet, SystemConfig, SystemNode, SystemSet,
-    ToposortError,
-};
 use crate::system::{IntoSystem, SystemId};
 use crate::world::World;
 

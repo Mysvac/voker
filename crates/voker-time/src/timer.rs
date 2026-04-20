@@ -5,9 +5,6 @@ use voker_reflect::Reflect;
 
 use crate::Stopwatch;
 
-
-
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[derive(Reflect, Default, Serialize, Deserialize)]
 #[reflect(Default, Clone, PartialEq, Hash, Serialize, Deserialize)]
@@ -162,7 +159,6 @@ impl Timer {
         self.times_finished_this_tick
     }
 
-
     pub fn tick(&mut self, delta: Duration) -> &Self {
         self.times_finished_this_tick = 0;
 
@@ -188,10 +184,11 @@ impl Timer {
                     .checked_div(self.duration().as_nanos())
                     .map_or(u32::MAX, |x| x as u32);
 
-                let elapsed = self.elapsed()
-                        .as_nanos()
-                        .checked_rem(self.duration().as_nanos())
-                        .map_or(Duration::ZERO, |x| Duration::from_nanos(x as u64));
+                let elapsed = self
+                    .elapsed()
+                    .as_nanos()
+                    .checked_rem(self.duration().as_nanos())
+                    .map_or(Duration::ZERO, |x| Duration::from_nanos(x as u64));
                 self.set_elapsed(elapsed);
             } else {
                 self.times_finished_this_tick = 1;
@@ -202,5 +199,3 @@ impl Timer {
         self
     }
 }
-
-

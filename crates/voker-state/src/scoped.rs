@@ -1,10 +1,11 @@
 use alloc::sync::Arc;
 
 use voker_ecs::command::Commands;
-use voker_ecs::derive::Component;
+use voker_ecs::component::Component;
 use voker_ecs::entity::Entity;
 use voker_ecs::message::MessageReader;
 use voker_ecs::query::Query;
+use voker_ecs::reflect::ReflectComponent;
 use voker_reflect::Reflect;
 
 use crate::state::{StateTransitionSignal, States};
@@ -14,7 +15,8 @@ use crate::state::{StateTransitionSignal, States};
 
 /// Despawn entities when the state transition enters this value.
 #[derive(Reflect, Component, Clone)]
-#[reflect(Component, Clone)]
+#[reflect(Clone)]
+#[type_data(ReflectComponent)]
 pub struct DespawnOnEnter<S: States>(pub S);
 
 impl<S: States + Default> Default for DespawnOnEnter<S> {
@@ -28,7 +30,8 @@ impl<S: States + Default> Default for DespawnOnEnter<S> {
 
 /// Despawn entities when the state transition exits this value.
 #[derive(Reflect, Component, Clone)]
-#[reflect(Component, Clone)]
+#[reflect(Clone)]
+#[type_data(ReflectComponent)]
 pub struct DespawnOnExit<S: States>(pub S);
 
 impl<S: States + Default> Default for DespawnOnExit<S> {
@@ -42,7 +45,8 @@ impl<S: States + Default> Default for DespawnOnExit<S> {
 
 /// Despawn entities when the custom predicate matches a state transition.
 #[derive(Reflect, Component, Clone)]
-#[reflect(Component, Clone)]
+#[reflect(Clone)]
+#[type_data(ReflectComponent)]
 pub struct DespawnWhen<S: States> {
     /// Predicate executed against the latest transition signal.
     pub state_transition_evaluator:

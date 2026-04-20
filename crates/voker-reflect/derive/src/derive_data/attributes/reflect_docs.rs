@@ -140,13 +140,13 @@ impl ReflectDocs {
     /// ```ignore
     /// .with_docs(::core::option::Option::Some("......"))
     /// ```
-    pub fn get_expression_with(&self) -> TokenStream {
+    pub fn get_with_expression(&self) -> TokenStream {
         if let Some(doc) = self.doc_string() {
             quote! {
                 .with_docs(#OptionFP::Some(#doc))
             }
         } else {
-            crate::utils::empty()
+            TokenStream::new()
         }
     }
 }

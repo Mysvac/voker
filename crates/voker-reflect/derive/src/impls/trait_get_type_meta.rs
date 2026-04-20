@@ -19,15 +19,6 @@ pub(crate) fn impl_trait_get_type_meta(
     let from_type_ = crate::path::from_type_(voker_reflect_path);
     let type_data_from_ptr = crate::path::reflect_from_ptr_(voker_reflect_path);
 
-    let voker_ecs_path = if meta.attrs().avail_traits.from_world.is_some()
-        || meta.attrs().avail_traits.component.is_some()
-        || meta.attrs().avail_traits.resource.is_some()
-    {
-        Some(crate::path::voker_ecs())
-    } else {
-        None
-    };
-
     let outer_ = Ident::new("__ret__", Span::call_site());
 
     // `1` : ReflectFromPtr
@@ -43,7 +34,7 @@ pub(crate) fn impl_trait_get_type_meta(
             #type_meta_::insert_data::<#reflect_from_reflect_>(&mut #outer_, #from_type_::<Self>::from_type());
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     let insert_default = match meta.attrs().avail_traits.default {
@@ -57,7 +48,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_default_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
     };
 
     let insert_serialize = match meta.attrs().avail_traits.serialize {
@@ -70,7 +61,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_serialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
     };
 
     let insert_deserialize = match meta.attrs().avail_traits.deserialize {
@@ -83,40 +74,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_deserialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
-    };
-
-    let insert_from_world = match meta.attrs().avail_traits.from_world {
-        Some(span) => {
-            data_counter += 1;
-            let from_type_fn = Ident::new("from_type", span);
-            quote! {
-                #type_meta_::insert_data::<#voker_ecs_path::reflect::ReflectFromWorld>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
-            }
-        }
-        None => crate::utils::empty(),
-    };
-
-    let insert_component = match meta.attrs().avail_traits.component {
-        Some(span) => {
-            data_counter += 1;
-            let from_type_fn = Ident::new("from_type", span);
-            quote! {
-                #type_meta_::insert_data::<#voker_ecs_path::reflect::ReflectComponent>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
-            }
-        }
-        None => crate::utils::empty(),
-    };
-
-    let insert_resource = match meta.attrs().avail_traits.resource {
-        Some(span) => {
-            data_counter += 1;
-            let from_type_fn = Ident::new("from_type", span);
-            quote! {
-                #type_meta_::insert_data::<#voker_ecs_path::reflect::ReflectResource>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
-            }
-        }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
     };
 
     data_counter += meta.attrs().extra_type_data.len();
@@ -142,9 +100,6 @@ pub(crate) fn impl_trait_get_type_meta(
                 #insert_default
                 #insert_serialize
                 #insert_deserialize
-                #insert_from_world
-                #insert_component
-                #insert_resource
                 #(#insert_extra_traits)*
                 #outer_
             }

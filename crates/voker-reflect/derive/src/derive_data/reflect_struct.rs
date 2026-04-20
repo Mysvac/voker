@@ -1,4 +1,4 @@
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{Field, Ident};
 
@@ -16,6 +16,7 @@ pub(crate) struct StructField<'a> {
     pub data: &'a Field,
     pub attrs: FieldAttributes,
     pub field_index: usize,
+    pub reflect_index: usize,
 }
 
 // -----------------------------------------------------------------------------
@@ -25,7 +26,7 @@ impl<'a> StructField<'a> {
     /// Generates a `TokenStream` for `NamedField` or `UnnamedField` construction.
     ///
     /// This function is only allowed to be called for active fields(self.reflection_index is some).
-    pub fn to_info_tokens(&self, voker_reflect_path: &syn::Path) -> proc_macro2::TokenStream {
+    pub fn to_info_tokens(&self, voker_reflect_path: &syn::Path) -> TokenStream {
         let field_info = if self.data.ident.is_some() {
             crate::path::named_field_(voker_reflect_path) // String Literal
         } else {
@@ -39,17 +40,17 @@ impl<'a> StructField<'a> {
 
         let ty = &self.data.ty;
 
-        // See [`CustomAttributes::get_expression_with`]
+        // See [`CustomAttributes::get_with_expression`]
         let with_custom_attributes =
-            self.attrs.custom_attributes.get_expression_with(voker_reflect_path);
-        // See [`ReflectDocs::get_expression_with`]
+            self.attrs.custom_attributes.get_with_expression(voker_reflect_path);
+        // See [`ReflectDocs::get_with_expression`]
         // If feature is diabled, this function will return a empty TokenStream, so it's safe.
-        let with_docs = self.attrs.docs.get_expression_with();
+        let with_docs = self.attrs.docs.get_with_expression();
 
         let with_skip_serde = if self.attrs.skip_serde.is_some() {
             quote! { .with_skip_serde(true) }
         } else {
-            crate::utils::empty()
+            TokenStream::new()
         };
 
         quote! {
@@ -75,11 +76,23 @@ impl<'a> StructField<'a> {
     ///
     /// - Named fields return values similar to `"name"`.
     /// - Unnamedfields return values similar to `2`.
-    pub fn reflect_accessor(&self) -> proc_macro2::TokenStream {
+    pub fn reflect_accessor(&self) -> TokenStream {
         match &self.data.ident {
             Some(ident) => ident.to_string().to_token_stream(),
-            None => self.field_index.to_token_stream(),
+            None => self.reflect_index.to_token_stream(),
         }
+    }
+
+    pub fn is_ignore(&self) -> bool {
+        self.attrs.ignore.is_some()
+    }
+
+    pub fn cloneable(&self) -> bool {
+        self.attrs.clone.is_some()
+    }
+
+    pub fn defaultable(&self) -> bool {
+        self.attrs.default.is_some()
     }
 }
 
@@ -108,10 +121,11 @@ impl<'a> ReflectStruct<'a> {
 
     /// Get an iterator of fields which are exposed to the reflection API.
     pub fn active_fields(&self) -> impl Iterator<Item = &StructField<'a>> {
-        self.fields().iter()
+        // Active fields are those not marked with `#[reflect(ignore)]`.
+        self.fields().iter().filter(|f| !f.is_ignore())
     }
 
-    pub fn type_info_tokens(&self, is_tuple: bool) -> proc_macro2::TokenStream {
+    pub fn type_info_tokens(&self, is_tuple: bool) -> TokenStream {
         let voker_reflect_path = self.meta.voker_reflect_path();
 
         let type_info_path = crate::path::type_info_(voker_reflect_path);
@@ -132,9 +146,9 @@ impl<'a> ReflectStruct<'a> {
             .active_fields()
             .map(|field| field.to_info_tokens(voker_reflect_path));
 
-        // See [`CustomAttributes::get_expression_with`]
+        // See [`CustomAttributes::get_with_expression`]
         let with_custom_attributes = self.meta.with_custom_attributes_expression();
-        // See [`ReflectDocs::get_expression_with`]
+        // See [`ReflectDocs::get_with_expression`]
         // If feature is diabled, this function will return a empty TokenStream, so it's safe.
         let with_docs = self.meta.with_docs_expression();
         // See [`ReflectMeta::with_generics_expression`]
@@ -157,9 +171,9 @@ impl<'a> ReflectStruct<'a> {
 /// A helper struct for creating field accessors.
 pub(crate) struct FieldAccessors {
     /// The referenced field accessors, such as `&self.foo`.
-    pub fields_ref: Vec<proc_macro2::TokenStream>,
+    pub fields_ref: Vec<TokenStream>,
     /// The mutably referenced field accessors, such as `&mut self.foo`.
-    pub fields_mut: Vec<proc_macro2::TokenStream>,
+    pub fields_mut: Vec<TokenStream>,
     /// The ordered set of field indices (basically just the range of [0, `field_count`).
     pub field_indices: Vec<usize>,
     /// The number of fields in the reflected struct.

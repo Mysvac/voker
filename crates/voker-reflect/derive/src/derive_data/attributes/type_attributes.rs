@@ -5,7 +5,7 @@ use syn::{parse::ParseStream, spanned::Spanned};
 
 use super::{CustomAttributes, ReflectDocs, TraitAvailableFlags, TraitImplSwitches};
 
-use crate::REFLECT_ATTRIBUTE;
+use crate::{REFLECT_ATTRIBUTE, TYPE_DATA_ATTRIBUTE, TYPE_PATH_ATTRIBUTE};
 
 mod kw {
     syn::custom_keyword!(TypePath);
@@ -20,18 +20,14 @@ mod kw {
     syn::custom_keyword!(Opaque);
     syn::custom_keyword!(Default);
     syn::custom_keyword!(Clone);
+    syn::custom_keyword!(NotCloneable);
     syn::custom_keyword!(Debug);
     syn::custom_keyword!(Hash);
     syn::custom_keyword!(PartialEq);
     syn::custom_keyword!(PartialOrd);
     syn::custom_keyword!(Serialize);
     syn::custom_keyword!(Deserialize);
-    syn::custom_keyword!(FromWorld);
-    syn::custom_keyword!(Component);
-    syn::custom_keyword!(Resource);
-    syn::custom_keyword!(type_path);
     syn::custom_keyword!(doc);
-    syn::custom_keyword!(type_data);
 }
 
 #[derive(Default)]
@@ -44,26 +40,57 @@ pub(crate) struct TypeAttributes {
     pub avail_traits: TraitAvailableFlags,
     /// `#[reflect(Opaque)]`
     pub is_opaque: Option<Span>,
-    /// `#[reflect(type_path = "...")]`
+    /// `#[type_path = "..."]`
     pub type_path: Option<Path>,
     /// `#[reflect(doc = "...")]` or `#[doc = "..."]`
     pub docs: ReflectDocs,
-    /// `#[reflect(type_data = (...))]`
+    /// `#[type_data(...)]`
     pub extra_type_data: Vec<Path>,
 }
 
 impl TypeAttributes {
     pub fn validity(&self) -> syn::Result<()> {
+        if let (Some(clone_span), Some(not_cloneable_span)) =
+            (self.avail_traits.clone, self.avail_traits.not_cloneable)
+        {
+            let span = clone_span.join(not_cloneable_span).unwrap_or(not_cloneable_span);
+            return Err(syn::Error::new(
+                span,
+                "#[reflect(Clone)] conflicts with #[reflect(NotCloneable)].",
+            ));
+        }
+
         if let Some(span) = self.is_opaque
             && self.avail_traits.clone.is_none()
+            && self.avail_traits.not_cloneable.is_none()
             && { self.impl_switchs.impl_reflect || self.impl_switchs.impl_from_reflect }
         {
             return Err(syn::Error::new(
                 span,
-                "#[reflect(Clone)] must be specified when auto impl `Reflect` or `FromReflect` for Opaque Type.",
+                "#[reflect(Clone)] or #[reflect(NotCloneable)] must be specified \
+                when auto impl `Reflect` or `FromReflect` for Opaque Type.",
             ));
         }
         Ok(())
+    }
+
+    pub fn parse_type_path(attrs: &[Attribute]) -> syn::Result<Self> {
+        let mut type_attributes = TypeAttributes {
+            impl_switchs: TraitImplSwitches::empty(),
+            ..Default::default()
+        };
+
+        type_attributes.impl_switchs.impl_type_path = true;
+
+        for attribute in attrs {
+            match &attribute.meta {
+                Meta::NameValue(pair) if pair.path.is_ident(TYPE_PATH_ATTRIBUTE) => {
+                    type_attributes.parse_type_path_impl(pair)?;
+                }
+                _ => continue,
+            }
+        }
+        Ok(type_attributes)
     }
 
     pub fn parse_attrs(attrs: &[Attribute]) -> syn::Result<Self> {
@@ -84,6 +111,23 @@ impl TypeAttributes {
                     meta_list.parse_args_with(|stream: ParseStream| {
                         type_attributes.parse_stream(stream)
                     })?;
+                }
+                Meta::List(meta_list) if meta_list.path.is_ident(TYPE_DATA_ATTRIBUTE) => {
+                    if !matches!(&meta_list.delimiter, MacroDelimiter::Paren(_)) {
+                        return Err(syn::Error::new(
+                            meta_list.delimiter.span().join(),
+                            format_args!(
+                                "`#[{TYPE_DATA_ATTRIBUTE}(\"...\")]` must use parentheses `(` and `)`"
+                            ),
+                        ));
+                    }
+
+                    meta_list.parse_args_with(|stream: ParseStream| {
+                        type_attributes.parse_type_data_args(stream)
+                    })?;
+                }
+                Meta::NameValue(pair) if pair.path.is_ident(TYPE_PATH_ATTRIBUTE) => {
+                    type_attributes.parse_type_path_impl(pair)?;
                 }
                 Meta::NameValue(pair)
                     if ::core::cfg!(feature = "reflect_docs") && pair.path.is_ident("doc") =>
@@ -113,37 +157,29 @@ impl TypeAttributes {
     fn parse_stream_internal(&mut self, input: ParseStream) -> syn::Result<()> {
         let lookahead = input.lookahead1();
         if lookahead.peek(Token![@]) {
-            self.parse_custom_attribute(input)
+            self.parse_custom_attribute_impl(input)
         } else if lookahead.peek(kw::doc) {
-            self.parse_docs(input)
+            self.parse_docs_impl(input)
         } else if lookahead.peek(kw::Clone) {
             self.parse_clone(input)
+        } else if lookahead.peek(kw::NotCloneable) {
+            self.parse_not_cloneable(input)
         } else if lookahead.peek(kw::Default) {
-            self.parse_default(input)
+            self.parse_default_impl(input)
         } else if lookahead.peek(kw::Hash) {
-            self.parse_hash(input)
+            self.parse_hash_impl(input)
         } else if lookahead.peek(kw::PartialEq) {
-            self.parse_partial_eq(input)
+            self.parse_partial_eq_impl(input)
         } else if lookahead.peek(kw::PartialOrd) {
-            self.parse_partial_ord(input)
+            self.parse_partial_ord_impl(input)
         } else if lookahead.peek(kw::Debug) {
-            self.parse_debug(input)
+            self.parse_debug_impl(input)
         } else if lookahead.peek(kw::Serialize) {
-            self.parse_serialize(input)
+            self.parse_serialize_impl(input)
         } else if lookahead.peek(kw::Deserialize) {
-            self.parse_deserialize(input)
-        } else if lookahead.peek(kw::FromWorld) {
-            self.parse_from_world(input)
-        } else if lookahead.peek(kw::Component) {
-            self.parse_component(input)
-        } else if lookahead.peek(kw::Resource) {
-            self.parse_resource(input)
+            self.parse_deserialize_impl(input)
         } else if lookahead.peek(kw::Opaque) {
-            self.parse_opaque(input)
-        } else if lookahead.peek(kw::type_path) {
-            self.parse_type_path(input)
-        } else if lookahead.peek(kw::type_data) {
-            self.parses_extra_type_data(input)
+            self.parse_opaque_impl(input)
         } else if lookahead.peek(kw::TypePath) {
             self.parse_trait_type_path(input)
         } else if lookahead.peek(kw::Typed) {
@@ -168,12 +204,12 @@ impl TypeAttributes {
     }
 
     // #[reflect(@expr)]
-    fn parse_custom_attribute(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_custom_attribute_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         self.custom_attributes.parse_stream(input)
     }
 
     // #[reflect(docs = "...")]
-    fn parse_docs(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_docs_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let pair = input.parse::<MetaNameValue>()?;
         if ::core::cfg!(feature = "reflect_docs") {
             self.docs.parse_custom_docs(&pair)
@@ -183,7 +219,7 @@ impl TypeAttributes {
     }
 
     // #[reflect(Default)]
-    fn parse_default(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_default_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Default>()?.span;
         self.avail_traits.default = Some(s);
         Ok(())
@@ -196,108 +232,93 @@ impl TypeAttributes {
         Ok(())
     }
 
+    // #[reflect(NotCloneable)]
+    fn parse_not_cloneable(&mut self, input: ParseStream) -> syn::Result<()> {
+        let s = input.parse::<kw::NotCloneable>()?.span;
+        self.avail_traits.not_cloneable = Some(s);
+        Ok(())
+    }
+
     // #[reflect(Hash)]
-    fn parse_hash(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_hash_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Hash>()?.span;
         self.avail_traits.hash = Some(s);
         Ok(())
     }
 
     // #[reflect(PartialEq)]
-    fn parse_partial_eq(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_partial_eq_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::PartialEq>()?.span;
         self.avail_traits.partial_eq = Some(s);
         Ok(())
     }
 
     // #[reflect(PartialOrd)]
-    fn parse_partial_ord(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_partial_ord_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::PartialOrd>()?.span;
         self.avail_traits.partial_ord = Some(s);
         Ok(())
     }
 
     // #[reflect(Debug)]
-    fn parse_debug(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_debug_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Debug>()?.span;
         self.avail_traits.debug = Some(s);
         Ok(())
     }
 
     // #[reflect(Serialize)]
-    fn parse_serialize(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_serialize_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Serialize>()?.span;
         self.avail_traits.serialize = Some(s);
         Ok(())
     }
 
     // #[reflect(Deserialize)]
-    fn parse_deserialize(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_deserialize_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Deserialize>()?.span;
         self.avail_traits.deserialize = Some(s);
         Ok(())
     }
 
-    // #[reflect(FromWorld)]
-    fn parse_from_world(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::FromWorld>()?.span;
-        self.avail_traits.from_world = Some(s);
-        Ok(())
-    }
-
-    // #[reflect(Component)]
-    fn parse_component(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::Component>()?.span;
-        self.avail_traits.component = Some(s);
-        Ok(())
-    }
-
-    // #[reflect(Resource)]
-    fn parse_resource(&mut self, input: ParseStream) -> syn::Result<()> {
-        let s = input.parse::<kw::Resource>()?.span;
-        self.avail_traits.resource = Some(s);
-        Ok(())
-    }
-
     // #[reflect(Opaque)]
-    fn parse_opaque(&mut self, input: ParseStream) -> syn::Result<()> {
+    fn parse_opaque_impl(&mut self, input: ParseStream) -> syn::Result<()> {
         let s = input.parse::<kw::Opaque>()?.span;
         self.is_opaque = Some(s);
         Ok(())
     }
 
-    // #[reflect(type_path = "...")]
-    fn parse_type_path(&mut self, input: ParseStream) -> syn::Result<()> {
-        let pair = input.parse::<MetaNameValue>()?;
-
-        if let Expr::Lit(ExprLit {
+    // #[type_path = "..."]
+    fn parse_type_path_impl(&mut self, pair: &MetaNameValue) -> syn::Result<()> {
+        let Expr::Lit(ExprLit {
             lit: Lit::Str(lit), ..
         }) = &pair.value
-        {
-            let path: Path = syn::parse_str(&lit.value())?;
-            if path.segments.is_empty() {
-                return Err(syn::Error::new(
-                    lit.span(),
-                    "`type_path` should not be empty.",
-                ));
-            }
-            if path.leading_colon.is_some() {
-                return Err(syn::Error::new(
-                    lit.span(),
-                    "`type_path` should not have leading-colon.",
-                ));
-            }
-            self.type_path = Some(path);
-        } else {
+        else {
             return Err(syn::Error::new(
                 pair.value.span(),
-                "Expected a string liternal value.",
+                "Expected a string literal value.",
+            ));
+        };
+
+        let path: Path = syn::parse_str(&lit.value())?;
+        if path.segments.is_empty() {
+            return Err(syn::Error::new(
+                lit.span(),
+                "`type_path` should not be empty.",
+            ));
+        }
+        if path.leading_colon.is_some() {
+            return Err(syn::Error::new(
+                lit.span(),
+                "`type_path` should not have leading-colon.",
             ));
         }
 
+        self.type_path = Some(path);
         Ok(())
     }
 
+    // #[reflect(TypePath = false)]
     fn parse_trait_type_path(&mut self, input: ParseStream) -> syn::Result<()> {
         // #[reflect(TypePath = false)]
         let pair = input.parse::<MetaNameValue>()?;
@@ -505,25 +526,22 @@ impl TypeAttributes {
         Ok(())
     }
 
-    fn parses_extra_type_data(&mut self, input: ParseStream) -> syn::Result<()> {
-        let pair = input.parse::<MetaNameValue>()?;
-
-        if let Expr::Tuple(tuple) = &pair.value {
-            for elem in &tuple.elems {
-                if let Expr::Path(expr_path) = elem {
-                    self.extra_type_data.push(expr_path.path.clone());
-                } else {
-                    return Err(syn::Error::new(elem.span(), "Expected a path in tuple."));
-                }
-            }
-        } else if let Expr::Path(expr_path) = &pair.value {
-            self.extra_type_data.push(expr_path.path.clone());
-        } else {
+    fn parse_type_data_args(&mut self, stream: ParseStream) -> syn::Result<()> {
+        if stream.is_empty() {
             return Err(syn::Error::new(
-                pair.value.span(),
-                "Expected a path or tuple of paths.",
+                stream.span(),
+                "Expected at least one type data path.",
             ));
         }
+
+        loop {
+            self.extra_type_data.push(stream.parse::<Path>()?);
+            if stream.is_empty() {
+                break;
+            }
+            stream.parse::<Token![,]>()?;
+        }
+
         Ok(())
     }
 }

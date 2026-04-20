@@ -14,7 +14,7 @@ pub(crate) fn impl_opaque(meta: &ReflectMeta) -> TokenStream {
     let type_path_trait_tokens = if meta.attrs().impl_switchs.impl_type_path {
         impl_trait_type_path(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Typed
@@ -22,7 +22,7 @@ pub(crate) fn impl_opaque(meta: &ReflectMeta) -> TokenStream {
         let (info_tokens, is_const_expr) = meta.type_info_tokens();
         impl_trait_typed(meta, info_tokens, is_const_expr, false)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Reflect
@@ -48,21 +48,21 @@ pub(crate) fn impl_opaque(meta: &ReflectMeta) -> TokenStream {
             false,
         )
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
-        impl_trait_get_type_meta(meta, crate::utils::empty())
+        impl_trait_get_type_meta(meta, TokenStream::new())
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: FromReflect
     let from_reflect_tokens = if meta.attrs().impl_switchs.impl_from_reflect {
         impl_opaque_from_reflect(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // featuer: auto_resiter
@@ -110,9 +110,26 @@ fn get_opaque_apply_impl(meta: &ReflectMeta) -> TokenStream {
                 )
             }
         }
+    } else if meta.attrs().avail_traits.not_cloneable.is_some() {
+        quote! {
+            fn apply(&mut self, __input__: &dyn #reflect_) -> #ResultFP<(), #apply_error_> {
+                if <dyn #reflect_>::is::<Self>(__input__) {
+                    return #ResultFP::Err(#apply_error_::NotSupport {
+                        type_path: <Self as #type_path_>::type_path(),
+                    });
+                }
+
+                #ResultFP::Err(
+                    #apply_error_::MismatchedType {
+                        from_type: #macro_utils_::Cow::Borrowed(#dynamic_type_path_::reflect_type_path(__input__)),
+                        to_type: #macro_utils_::Cow::Borrowed(<Self as #type_path_>::type_path()),
+                    }
+                )
+            }
+        }
     } else {
         unreachable!(
-            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] or #[reflect(NotCloneable)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -124,6 +141,7 @@ fn get_opaque_to_dynamic_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let macro_utils_ = crate::path::macro_utils_(voker_reflect_path);
     let reflect_ = crate::path::reflect_(voker_reflect_path);
+    let type_path_ = crate::path::type_path_(voker_reflect_path);
 
     if meta.attrs().avail_traits.clone.is_some() {
         quote! {
@@ -132,9 +150,19 @@ fn get_opaque_to_dynamic_impl(meta: &ReflectMeta) -> TokenStream {
                 #macro_utils_::Box::new(<Self as #CloneFP>::clone(self))
             }
         }
+    } else if meta.attrs().avail_traits.not_cloneable.is_some() {
+        quote! {
+            #[inline]
+            fn to_dynamic(&self) -> #macro_utils_::Box<dyn #reflect_> {
+                panic!(
+                    "type `{}` does not support `to_dynamic`",
+                    <Self as #type_path_>::type_path(),
+                )
+            }
+        }
     } else {
         unreachable!(
-            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] or #[reflect(NotCloneable)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -147,6 +175,18 @@ fn get_opaque_clone_impl(meta: &ReflectMeta) -> TokenStream {
     let macro_utils_ = crate::path::macro_utils_(voker_reflect_path);
     let reflect_ = crate::path::reflect_(voker_reflect_path);
     let reflect_clone_error_ = crate::path::reflect_clone_error_(voker_reflect_path);
+    let type_path_ = crate::path::type_path_(voker_reflect_path);
+
+    if meta.attrs().avail_traits.not_cloneable.is_some() {
+        return quote! {
+            #[inline]
+            fn reflect_clone(&self) -> #ResultFP<#macro_utils_::Box<dyn #reflect_>, #reflect_clone_error_> {
+                #ResultFP::Err(#reflect_clone_error_::NotSupport {
+                    type_path: <Self as #type_path_>::type_path(),
+                })
+            }
+        };
+    }
 
     if let Some(span) = meta.attrs().avail_traits.clone {
         let reflect_clone = Ident::new("reflect_clone", span);
@@ -159,7 +199,7 @@ fn get_opaque_clone_impl(meta: &ReflectMeta) -> TokenStream {
         }
     } else {
         unreachable!(
-            "#[reflect(Clone)] must be specified when auto impl `Reflect` for Opaque Type."
+            "#[reflect(Clone)] or #[reflect(NotCloneable)] must be specified when auto impl `Reflect` for Opaque Type."
         )
     }
 }
@@ -183,7 +223,7 @@ fn get_opaque_eq_impl(meta: &ReflectMeta) -> TokenStream {
             }
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     }
 }
 
@@ -206,7 +246,7 @@ fn get_opaque_cmp_impl(meta: &ReflectMeta) -> TokenStream {
             }
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     }
 }
 
@@ -229,7 +269,7 @@ fn get_opaque_hash_impl(meta: &ReflectMeta) -> TokenStream {
             }
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     }
 }
 

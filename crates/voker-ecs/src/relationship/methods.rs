@@ -205,7 +205,7 @@ impl<'a> EntityCommands<'a> {
     ///
     /// See [`add_related`](Self::add_related) if you want to relate more than one entity.
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
-        self.push(move |mut entity_owned: EntityOwned| {
+        self.queue(move |mut entity_owned: EntityOwned| {
             entity_owned.insert_related::<R>(&[entity]);
         })
     }
@@ -216,21 +216,21 @@ impl<'a> EntityCommands<'a> {
     pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let entities: Box<[Entity]> = entities.into();
 
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.insert_related::<R>(&entities);
         })
     }
 
     /// Removes the relation `R` between this entity and all its related entities.
     pub fn detach_all_related<R: Relationship>(&mut self) -> &mut Self {
-        self.push(|mut entity: EntityOwned| {
+        self.queue(|mut entity: EntityOwned| {
             entity.detach_all_related::<R>();
         })
     }
 
     /// Removes all related source entities linked through `R` by despawning them.
     pub fn despawn_all_related<R: Relationship>(&mut self) -> &mut Self {
-        self.push(|mut entity: EntityOwned| {
+        self.queue(|mut entity: EntityOwned| {
             entity.despawn_all_related::<R>();
         })
     }
@@ -239,21 +239,21 @@ impl<'a> EntityCommands<'a> {
     pub fn remove_related<R: Relationship>(&mut self, related: &[Entity]) -> &mut Self {
         let related: Box<[Entity]> = related.into();
 
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.remove_related::<R>(&related);
         })
     }
 
     /// Removes the target cache component `R` from this entity, detaching sources.
     pub fn detach_related<R: RelationshipTarget>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.detach_related::<R>();
         })
     }
 
     /// Despawns source entities listed by target cache `R`.
     pub fn despawn_related<R: RelationshipTarget>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.despawn_related::<R>();
         })
     }
@@ -269,7 +269,7 @@ impl<'a> EntityCommands<'a> {
         &mut self,
         bundle: impl Bundle + Clone,
     ) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.insert_recursive::<R>(bundle);
         })
     }
@@ -282,7 +282,7 @@ impl<'a> EntityCommands<'a> {
     /// This method should only be called on relationships that form a tree-like structure.
     /// Any cycles will cause this method to loop infinitely.
     pub fn remove_recursive<R: RelationshipTarget, B: Bundle>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.remove_recursive::<R, B>();
         })
     }
