@@ -5,7 +5,7 @@ use crate::{FromReflect, Reflect};
 use crate::derive::{impl_reflect_opaque, impl_type_path};
 use crate::info::{OpaqueInfo, TypeInfo, Typed};
 use crate::registry::{ReflectDefault, FromType, GetTypeMeta, ReflectDeserialize};
-use crate::registry::{ReflectFromPtr, ReflectFromReflect, ReflectSerialize, TypeMeta};
+use crate::registry::{ReflectFromReflect, ReflectSerialize, TypeMeta};
 
 impl_reflect_opaque!(::std::path::PathBuf(Default, Debug, Clone, Hash, PartialEq, PartialOrd, Serialize, Deserialize));
 
@@ -31,8 +31,7 @@ impl FromReflect for &'static Path {
 
 impl GetTypeMeta for &'static Path {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
         type_meta
@@ -61,7 +60,6 @@ impl GetTypeMeta for Cow<'static, Path> {
     fn get_type_meta() -> TypeMeta {
         let mut type_meta: TypeMeta = TypeMeta::with_capacity::<Self>(4);
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());

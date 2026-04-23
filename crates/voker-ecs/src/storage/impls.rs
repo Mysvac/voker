@@ -1,9 +1,6 @@
-use voker_task::ComputeTaskPool;
-
 use crate::component::{ComponentInfo, StorageMode};
 use crate::resource::ResourceInfo;
 use crate::storage::{Maps, Tables};
-use crate::tick::CheckTicks;
 
 use super::ResSet;
 
@@ -98,53 +95,6 @@ impl Storages {
             StorageMode::Sparse => {
                 self.maps.prepare(info);
             }
-        }
-    }
-
-    /// Updates tick information across all storage backends.
-    ///
-    /// This method advances the tick counters for all stored data, marking which
-    /// components and resources have been accessed or modified. It automatically
-    /// parallelizes the work when a [`ComputeTaskPool`] is available.
-    ///
-    /// # Parallelism
-    /// When a compute task pool is available, this method spawns separate tasks for:
-    /// - Resource set tick updates
-    /// - Each individual table's tick updates  
-    /// - Each individual map's tick updates
-    ///
-    /// This provides near-optimal parallel utilization for large worlds with
-    /// many tables and maps.
-    pub fn check_ticks(&mut self, check: CheckTicks) {
-        let Storages {
-            res_set,
-            tables,
-            maps,
-        } = self;
-        let now = check.tick();
-
-        if voker_task::cfg::multi_threaded!()
-            && let Some(task_pool) = ComputeTaskPool::try_get()
-        {
-            task_pool.scope(|scope| {
-                scope.spawn(async move {
-                    res_set.check_ticks(now);
-                });
-                tables.iter_mut().for_each(|tb| {
-                    scope.spawn(async move { tb.check_ticks(now) });
-                });
-                maps.iter_mut().for_each(|mp| {
-                    scope.spawn(async move { mp.check_ticks(now) });
-                });
-            });
-        } else {
-            res_set.check_ticks(now);
-            tables.iter_mut().for_each(|tb| {
-                tb.check_ticks(now);
-            });
-            maps.iter_mut().for_each(|mp| {
-                mp.check_ticks(now);
-            });
         }
     }
 }

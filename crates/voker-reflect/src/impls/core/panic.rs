@@ -4,7 +4,7 @@ use core::panic::Location;
 use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
 use crate::ops::ApplyError;
 use crate::registry::ReflectFromReflect;
-use crate::registry::{FromType, GetTypeMeta, ReflectFromPtr, TypeMeta};
+use crate::registry::{FromType, GetTypeMeta, TypeMeta};
 use crate::{FromReflect, Reflect};
 
 impl TypePath for &'static Location<'static> {
@@ -76,8 +76,7 @@ impl Reflect for &'static Location<'static> {
 
 impl GetTypeMeta for &'static Location<'static> {
     fn get_type_meta() -> TypeMeta {
-        let mut meta = TypeMeta::with_capacity::<Self>(2);
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut meta = TypeMeta::with_capacity::<Self>(1);
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }

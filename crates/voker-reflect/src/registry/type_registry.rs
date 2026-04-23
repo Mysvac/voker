@@ -493,7 +493,7 @@ mod tests {
     use super::{TypeRegistry, TypeRegistryArc};
     use crate::Reflect;
     use crate::info::TypePath;
-    use crate::registry::{ReflectDefault, ReflectFromPtr};
+    use crate::registry::ReflectDefault;
 
     mod foo {
         use crate::Reflect;
@@ -535,7 +535,6 @@ mod tests {
         let type_id = TypeId::of::<NeedsDefault>();
         assert!(registry.contains(type_id));
         assert!(registry.get_type_data::<ReflectDefault>(type_id).is_some());
-        assert!(registry.get_type_data::<ReflectFromPtr>(type_id).is_some());
 
         let with_default: Vec<_> = registry
             .iter_with_data::<ReflectDefault>()

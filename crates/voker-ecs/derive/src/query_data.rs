@@ -98,7 +98,6 @@ fn map_static_lifetimes(ty: &syn::Type) -> syn::Type {
 pub(crate) fn impl_derive_query_data(mut ast: DeriveInput) -> TokenStream {
     use crate::path::fp::OptionFP;
     let voker_ecs_path = crate::path::voker_ecs();
-    let macro_utils_ = crate::path::macro_utils_(&voker_ecs_path);
     let query_data_ = crate::path::query_data_(&voker_ecs_path);
     let readonly_query_data_ = crate::path::readonly_query_data_(&voker_ecs_path);
     let world_ = crate::path::world_(&voker_ecs_path);
@@ -205,6 +204,8 @@ pub(crate) fn impl_derive_query_data(mut ast: DeriveInput) -> TokenStream {
 
     quote! {
         const _: () = {
+            extern crate alloc; // for Vec
+
             #[expect(unsafe_code, reason = "QueryData implementation is unsafe")]
             unsafe impl #impl_g #query_data_ for #type_ident #ty_g #where_g {
                 type State = ( #( <#static_field_types as #query_data_>::State, )* );
@@ -232,7 +233,7 @@ pub(crate) fn impl_derive_query_data(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                fn build_filter(state: &Self::State, out: &mut #macro_utils_::Vec<#filter_param_builder_>) {
+                fn build_filter(state: &Self::State, out: &mut ::alloc::vec::Vec<#filter_param_builder_>) {
                     #( <#static_field_types as #query_data_>::build_filter(&state.#idx, out); )*
                 }
 

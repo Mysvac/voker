@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use voker_utils::hash::NoOpHashSet;
+use voker_utils::hash::NoopHashSet;
 
 use super::error::{QueryEntityError, QuerySingleError};
 use super::{QueryData, QueryFilter, QueryIter};
@@ -218,8 +218,8 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
 #[inline(never)]
 fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
-    // We use NoOpHash because FilterParam is pre-hased.
-    let mut params: NoOpHashSet<FilterParam> = NoOpHashSet::with_capacity(builders.len());
+    // We use NoopHash because FilterParam is pre-hased.
+    let mut params: NoopHashSet<FilterParam> = NoopHashSet::with_capacity(builders.len());
     builders.into_iter().for_each(|builder| {
         if let Some(param) = builder.build() {
             params.insert(param);

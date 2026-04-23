@@ -11,8 +11,8 @@ pub mod cfg {
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
         #[cfg(all(feature = "std", feature = "async_io"))] => async_io,
-        #[cfg(not(feature = "std"))] => single_threaded,
-        #[cfg(feature = "std")] => multi_threaded,
+        #[cfg(any(not(feature = "std"), target_arch = "wasm32", feature = "single_threaded"))] => single_threaded,
+        #[cfg(all(feature = "std", not(target_arch = "wasm32"), not(feature = "single_threaded")))] => multi_threaded,
     }
 }
 

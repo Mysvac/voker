@@ -229,7 +229,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// If the [`Command`] returns a [`Result`],
     /// the given `error_handler` will be used to handle error cases.
     ///
-    /// To implicitly use the fallback error handler, see [`Commands::push`].
+    /// To implicitly use the fallback error handler, see [`Commands::queue`].
     #[inline]
     pub fn queue_handled(&mut self, cmd: impl Command, handler: ErrorHandler) {
         unsafe {
@@ -502,7 +502,7 @@ impl<'a> EntityCommands<'a> {
     /// The given `error_handler` will be used to handle error cases. Every [`EntityCommand`] checks
     /// whether the entity exists at the time of execution and returns an error if it does not.
     ///
-    /// To implicitly use the fallback error handler, see [`EntityCommands::push`].
+    /// To implicitly use the fallback error handler, see [`EntityCommands::queue`].
     #[inline]
     pub fn queue_handled(
         &mut self,

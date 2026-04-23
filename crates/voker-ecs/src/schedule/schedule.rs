@@ -8,15 +8,17 @@ use alloc::vec::Vec;
 use fixedbitset::FixedBitSet;
 use slotmap::{SecondaryMap, SlotMap};
 use voker_utils::extra::PagePool;
-use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMap};
+use voker_utils::hash::{HashMap, HashSet, NoopHashMap, NoopHashSet, SparseHashMap};
 
+use super::config::SystemEntry;
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
 use super::{AnonymousSchedule, AnonymousSystemSet, InternedSystemSet};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
-use super::{SystemConfig, SystemNode, SystemSet, ToposortError};
+use super::{SystemConfig, SystemSet, ToposortError};
 use crate::prelude::IntoSystemConfig;
 use crate::system::{IntoSystem, SystemId};
+use crate::tick::Tick;
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -104,7 +106,7 @@ pub struct Schedule {
 // -----------------------------------------------------------------------------
 // SystemSets
 
-type SystemSets = HashMap<InternedSystemSet, NoOpHashSet<SystemId>>;
+type SystemSets = HashMap<InternedSystemSet, NoopHashSet<SystemId>>;
 
 // -----------------------------------------------------------------------------
 // Allocator
@@ -112,7 +114,7 @@ type SystemSets = HashMap<InternedSystemSet, NoOpHashSet<SystemId>>;
 #[derive(Default)]
 struct Allocator {
     slots: SlotMap<SystemKey, SystemId>,
-    idents: NoOpHashMap<SystemId, SystemKey>,
+    idents: NoopHashMap<SystemId, SystemKey>,
 }
 
 // -----------------------------------------------------------------------------
@@ -338,11 +340,11 @@ impl OrderingGraph {
         self.dependency.remove_edge(before, after)
     }
 
-    fn insert_condition(&mut self, runnable: SystemKey, condition: SystemKey) {
+    fn insert_condition_order(&mut self, condition: SystemKey, runnable: SystemKey) {
         self.condition.insert_edge(condition, runnable);
     }
 
-    fn remove_condition(&mut self, runnable: SystemKey, condition: SystemKey) -> bool {
+    fn remove_condition_order(&mut self, condition: SystemKey, runnable: SystemKey) -> bool {
         self.condition.remove_edge(condition, runnable)
     }
 
@@ -789,6 +791,45 @@ impl Schedule {
         self.system_sets.contains_key(&name)
     }
 
+    /// Wires set-boundary condition edges for a newly inserted system.
+    ///
+    /// Ensures begin/end markers exist, then inserts:
+    /// - `begin → system_key` (begin is a condition for the system)
+    /// - `end → system_key`   (end depends on the system)
+    /// - `end → begin`        (keeps an empty-set boundary)
+    fn wire_set_boundaries(&mut self, system_key: SystemKey, id: SystemId, set: InternedSystemSet) {
+        let set_members = self.system_sets.entry(set).or_default();
+        set_members.insert(id);
+
+        let begin = {
+            let marker = set.begin();
+            let id = marker.id();
+            self.allocator.get_key(id).unwrap_or_else(|| {
+                let key = self.allocator.insert(id);
+                self.buffer.insert_action(key, marker);
+                self.ordering.insert_node(key);
+                set_members.insert(id);
+                key
+            })
+        };
+
+        let end = {
+            let marker = set.end();
+            let id = marker.id();
+            self.allocator.get_key(id).unwrap_or_else(|| {
+                let key = self.allocator.insert(id);
+                self.buffer.insert_action(key, marker);
+                self.ordering.insert_node(key);
+                set_members.insert(id);
+                key
+            })
+        };
+
+        self.ordering.insert_order(system_key, end);
+        self.ordering.insert_condition_order(begin, system_key);
+        self.ordering.insert_condition_order(begin, end);
+    }
+
     /// Inserts (or replaces) an action system and associates it with `set`.
     ///
     /// This also ensures the set boundary marker systems exist and wires
@@ -808,31 +849,7 @@ impl Schedule {
             key
         });
 
-        let sets = self.system_sets.entry(set).or_default();
-        sets.insert(id);
-
-        let begin_system = set.begin();
-        let begin_id = begin_system.id();
-        let begin = self.allocator.get_key(begin_id).unwrap_or_else(|| {
-            let key = self.allocator.insert(begin_id);
-            self.buffer.insert_action(key, begin_system);
-            self.ordering.insert_node(key);
-            sets.insert(begin_id);
-            key
-        });
-        self.ordering.insert_condition(system_key, begin);
-
-        let end_system = set.end();
-        let end_id = end_system.id();
-        let end = self.allocator.get_key(end_id).unwrap_or_else(|| {
-            let key = self.allocator.insert(end_id);
-            self.buffer.insert_action(key, end_system);
-            self.ordering.insert_node(key);
-            sets.insert(end_id);
-            key
-        });
-        self.ordering.insert_condition(end, system_key);
-        self.ordering.insert_condition(end, begin);
+        self.wire_set_boundaries(system_key, id, set);
 
         assert!(
             self.allocator.len() <= u32::MAX as usize,
@@ -861,31 +878,7 @@ impl Schedule {
             key
         });
 
-        let sets = self.system_sets.entry(set).or_default();
-        sets.insert(id);
-
-        let begin_system = set.begin();
-        let begin_id = begin_system.id();
-        let begin = self.allocator.get_key(begin_id).unwrap_or_else(|| {
-            let key = self.allocator.insert(begin_id);
-            self.buffer.insert_action(key, begin_system);
-            self.ordering.insert_node(key);
-            sets.insert(begin_id);
-            key
-        });
-        self.ordering.insert_condition(system_key, begin);
-
-        let end_system = set.end();
-        let end_id = end_system.id();
-        let end = self.allocator.get_key(end_id).unwrap_or_else(|| {
-            let key = self.allocator.insert(end_id);
-            self.buffer.insert_action(key, end_system);
-            self.ordering.insert_node(key);
-            sets.insert(end_id);
-            key
-        });
-        self.ordering.insert_condition(end, system_key);
-        self.ordering.insert_condition(end, begin);
+        self.wire_set_boundaries(system_key, id, set);
 
         assert!(
             self.allocator.len() <= u32::MAX as usize,
@@ -926,7 +919,7 @@ impl Schedule {
                 sets.insert(end_id);
                 key
             });
-            self.ordering.insert_condition(end, begin);
+            self.ordering.insert_condition_order(begin, end);
         }
     }
 
@@ -957,9 +950,9 @@ impl Schedule {
         self.buffer.remove(key);
         self.ordering.remove_node(key);
         self.conflict.remove(key);
-        self.system_sets.values_mut().for_each(|set| {
+        for set in self.system_sets.values_mut() {
             set.remove(&name);
-        });
+        }
 
         true
     }
@@ -1020,7 +1013,7 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        self.ordering.insert_condition(r, c);
+        self.ordering.insert_condition_order(c, r);
 
         true
     }
@@ -1041,7 +1034,7 @@ impl Schedule {
             self.is_changed = true;
         }
 
-        self.ordering.remove_condition(r, c)
+        self.ordering.remove_condition_order(c, r)
     }
 
     /// Returns the internal key for a system name.
@@ -1062,6 +1055,12 @@ impl Schedule {
     /// Returns the run-condition graph.
     pub fn condition_graph(&self) -> &Dag<SystemKey> {
         &self.ordering.condition
+    }
+
+    pub(crate) fn check_ticks(&mut self, now: Tick) {
+        for system in self.schedule.systems.iter_mut() {
+            system.check_ticks(now);
+        }
     }
 }
 
@@ -1174,34 +1173,40 @@ impl Schedule {
         let SystemConfig {
             systems,
             deferred,
-            dependency,
-            condition,
-            system_set,
+            dependencies,
+            conditions,
+            set_anchors,
+            set,
             ..
         } = config.into_config();
 
-        let system_set = system_set.unwrap_or(AnonymousSystemSet.intern());
+        // Ensure set boundaries referenced by before_set/after_set are registered.
+        for anchor_set in set_anchors {
+            self.init_system_set(anchor_set);
+        }
 
-        for (_, node) in systems {
-            match node {
-                SystemNode::Action(system) => {
-                    self.insert_action(system, system_set);
+        let set = set.unwrap_or(AnonymousSystemSet.intern());
+
+        for (_, entry) in systems {
+            match entry {
+                SystemEntry::Action(system) => {
+                    self.insert_action(system, set);
                 }
-                SystemNode::Condition(system) => {
-                    self.insert_condition(system, system_set);
+                SystemEntry::Condition(system) => {
+                    self.insert_condition(system, set);
                 }
             }
         }
 
-        for (_, apply_deferred) in deferred {
-            self.insert_action(apply_deferred, system_set);
+        for (_, apply) in deferred {
+            self.insert_action(apply, set);
         }
 
-        for (before, after) in dependency {
+        for (before, after) in dependencies {
             self.insert_order(before, after);
         }
 
-        for (condition, runnable) in condition {
+        for (condition, runnable) in conditions {
             self.insert_run_if(runnable, condition);
         }
 

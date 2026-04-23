@@ -20,6 +20,8 @@ std = [
 voker-cfg = { path = "../voker-cfg" }
 voker-utils = { path = "../voker-utils" }
 
+voker-app-derive = { path = "derive" }
+
 voker-os = { path = "../voker-os", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
 voker-task = { path = "../voker-task", default-features = false }
@@ -30,6 +32,9 @@ log = { version = "0.4", default-features = false }
 
 [target.'cfg(any(all(unix, not(target_os = "horizon")), windows))'.dependencies]
 ctrlc = { version = "3.5", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = { version = "0.1.7" }
 
 [lints]
 workspace = true

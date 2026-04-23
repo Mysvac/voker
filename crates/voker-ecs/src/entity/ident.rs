@@ -192,16 +192,8 @@ impl Display for EntityTag {
 /// (8-byte aligned) to enable efficient bitwise operations and serialization.
 /// Endianness-aware field ordering ensures consistent behavior across platforms.
 #[derive(Reflect, Clone, Copy)]
-#[reflect(
-    Opaque,
-    Clone,
-    Debug,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-)]
+#[reflect(Opaque, Clone, Debug, Hash)] // Fields order is not fixed, use `Opaque` to ensure logical stability.
+#[reflect(PartialEq, PartialOrd, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct Entity {
     // Field ordering is endianness-dependent to ensure consistent u64 representation
@@ -335,7 +327,7 @@ impl Display for Entity {
         if *self == Self::PLACEHOLDER {
             f.pad("PLACEHOLDER")
         } else {
-            f.pad(&alloc::format!("{}v{}", self.id(), self.tag()))
+            write!(f, "{}v{}", self.id(), self.tag())
         }
     }
 }

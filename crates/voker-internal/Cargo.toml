@@ -15,7 +15,6 @@ std = [
     "voker-task/std",
     "voker-reflect/std",
     "voker-ecs/std",
-    "voker-state/std",
     "voker-math/std",
 ]
 

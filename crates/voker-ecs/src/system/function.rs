@@ -117,7 +117,7 @@ macro_rules! impl_tuple {
         }
 
         #[cfg_attr(docsrs, doc(fake_variadic))]
-        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 15 items long.")]
         impl<I, O, $name, Func> SystemFunction<(I, fn($name) -> O)> for Func
         where
             O: 'static,
@@ -217,7 +217,7 @@ macro_rules! impl_tuple {
     }
 }
 
-voker_utils::range_invoke!(impl_tuple, 12);
+voker_utils::range_invoke!(impl_tuple, 15);
 
 // -----------------------------------------------------------------------------
 // FunctionSystem
@@ -279,6 +279,10 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
 
     fn set_last_run(&mut self, last_run: Tick) {
         self.meta.set_last_run(last_run)
+    }
+
+    fn check_ticks(&mut self, now: Tick) {
+        self.meta.last_run.check_tick(now);
     }
 
     /// Initializes parameter state and registers access declarations.

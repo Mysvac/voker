@@ -1,6 +1,6 @@
 //! Provide [`SparseIndexSet`] based on [indexmap]'s implementation.
 //!
-//! Unlike [`indexmap::SparseIndexSet`], [`SparseIndexSet`] defaults to [`FixedHashState`]
+//! Unlike [`indexmap::IndexSet`], [`SparseIndexSet`] defaults to [`SparseHashState`]
 //! instead of `RandomState`.
 //!
 //! This provides determinism by default with an acceptable compromise to denial

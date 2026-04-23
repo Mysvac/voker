@@ -9,8 +9,8 @@ use core::any::Any;
 use core::hash::Hash;
 use core::ops::Deref;
 use core::{fmt::Debug, hash::Hasher};
-use voker_os::sync::{PoisonError, RwLock};
 
+use voker_os::sync::{PoisonError, RwLock};
 use voker_utils::hash::HashSet;
 
 pub use alloc::boxed::Box;

@@ -482,4 +482,4 @@ macro_rules! impl_state_set_sealed_tuples {
     };
 }
 
-voker_utils::range_invoke!(impl_state_set_sealed_tuples, 12);
+voker_utils::range_invoke!(impl_state_set_sealed_tuples, 15);

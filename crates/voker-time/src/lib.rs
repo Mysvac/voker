@@ -3,9 +3,13 @@
 #![forbid(unsafe_code)]
 #![no_std]
 
-extern crate alloc;
+// -----------------------------------------------------------------------------
+// no_std support
+
 #[cfg(feature = "std")]
 extern crate std;
+
+extern crate alloc;
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -57,9 +61,11 @@ use crate::delayed::{DelayedCommandQueues, check_delayed_command_queues};
 #[derive(Default)]
 pub struct TimePlugin;
 
+/// System set containing the core time update systems added by [`TimePlugin`].
 #[derive(Debug, PartialEq, Eq, Clone, Hash, SystemSet)]
 pub struct TimeSystems;
 
+/// Configuration resource used to determine how the time system should run.
 #[derive(Resource, Default, Reflect, Clone, Debug)]
 #[reflect(Default, Clone, Debug)]
 #[type_data(ReflectResource)]
@@ -94,6 +100,7 @@ impl Plugin for TimePlugin {
     }
 }
 
+/// Reads the current [`TimeUpdateStrategy`] and advances the real, virtual, and fixed clocks.
 pub fn time_system(
     mut real_time: ResMut<Time<Real>>,
     mut virtual_time: ResMut<Time<Virtual>>,

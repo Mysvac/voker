@@ -15,6 +15,9 @@ extern crate std;
 
 extern crate alloc;
 
+// For doc test
+extern crate self as voker_math;
+
 mod affine3;
 mod aspect_ratio;
 mod compass;

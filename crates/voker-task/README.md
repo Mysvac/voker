@@ -147,9 +147,6 @@ mode with two executor types:
 
 ### Optional Features
 
-- **`web`**: Enables WASM support, using `wasm_bindgen_futures` for the event loop. Implicitly
-  requires standard library support but can be used without this crate's `std` feature.
-
 - **`async_io`**: Available only in non-WASM `std` environments. Uses `async_io::block_on` as
   the blocking function for executors, which may improve efficiency if the project already uses
   `async_io`. (Defaults to `futures_lite::futures::block_on` in non-`no_std` environments.)

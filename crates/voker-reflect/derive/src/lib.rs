@@ -128,8 +128,7 @@ mod string_expr;
 ///
 /// ## Custom GetTypeMeta
 ///
-/// By default, a type's `get_type_meta` includes at least `ReflectFromPtr`. The following type traits may also be
-/// included based on conditions:
+/// By default, The following type traits may be included based on conditions:
 ///
 /// - `ReflectFromReflect`: If the default `FromReflect` implementation is enabled (not disabled with
 ///   `#[reflect(FromReflect = false)]`).
@@ -143,8 +142,8 @@ mod string_expr;
 /// ### Example
 ///
 /// ```rust, ignore
-/// #[derive(Reflect)]
-/// #[type_data(ReflectPrint)]
+/// #[derive(Reflect, Component)]
+/// #[type_data(ReflectComponent)]
 /// struct A;
 ///
 /// #[derive(Reflect)]

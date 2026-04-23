@@ -325,15 +325,15 @@ impl DiagnosticsStore {
 }
 
 // -----------------------------------------------------------------------------
-// RegisterDiagnostic
+// AppDiagnosticExt
 
 /// Extends app builders with `register_diagnostic`.
-pub trait RegisterDiagnostic {
+pub trait AppDiagnosticExt {
     /// Registers a diagnostic in the app's [`DiagnosticsStore`].
     fn register_diagnostic(&mut self, diagnostic: Diagnostic) -> &mut Self;
 }
 
-impl RegisterDiagnostic for SubApp {
+impl AppDiagnosticExt for SubApp {
     fn register_diagnostic(&mut self, diagnostic: Diagnostic) -> &mut Self {
         self.world_mut()
             .resource_mut_or_init::<DiagnosticsStore>()
@@ -342,7 +342,7 @@ impl RegisterDiagnostic for SubApp {
     }
 }
 
-impl RegisterDiagnostic for App {
+impl AppDiagnosticExt for App {
     fn register_diagnostic(&mut self, diagnostic: Diagnostic) -> &mut Self {
         SubApp::register_diagnostic(self.main_mut(), diagnostic);
         self

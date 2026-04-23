@@ -68,7 +68,7 @@ mod internal {
     use voker_os::time::Instant;
 
     use super::{SystemInfo, SystemInfoDiagnosticsPlugin};
-    use crate::{Diagnostic, DiagnosticsStore, RegisterDiagnostic};
+    use crate::{AppDiagnosticExt, Diagnostic, DiagnosticsStore};
 
     const BYTES_TO_GIB: f64 = 1.0 / 1024.0 / 1024.0 / 1024.0;
 

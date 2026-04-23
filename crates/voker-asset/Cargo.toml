@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+
+file_watcher = []
+
 [dependencies]
 
 voker-app = { path = "../voker-app", default-features = false, features = ["std"]}
@@ -14,6 +18,7 @@ voker-reflect = { path = "../voker-reflect", default-features = false, features 
 voker-diagnostic = { path = "../voker-diagnostic", default-features = false }
 voker-task = { path = "../voker-task", default-features = false }
 voker-utils = { path = "../voker-utils", default-features = false }
+voker-ptr = { path = "../voker-ptr", default-features = false }
 voker-os = { path = "../voker-os", default-features = false, features = ["std"]}
 
 bitflags = { version = "2.10", default-features = false }
@@ -21,8 +26,22 @@ ron = { version = "0.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["v4","serde"] }
-tracing = { version = "0.1", default-features = false }
+tracing = { version = "0.1", default-features = false, features = []}
 atomicow = { version = "1.2", default-features = false, features = ["std"] }
+# stackfuture = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["async-await-macro", "alloc"] }
+futures-io = { version = "0.3", default-features = false, features = ["std"] }
+futures-lite = { version = "2.6", default-features = false, features = ["std"] }
+crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
+async-channel = { version = "2", default-features = false }
+
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen-futures = "0.4"
+wasm-bindgen = { version = "0.2" }
+web-sys = { version = "0.3", features = ["Window", "Response", "WorkerGlobalScope"] }
+uuid = { version = "1.21.0", default-features = false, features = ["js"] }
 
 [lints]
 workspace = true

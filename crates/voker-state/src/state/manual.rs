@@ -16,11 +16,11 @@ use super::{last_transition, run_enter, run_exit, run_transition};
 // -----------------------------------------------------------------------------
 // register_state
 
-#[diagnostic::on_unimplemented(note = "consider annotating `{Self}` with `#[derive(States)]`")]
 /// Marker trait for manually mutable state types.
 ///
 /// This trait wires transition apply/exit/transition/enter systems for the
 /// state type into the [`Schedule`].
+#[diagnostic::on_unimplemented(note = "consider annotating `{Self}` with `#[derive(States)]`")]
 pub trait ManualStates: States {
     /// Registers transition systems and transition-phase set boundaries.
     fn register_state(schedule: &mut Schedule) {

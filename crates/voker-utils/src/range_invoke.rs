@@ -1,6 +1,6 @@
 /// Call the target macro and pass a sequence of numbers as parameters.
 ///
-/// The number cannot exceed `12` .
+/// The number cannot exceed `15` .
 ///
 /// # Examples
 ///
@@ -78,6 +78,21 @@ macro_rules! range_invoke {
         $macro!(10: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9]);
         $macro!(11: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10]);
         $macro!(12: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11]);
+    };
+    ($macro:ident, 13) => {
+        $crate::range_invoke!($macro, 12);
+        $macro!(13: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12]);
+    };
+    ($macro:ident, 14) => {
+        $crate::range_invoke!($macro, 12);
+        $macro!(13: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12]);
+        $macro!(14: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12, 13: P13]);
+    };
+    ($macro:ident, 15) => {
+        $crate::range_invoke!($macro, 12);
+        $macro!(13: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12]);
+        $macro!(14: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12, 13: P13]);
+        $macro!(15: [0: P0, 1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10, 11: P11, 12: P12, 13: P13, 14: P14]);
     };
 }
 

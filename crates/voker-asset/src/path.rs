@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize, de::Visitor};
 use thiserror::Error;
 use voker_reflect::Reflect;
 
-use crate::AssetSourceId;
+use crate::ident::AssetSourceId;
 
 // -----------------------------------------------------------------------------
 // AssetPath
@@ -276,16 +276,6 @@ impl<'a> AssetPath<'a> {
         &self.path
     }
 
-    /// Gets the path to the asset in the "virtual filesystem" without a label (if a label is currently set).
-    #[inline]
-    pub fn without_label(&self) -> AssetPath<'_> {
-        Self {
-            source: self.source.clone(),
-            path: self.path.clone(),
-            label: None,
-        }
-    }
-
     /// Removes a "sub-asset label" from this [`AssetPath`], if one was set.
     #[inline]
     pub fn remove_label(&mut self) {
@@ -298,14 +288,25 @@ impl<'a> AssetPath<'a> {
         self.label.take()
     }
 
-    /// Returns this asset path with the given label. This will replace the previous
-    /// label if it exists.
+    /// Returns this asset path with the given label.
+    ///
+    /// This will replace the previous label if it exists.
     #[inline]
     pub fn with_label(self, label: impl Into<CowArc<'a, str>>) -> AssetPath<'a> {
         AssetPath {
             source: self.source,
             path: self.path,
             label: Some(label.into()),
+        }
+    }
+
+    /// Gets the path to the asset in the "virtual filesystem" without a label (if a label is currently set).
+    #[inline]
+    pub fn without_label(&self) -> AssetPath<'_> {
+        Self {
+            source: self.source.clone(),
+            path: self.path.clone(),
+            label: None,
         }
     }
 
@@ -659,12 +660,7 @@ impl<'de> Deserialize<'de> for AssetPath<'static> {
 impl From<&'static str> for AssetPath<'static> {
     #[inline]
     fn from(asset_path: &'static str) -> Self {
-        let (source, path, label) = Self::parse_internal(asset_path).unwrap();
-        AssetPath {
-            source: source.into(),
-            path: CowArc::Static(path),
-            label: label.map(CowArc::Static),
-        }
+        Self::parse_static(asset_path)
     }
 }
 

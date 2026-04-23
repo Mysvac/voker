@@ -9,8 +9,6 @@ pub(crate) fn voker_state_path() -> syn::Path {
     voker_macro_utils::crate_path!(voker_state)
 }
 
-pub(crate) use voker_macro_utils::full_path as fp;
-
 #[inline(always)]
 pub(crate) fn states_(voker_state_path: &syn::Path) -> TokenStream {
     quote! {
@@ -19,9 +17,9 @@ pub(crate) fn states_(voker_state_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
-pub(crate) fn manual_state_(voker_state_path: &syn::Path) -> TokenStream {
+pub(crate) fn manual_states_(voker_state_path: &syn::Path) -> TokenStream {
     quote! {
-        #voker_state_path::state::ManualState
+        #voker_state_path::state::ManualStates
     }
 }
 
@@ -29,5 +27,12 @@ pub(crate) fn manual_state_(voker_state_path: &syn::Path) -> TokenStream {
 pub(crate) fn sub_states_(voker_state_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_state_path::state::SubStates
+    }
+}
+
+#[inline(always)]
+pub(crate) fn state_set_(voker_state_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_state_path::state::StateSet
     }
 }

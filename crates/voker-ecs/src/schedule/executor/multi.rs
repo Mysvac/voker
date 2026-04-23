@@ -5,7 +5,7 @@ use core::any::Any;
 use core::panic::AssertUnwindSafe;
 use fixedbitset::FixedBitSet;
 
-use voker_os::sync::{Mutex, PoisonError, SyncUnsafeCell};
+use voker_os::sync::SyncUnsafeCell;
 use voker_os::utils::{SegQueue, SpinLock};
 use voker_task::{ComputeTaskPool, Scope, TaskPool};
 use voker_utils::vec::FastVec;
@@ -56,7 +56,7 @@ struct CompletedSignal {
 /// Non-send systems are dispatched to the external/main-thread executor when
 /// available; sendable systems run on the compute task pool.
 pub struct MultiThreadedExecutor {
-    state: Mutex<ExecutorState>,
+    state: SpinLock<ExecutorState>,
     completed: SegQueue<CompletedSignal>,
     panic_payload: SpinLock<Option<Box<dyn Any + Send>>>,
 }
@@ -141,7 +141,7 @@ impl MultiThreadedExecutor {
     /// Creates a new multi-threaded executor.
     pub const fn new() -> Self {
         Self {
-            state: Mutex::new(ExecutorState::new()),
+            state: SpinLock::new(ExecutorState::new()),
             completed: SegQueue::new(),
             panic_payload: SpinLock::new(None),
         }
@@ -467,7 +467,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     /// Progresses scheduling work until no fresh completion event is observed.
     fn tick(&self) {
         loop {
-            let Ok(mut guard) = self.executor.state.try_lock() else {
+            let Some(mut guard) = self.executor.state.try_lock() else {
                 // Another thread is already advancing scheduling state.
                 return;
             };
@@ -498,10 +498,7 @@ impl SystemExecutor for MultiThreadedExecutor {
     ///
     /// This pre-allocates storage for dependency counters and ready queues.
     fn init(&mut self, schedule: &SystemSchedule) {
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .init(schedule);
+        self.state.get_mut().init(schedule);
     }
 
     /// Executes the schedule using task-based parallel dispatch.
@@ -527,13 +524,7 @@ impl SystemExecutor for MultiThreadedExecutor {
             return;
         }
 
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .reset(schedule);
-
-        // The executor handles panics explicitly; clear stale poison state.
-        self.state.clear_poison();
+        self.state.get_mut().reset(schedule);
 
         let main_thread_ex = world.get_resource::<MainThreadExecutor>().map(|e| e.0.clone());
         let remote_ex = main_thread_ex.as_deref();
@@ -544,24 +535,19 @@ impl SystemExecutor for MultiThreadedExecutor {
             context.tick();
         });
 
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .deferred_systems
-            .iter()
-            .for_each(|&index| {
-                let func = AssertUnwindSafe(|| {
-                    schedule.systems_mut()[index as usize].apply_deferred(world);
-                });
-
-                #[cfg(feature = "std")]
-                if let Err(e) = ::std::panic::catch_unwind(func) {
-                    *self.panic_payload.get_mut() = Some(e);
-                }
-
-                #[cfg(not(feature = "std"))]
-                (func)();
+        self.state.get_mut().deferred_systems.iter().for_each(|&index| {
+            let func = AssertUnwindSafe(|| {
+                schedule.systems_mut()[index as usize].apply_deferred(world);
             });
+
+            #[cfg(feature = "std")]
+            if let Err(e) = ::std::panic::catch_unwind(func) {
+                *self.panic_payload.get_mut() = Some(e);
+            }
+
+            #[cfg(not(feature = "std"))]
+            (func)();
+        });
 
         // Re-throw captured panic after scheduler cleanup.
         let payload = self.panic_payload.get_mut().take();

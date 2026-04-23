@@ -10,13 +10,16 @@ use syn::{parse::Parse, parse::ParseStream};
 
 mod path;
 
+// -----------------------------------------------------------------------------
+// derive_states
+
 #[proc_macro_derive(States)]
 pub fn derive_states(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
 
     let voker_state_path = path::voker_state_path();
     let states_ = path::states_(&voker_state_path);
-    let manual_state_ = path::manual_state_(&voker_state_path);
+    let manual_states_ = path::manual_states_(&voker_state_path);
 
     let ident = ast.ident;
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
@@ -24,10 +27,13 @@ pub fn derive_states(input: TokenStream) -> TokenStream {
     quote! {
         impl #impl_generics #states_ for #ident #ty_generics #where_clause {}
 
-        impl #impl_generics #manual_state_ for #ident #ty_generics #where_clause {}
+        impl #impl_generics #manual_states_ for #ident #ty_generics #where_clause {}
     }
     .into()
 }
+
+// -----------------------------------------------------------------------------
+// derive_sub_states
 
 struct SourceAttr {
     source: Type,
@@ -49,11 +55,11 @@ impl Parse for SourceAttr {
 pub fn derive_sub_states(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
 
-    use path::fp::OptionFP;
     let voker_state_path = path::voker_state_path();
     let states_ = path::states_(&voker_state_path);
-    let manual_state_ = path::manual_state_(&voker_state_path);
+    let manual_states_ = path::manual_states_(&voker_state_path);
     let sub_states_ = path::sub_states_(&voker_state_path);
+    let state_set_ = path::state_set_(&voker_state_path);
 
     let mut source_attr: Option<(Type, Expr)> = None;
     for attr in &ast.attrs {
@@ -73,7 +79,7 @@ pub fn derive_sub_states(input: TokenStream) -> TokenStream {
     let ident: Ident = ast.ident;
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
-    let Some((source_ty, source_value)) = source_attr else {
+    let Some((source_type, source_value)) = source_attr else {
         return syn::Error::new(
             Span::call_site(),
             "missing #[source(SourceType = value)] on SubStates derive",
@@ -83,18 +89,17 @@ pub fn derive_sub_states(input: TokenStream) -> TokenStream {
     };
 
     quote! {
-        impl #impl_generics #states_ for #ident #ty_generics #where_clause {}
+        impl #impl_generics #states_ for #ident #ty_generics #where_clause {
+            const DEPENDENCY_DEPTH : usize = <<Self as #sub_states_>::SourceStates as #state_set_>::STATE_SET_DEPENDENCY_DEPTH + 1;
+        }
 
-        impl #impl_generics #manual_state_ for #ident #ty_generics #where_clause {}
+        impl #impl_generics #manual_states_ for #ident #ty_generics #where_clause {}
 
         impl #impl_generics #sub_states_ for #ident #ty_generics #where_clause {
-            type SourceStates = (#OptionFP<#source_ty>,);
+            type SourceStates = #source_type;
 
-            fn should_exist(sources: <Self as #sub_states_>::SourceStates) -> bool {
-                match sources {
-                    (#OptionFP::Some(source),) => source == (#source_value),
-                    _ => false,
-                }
+            fn should_exist(sources: <Self as #sub_states_>::SourceStates) -> Option<Self> {
+                matches!(sources, #source_value).then_some(Self::default())
             }
         }
     }

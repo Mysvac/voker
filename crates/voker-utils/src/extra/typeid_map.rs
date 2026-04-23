@@ -1,7 +1,7 @@
 use core::any::TypeId;
 use core::fmt::Debug;
 
-use crate::hash::NoOpHashState;
+use crate::hash::NoopHashState;
 use crate::hash::hashbrown::HashMap;
 use crate::hash::hashbrown::hash_map::Entry;
 
@@ -17,7 +17,7 @@ use crate::hash::hashbrown::hash_map::Entry;
 /// The container's interface is fully abstracted, exposing no [`HashMap`]
 /// specific APIs. This allows for potential future changes to the underlying
 /// implementation without breaking external code.
-pub struct TypeIdMap<V>(HashMap<TypeId, V, NoOpHashState>);
+pub struct TypeIdMap<V>(HashMap<TypeId, V, NoopHashState>);
 
 impl<V> TypeIdMap<V> {
     /// Creates an empty `TypeIdMap`.
@@ -30,7 +30,7 @@ impl<V> TypeIdMap<V> {
     /// ```
     #[inline]
     pub const fn new() -> Self {
-        Self(HashMap::with_hasher(NoOpHashState))
+        Self(HashMap::with_hasher(NoopHashState))
     }
 
     /// Creates an empty `TypeIdMap` with the specified capacity,
@@ -43,7 +43,7 @@ impl<V> TypeIdMap<V> {
     /// ```
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
-        Self(HashMap::with_capacity_and_hasher(capacity, NoOpHashState))
+        Self(HashMap::with_capacity_and_hasher(capacity, NoopHashState))
     }
 
     /// Shrinks the capacity of the map as much as possible.

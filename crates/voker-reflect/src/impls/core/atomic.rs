@@ -76,10 +76,7 @@ macro_rules! impl_reflect_for_atomic {
 
         impl $crate::registry::GetTypeMeta for $ty {
             fn get_type_meta() -> $crate::registry::TypeMeta {
-                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_data::<$crate::registry::ReflectFromPtr>(
-                    $crate::registry::FromType::<Self>::from_type(),
-                );
+                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(2);
                 type_meta.insert_data::<$crate::registry::ReflectFromReflect>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );

@@ -60,7 +60,9 @@ pub(crate) fn position_entity(id: Entity, slice: &[Entity]) -> Option<usize> {
 
     let val = unsafe { core::mem::transmute::<Entity, u64>(id) };
     let arr = unsafe { core::mem::transmute::<&[Entity], &[u64]>(slice) };
-    arr.iter().position(|&e| e == val)
+    // For the deletion of relationship entities,
+    // the right side is faster
+    arr.iter().rposition(|&e| e == val)
 }
 
 /// Clamps a tick slice, optimized for bulk processing.

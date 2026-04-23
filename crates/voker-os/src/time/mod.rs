@@ -15,6 +15,9 @@ pub use core::time::{Duration, TryFromFloatSecsError};
 pub use time_impl::{Instant, SystemTime, SystemTimeError};
 
 crate::cfg::switch! {
+    crate::cfg::wasm => {
+        use web_time as time;
+    }
     crate::cfg::std => {
         use ::std::time as time_impl;
     }

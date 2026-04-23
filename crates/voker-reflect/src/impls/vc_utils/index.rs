@@ -13,7 +13,7 @@ use crate::info::{GenericInfo, Generics, TypeParamInfo};
 use crate::info::{MapInfo, SetInfo, TypeInfo, TypePath, Typed};
 use crate::ops::{ApplyError, Map, ReflectCloneError, Set};
 use crate::registry::{FromType, GetTypeMeta, TypeMeta, TypeRegistry};
-use crate::registry::{ReflectDefault, ReflectFromPtr, ReflectFromReflect};
+use crate::registry::{ReflectDefault, ReflectFromReflect};
 use crate::{FromReflect, Reflect};
 
 // -----------------------------------------------------------------------------
@@ -186,8 +186,7 @@ where
     S: TypePath + ::core::hash::BuildHasher + Default + Send + Sync,
 {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta
@@ -401,8 +400,7 @@ where
     S: TypePath + ::core::hash::BuildHasher + Default + Send + Sync,
 {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta
@@ -576,8 +574,7 @@ where
     T: FromReflect + Typed + GetTypeMeta + Eq + ::core::hash::Hash,
 {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta
@@ -785,8 +782,7 @@ where
     V: FromReflect + Typed + GetTypeMeta,
 {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta

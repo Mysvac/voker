@@ -7,6 +7,7 @@ extern crate proc_macro;
 // -----------------------------------------------------------------------------
 // Modules
 
+mod label;
 mod manifest;
 
 // -----------------------------------------------------------------------------
@@ -16,6 +17,8 @@ pub mod full_path;
 
 #[doc(inline)]
 pub use manifest::crate_path;
+
+pub use label::derive_label;
 
 /// Resolve a crate name into a canonical `syn::Path`.
 ///

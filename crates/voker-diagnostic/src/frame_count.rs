@@ -7,7 +7,7 @@ use voker_ecs::system::Local;
 use voker_os::sync::atomic::AtomicU32;
 use voker_os::time::Instant;
 
-use crate::{DEFAULT_MAX_HISTORY_LENGTH, RegisterDiagnostic};
+use crate::{AppDiagnosticExt, DEFAULT_MAX_HISTORY_LENGTH};
 use crate::{Diagnostic, DiagnosticPath, DiagnosticsStore};
 
 // -----------------------------------------------------------------------------

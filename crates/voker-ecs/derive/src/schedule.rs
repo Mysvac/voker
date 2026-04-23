@@ -29,37 +29,10 @@ fn parse_system_set_attrs(attrs: &[syn::Attribute]) -> syn::Result<SystemSetAttr
 }
 
 pub(crate) fn impl_derive_schedule_label(ast: DeriveInput) -> TokenStream {
-    use crate::path::fp::{CloneFP, DebugFP, EqFP, HashFP, SendFP, SyncFP};
     let voker_ecs_path = crate::path::voker_ecs();
-    let schedule_label_ = crate::path::schedule_label_(&voker_ecs_path);
-    let macro_utils_ = crate::path::macro_utils_(&voker_ecs_path);
+    let trait_path = crate::path::schedule_label_(&voker_ecs_path);
 
-    let type_ident = ast.ident;
-
-    let mut generics = ast.generics;
-    if generics.type_params().next().is_some() {
-        generics
-            .make_where_clause()
-            .predicates
-            .push(parse_quote! { Self: #SendFP + #SyncFP + #CloneFP + #DebugFP + #HashFP + #EqFP + 'static });
-    } else if generics.lifetimes().next().is_some() {
-        generics
-            .make_where_clause()
-            .predicates
-            .push(parse_quote! { Self: 'static });
-    }
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    quote! {
-        const _:() = {
-            impl #impl_generics #schedule_label_ for #type_ident #ty_generics #where_clause {
-                fn dyn_clone(&self) -> #macro_utils_::Box<dyn #schedule_label_> {
-                    #macro_utils_::Box::new(#CloneFP::clone(self))
-                }
-            }
-        };
-    }
-    .into()
+    voker_macro_utils::derive_label(ast, trait_path)
 }
 
 pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
@@ -76,7 +49,6 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
     let into_system_ = crate::path::into_system_(&voker_ecs_path);
     let system_set_begin_ = crate::path::system_set_begin_(&voker_ecs_path);
     let system_set_end_ = crate::path::system_set_end_(&voker_ecs_path);
-    let macro_utils_ = crate::path::macro_utils_(&voker_ecs_path);
 
     let type_ident = ast.ident;
 
@@ -109,10 +81,10 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
 
         (
             quote! {
-                #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
+                ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
             },
             quote! {
-                #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+                ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
             },
         )
     } else {
@@ -129,7 +101,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                 }
 
                 quote! {
-                    #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
+                    ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
                 }
             }
             Data::Enum(item) => {
@@ -150,7 +122,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                     let tag = index;
                     arms.push(quote! {
                         Self::#variant_ident => {
-                            #macro_utils_::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
+                            ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
                         }
                     });
                 }
@@ -174,7 +146,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
         let end_body = match &ast.data {
             Data::Struct(_) => {
                 quote! {
-                    #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+                    ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
                 }
             }
             Data::Enum(item) => {
@@ -185,7 +157,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                     let tag = index;
                     arms.push(quote! {
                         Self::#variant_ident => {
-                            #macro_utils_::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
+                            ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
                         }
                     });
                 }
@@ -204,17 +176,19 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
 
     quote! {
         const _:() = {
+            extern crate alloc;
+
             impl #impl_generics #system_set_ for #type_ident #ty_generics #where_clause {
-                fn begin(&self) -> #macro_utils_::Box<dyn #system_<Input = (), Output = ()>> {
+                fn begin(&self) -> ::alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
                     #begin_body
                 }
 
-                fn end(&self) -> #macro_utils_::Box<dyn #system_<Input = (), Output = ()>> {
+                fn end(&self) -> ::alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
                     #end_body
                 }
 
-                fn dyn_clone(&self) -> #macro_utils_::Box<dyn #system_set_> {
-                    #macro_utils_::Box::new(#CloneFP::clone(self))
+                fn dyn_clone(&self) -> ::alloc::boxed::Box<dyn #system_set_> {
+                    ::alloc::boxed::Box::new(#CloneFP::clone(self))
                 }
             }
         };

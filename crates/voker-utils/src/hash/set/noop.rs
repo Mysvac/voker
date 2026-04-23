@@ -1,4 +1,4 @@
-//! Provide [`NoOpHashSet`] based on [hashbrown]'s implementation.
+//! Provide [`NoopHashSet`] based on [hashbrown]'s implementation.
 
 use core::fmt::Debug;
 use core::hash::Hash;
@@ -12,21 +12,21 @@ use hb::{Difference, Intersection};
 use hb::{Drain, ExtractIf, Iter};
 use hb::{SymmetricDifference, Union};
 
-use crate::hash::NoOpHashState;
+use crate::hash::NoopHashState;
 
 // -----------------------------------------------------------------------------
-// NoOpHashSet
+// NoopHashSet
 
-type InternalSet<T> = hb::HashSet<T, NoOpHashState>;
+type InternalSet<T> = hb::HashSet<T, NoopHashState>;
 
-/// New-type for [`HashSet`] with [`NoOpHashState`] as the default hashing provider.
+/// New-type for [`HashSet`] with [`NoopHashState`] as the default hashing provider.
 ///
 /// # Examples
 ///
 /// ```
-/// use voker_utils::hash::NoOpHashSet;
+/// use voker_utils::hash::NoopHashSet;
 ///
-/// let mut names = NoOpHashSet::new();
+/// let mut names = NoopHashSet::new();
 ///
 /// names.insert("a");
 /// names.insert("b");
@@ -41,26 +41,26 @@ type InternalSet<T> = hb::HashSet<T, NoOpHashState>;
 ///
 /// [`HashSet`]: hb::HashSet
 #[repr(transparent)]
-pub struct NoOpHashSet<T>(InternalSet<T>);
+pub struct NoopHashSet<T>(InternalSet<T>);
 
 // -----------------------------------------------------------------------------
-// `NoOpHashState` specific methods
+// `NoopHashState` specific methods
 
-impl<T: Eq + Hash, const N: usize> From<[T; N]> for NoOpHashSet<T> {
+impl<T: Eq + Hash, const N: usize> From<[T; N]> for NoopHashSet<T> {
     fn from(value: [T; N]) -> Self {
         value.into_iter().collect()
     }
 }
 
-impl<T> NoOpHashSet<T> {
-    /// Create a empty [`NoOpHashSet`]
+impl<T> NoopHashSet<T> {
+    /// Create a empty [`NoopHashSet`]
     ///
     /// # Example
     ///
     /// ```rust
-    /// use voker_utils::hash::NoOpHashSet;
+    /// use voker_utils::hash::NoopHashSet;
     ///
-    /// let map = NoOpHashSet::new();
+    /// let map = NoopHashSet::new();
     /// #
     /// # let mut map = map;
     /// # map.insert("foo");
@@ -68,17 +68,17 @@ impl<T> NoOpHashSet<T> {
     /// ```
     #[inline(always)]
     pub const fn new() -> Self {
-        Self(InternalSet::with_hasher(NoOpHashState))
+        Self(InternalSet::with_hasher(NoopHashState))
     }
 
-    /// Create a empty [`NoOpHashSet`] with specific capacity
+    /// Create a empty [`NoopHashSet`] with specific capacity
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
+    /// # use voker_utils::hash::NoopHashSet;
     /// #
-    /// let map = NoOpHashSet::with_capacity(5);
+    /// let map = NoopHashSet::with_capacity(5);
     /// #
     /// # let mut map = map;
     /// # map.insert("foo");
@@ -88,7 +88,7 @@ impl<T> NoOpHashSet<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self(InternalSet::with_capacity_and_hasher(
             capacity,
-            NoOpHashState,
+            NoopHashState,
         ))
     }
 }
@@ -96,7 +96,7 @@ impl<T> NoOpHashSet<T> {
 // -----------------------------------------------------------------------------
 // Transmute
 
-// impl<T> Deref for NoOpHashSet<T> {
+// impl<T> Deref for NoopHashSet<T> {
 //     type Target = InternalSet<T>;
 //
 //     #[inline(always)]
@@ -105,7 +105,7 @@ impl<T> NoOpHashSet<T> {
 //     }
 // }
 
-// impl<T> DerefMut for NoOpHashSet<T> {
+// impl<T> DerefMut for NoopHashSet<T> {
 //     #[inline(always)]
 //     fn deref_mut(&mut self) -> &mut Self::Target {
 //         &mut self.0
@@ -115,7 +115,7 @@ impl<T> NoOpHashSet<T> {
 // -----------------------------------------------------------------------------
 // Re-export the underlying method
 
-impl<T> Clone for NoOpHashSet<T>
+impl<T> Clone for NoopHashSet<T>
 where
     InternalSet<T>: Clone,
 {
@@ -130,7 +130,7 @@ where
     }
 }
 
-impl<T> Debug for NoOpHashSet<T>
+impl<T> Debug for NoopHashSet<T>
 where
     InternalSet<T>: Debug,
 {
@@ -140,7 +140,7 @@ where
     }
 }
 
-impl<T> Default for NoOpHashSet<T>
+impl<T> Default for NoopHashSet<T>
 where
     InternalSet<T>: Default,
 {
@@ -150,7 +150,7 @@ where
     }
 }
 
-impl<T> PartialEq for NoOpHashSet<T>
+impl<T> PartialEq for NoopHashSet<T>
 where
     InternalSet<T>: PartialEq,
 {
@@ -160,9 +160,9 @@ where
     }
 }
 
-impl<T> Eq for NoOpHashSet<T> where InternalSet<T>: Eq {}
+impl<T> Eq for NoopHashSet<T> where InternalSet<T>: Eq {}
 
-impl<T, X> FromIterator<X> for NoOpHashSet<T>
+impl<T, X> FromIterator<X> for NoopHashSet<T>
 where
     InternalSet<T>: FromIterator<X>,
 {
@@ -172,7 +172,7 @@ where
     }
 }
 
-impl<T> IntoIterator for NoOpHashSet<T>
+impl<T> IntoIterator for NoopHashSet<T>
 where
     InternalSet<T>: IntoIterator,
 {
@@ -186,7 +186,7 @@ where
     }
 }
 
-impl<'a, T> IntoIterator for &'a NoOpHashSet<T>
+impl<'a, T> IntoIterator for &'a NoopHashSet<T>
 where
     &'a InternalSet<T>: IntoIterator,
 {
@@ -200,7 +200,7 @@ where
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut NoOpHashSet<T>
+impl<'a, T> IntoIterator for &'a mut NoopHashSet<T>
 where
     &'a mut InternalSet<T>: IntoIterator,
 {
@@ -214,7 +214,7 @@ where
     }
 }
 
-impl<T, X> Extend<X> for NoOpHashSet<T>
+impl<T, X> Extend<X> for NoopHashSet<T>
 where
     InternalSet<T>: Extend<X>,
 {
@@ -224,7 +224,7 @@ where
     }
 }
 
-impl<T> serde_core::Serialize for NoOpHashSet<T>
+impl<T> serde_core::Serialize for NoopHashSet<T>
 where
     InternalSet<T>: serde_core::Serialize,
 {
@@ -237,7 +237,7 @@ where
     }
 }
 
-impl<'de, T> serde_core::Deserialize<'de> for NoOpHashSet<T>
+impl<'de, T> serde_core::Deserialize<'de> for NoopHashSet<T>
 where
     InternalSet<T>: serde_core::Deserialize<'de>,
 {
@@ -250,16 +250,16 @@ where
     }
 }
 
-impl<T> NoOpHashSet<T> {
+impl<T> NoopHashSet<T> {
     /// Returns the number of elements the set can hold without reallocating.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let map = NoOpHashSet::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let map = NoopHashSet::with_capacity(5);
     ///
-    /// # let map: NoOpHashSet<()> = map;
+    /// # let map: NoopHashSet<()> = map;
     /// #
     /// assert!(map.capacity() >= 5);
     /// ```
@@ -274,8 +274,8 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -296,8 +296,8 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// assert_eq!(map.len(), 0);
     ///
@@ -315,8 +315,8 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// assert!(map.is_empty());
     ///
@@ -334,9 +334,9 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
+    /// # use voker_utils::hash::NoopHashSet;
     /// #
-    /// let mut map = NoOpHashSet::new();
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -359,9 +359,9 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
+    /// # use voker_utils::hash::NoopHashSet;
     /// #
-    /// let mut map = NoOpHashSet::new();
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -385,9 +385,9 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
+    /// # use voker_utils::hash::NoopHashSet;
     /// #
-    /// let mut map = NoOpHashSet::new();
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -413,9 +413,9 @@ impl<T> NoOpHashSet<T> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
+    /// # use voker_utils::hash::NoopHashSet;
     /// #
-    /// let mut map = NoOpHashSet::new();
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -431,19 +431,19 @@ impl<T> NoOpHashSet<T> {
     }
 }
 
-impl<T> NoOpHashSet<T>
+impl<T> NoopHashSet<T>
 where
     T: Eq + Hash,
 {
-    /// Reserves capacity for at least additional more elements to be inserted in the NoOpHashSet.
+    /// Reserves capacity for at least additional more elements to be inserted in the NoopHashSet.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::with_capacity(5);
     ///
-    /// # let mut map: NoOpHashSet<()> = map;
+    /// # let mut map: NoopHashSet<()> = map;
     /// #
     /// assert!(map.capacity() >= 5);
     ///
@@ -461,10 +461,10 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::with_capacity(5);
     ///
-    /// # let mut map: NoOpHashSet<()> = map;
+    /// # let mut map: NoopHashSet<()> = map;
     /// #
     /// assert!(map.capacity() >= 5);
     ///
@@ -482,8 +482,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::with_capacity(5);
     ///
     /// map.insert("foo");
     /// map.insert("bar");
@@ -508,7 +508,7 @@ where
 
     /// Visits the values representing the difference
     #[inline(always)]
-    pub fn difference<'a>(&'a self, other: &'a Self) -> Difference<'a, T, NoOpHashState> {
+    pub fn difference<'a>(&'a self, other: &'a Self) -> Difference<'a, T, NoopHashState> {
         self.0.difference(&other.0)
     }
 
@@ -517,19 +517,19 @@ where
     pub fn symmetric_difference<'a>(
         &'a self,
         other: &'a Self,
-    ) -> SymmetricDifference<'a, T, NoOpHashState> {
+    ) -> SymmetricDifference<'a, T, NoopHashState> {
         self.0.symmetric_difference(&other.0)
     }
 
     /// Visits the values representing the intersection
     #[inline(always)]
-    pub fn intersection<'a>(&'a self, other: &'a Self) -> Intersection<'a, T, NoOpHashState> {
+    pub fn intersection<'a>(&'a self, other: &'a Self) -> Intersection<'a, T, NoopHashState> {
         self.0.intersection(&other.0)
     }
 
     /// Visits the values representing the union
     #[inline(always)]
-    pub fn union<'a>(&'a self, other: &'a Self) -> Union<'a, T, NoOpHashState> {
+    pub fn union<'a>(&'a self, other: &'a Self) -> Union<'a, T, NoopHashState> {
         self.0.union(&other.0)
     }
 
@@ -538,8 +538,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -558,8 +558,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -579,8 +579,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// assert_eq!(map.get_or_insert("foo"), &"foo");
     /// ```
@@ -595,8 +595,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// assert_eq!(map.get_or_insert_with(&"foo", |_| "foo"), &"foo");
     /// ```
@@ -614,15 +614,15 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// let value = map.entry("foo").or_insert();
     /// #
     /// # assert_eq!(value, ());
     /// ```
     #[inline(always)]
-    pub fn entry(&mut self, value: T) -> hb::Entry<'_, T, NoOpHashState> {
+    pub fn entry(&mut self, value: T) -> hb::Entry<'_, T, NoopHashState> {
         self.0.entry(value)
     }
 
@@ -652,8 +652,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -670,8 +670,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -687,8 +687,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -709,8 +709,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// map.insert("foo");
     ///
@@ -731,8 +731,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashSet;
-    /// let mut map = NoOpHashSet::new();
+    /// # use voker_utils::hash::NoopHashSet;
+    /// let mut map = NoopHashSet::new();
     ///
     /// assert_eq!(map.allocation_size(), 0);
     ///
@@ -759,7 +759,7 @@ where
     /// are guaranteed to not violate memory safety.
     ///
     /// However this operation is still unsafe
-    /// because the resulting NoOpHashSet may be passed to unsafe code
+    /// because the resulting NoopHashSet may be passed to unsafe code
     /// which does expect the set to behave correctly,
     /// and would cause unsoundness as a result.
     #[expect(unsafe_code, reason = "re-exporting unsafe method")]
@@ -770,94 +770,94 @@ where
     }
 }
 
-impl<T> BitOr<&NoOpHashSet<T>> for &NoOpHashSet<T>
+impl<T> BitOr<&NoopHashSet<T>> for &NoopHashSet<T>
 where
     for<'a> &'a InternalSet<T>: BitOr<&'a InternalSet<T>, Output = InternalSet<T>>,
 {
-    type Output = NoOpHashSet<T>;
+    type Output = NoopHashSet<T>;
 
     /// Performs the | operation.
     #[inline(always)]
-    fn bitor(self, rhs: &NoOpHashSet<T>) -> NoOpHashSet<T> {
-        NoOpHashSet(self.0.bitor(&rhs.0))
+    fn bitor(self, rhs: &NoopHashSet<T>) -> NoopHashSet<T> {
+        NoopHashSet(self.0.bitor(&rhs.0))
     }
 }
 
-impl<T> BitAnd<&NoOpHashSet<T>> for &NoOpHashSet<T>
+impl<T> BitAnd<&NoopHashSet<T>> for &NoopHashSet<T>
 where
     for<'a> &'a InternalSet<T>: BitAnd<&'a InternalSet<T>, Output = InternalSet<T>>,
 {
-    type Output = NoOpHashSet<T>;
+    type Output = NoopHashSet<T>;
 
     /// Performs the & operation.
     #[inline(always)]
-    fn bitand(self, rhs: &NoOpHashSet<T>) -> NoOpHashSet<T> {
-        NoOpHashSet(self.0.bitand(&rhs.0))
+    fn bitand(self, rhs: &NoopHashSet<T>) -> NoopHashSet<T> {
+        NoopHashSet(self.0.bitand(&rhs.0))
     }
 }
 
-impl<T> BitXor<&NoOpHashSet<T>> for &NoOpHashSet<T>
+impl<T> BitXor<&NoopHashSet<T>> for &NoopHashSet<T>
 where
     for<'a> &'a InternalSet<T>: BitXor<&'a InternalSet<T>, Output = InternalSet<T>>,
 {
-    type Output = NoOpHashSet<T>;
+    type Output = NoopHashSet<T>;
 
     /// Performs the ^ operation.
     #[inline(always)]
-    fn bitxor(self, rhs: &NoOpHashSet<T>) -> NoOpHashSet<T> {
-        NoOpHashSet(self.0.bitxor(&rhs.0))
+    fn bitxor(self, rhs: &NoopHashSet<T>) -> NoopHashSet<T> {
+        NoopHashSet(self.0.bitxor(&rhs.0))
     }
 }
 
-impl<T> Sub<&NoOpHashSet<T>> for &NoOpHashSet<T>
+impl<T> Sub<&NoopHashSet<T>> for &NoopHashSet<T>
 where
     for<'a> &'a InternalSet<T>: Sub<&'a InternalSet<T>, Output = InternalSet<T>>,
 {
-    type Output = NoOpHashSet<T>;
+    type Output = NoopHashSet<T>;
 
     /// Performs the - operation.
     #[inline(always)]
-    fn sub(self, rhs: &NoOpHashSet<T>) -> NoOpHashSet<T> {
-        NoOpHashSet(self.0.sub(&rhs.0))
+    fn sub(self, rhs: &NoopHashSet<T>) -> NoopHashSet<T> {
+        NoopHashSet(self.0.sub(&rhs.0))
     }
 }
 
-impl<T> BitOrAssign<&NoOpHashSet<T>> for NoOpHashSet<T>
+impl<T> BitOrAssign<&NoopHashSet<T>> for NoopHashSet<T>
 where
     InternalSet<T>: for<'a> BitOrAssign<&'a InternalSet<T>>,
 {
     #[inline(always)]
-    fn bitor_assign(&mut self, rhs: &NoOpHashSet<T>) {
+    fn bitor_assign(&mut self, rhs: &NoopHashSet<T>) {
         self.0.bitor_assign(&rhs.0);
     }
 }
 
-impl<T> BitAndAssign<&NoOpHashSet<T>> for NoOpHashSet<T>
+impl<T> BitAndAssign<&NoopHashSet<T>> for NoopHashSet<T>
 where
     InternalSet<T>: for<'a> BitAndAssign<&'a InternalSet<T>>,
 {
     #[inline(always)]
-    fn bitand_assign(&mut self, rhs: &NoOpHashSet<T>) {
+    fn bitand_assign(&mut self, rhs: &NoopHashSet<T>) {
         self.0.bitand_assign(&rhs.0);
     }
 }
 
-impl<T> BitXorAssign<&NoOpHashSet<T>> for NoOpHashSet<T>
+impl<T> BitXorAssign<&NoopHashSet<T>> for NoopHashSet<T>
 where
     InternalSet<T>: for<'a> BitXorAssign<&'a InternalSet<T>>,
 {
     #[inline(always)]
-    fn bitxor_assign(&mut self, rhs: &NoOpHashSet<T>) {
+    fn bitxor_assign(&mut self, rhs: &NoopHashSet<T>) {
         self.0.bitxor_assign(&rhs.0);
     }
 }
 
-impl<T> SubAssign<&NoOpHashSet<T>> for NoOpHashSet<T>
+impl<T> SubAssign<&NoopHashSet<T>> for NoopHashSet<T>
 where
     InternalSet<T>: for<'a> SubAssign<&'a InternalSet<T>>,
 {
     #[inline(always)]
-    fn sub_assign(&mut self, rhs: &NoOpHashSet<T>) {
+    fn sub_assign(&mut self, rhs: &NoopHashSet<T>) {
         self.0.sub_assign(&rhs.0);
     }
 }

@@ -127,6 +127,8 @@ pub trait System: Send + Sync + 'static {
     /// Sets the tick when this system last completed execution.
     fn set_last_run(&mut self, last_run: Tick);
 
+    fn check_ticks(&mut self, now: Tick);
+
     /// Initializes the system, registering any required components or resources.
     ///
     /// The implementer must allow for repeated initialization.
@@ -349,6 +351,10 @@ where
         self.s.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.s.initialize(world)
     }
@@ -440,6 +446,11 @@ where
         self.b.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.a.check_ticks(now);
+        self.b.check_ticks(now);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.a.initialize(world).merge(self.b.initialize(world))
     }
@@ -529,6 +540,10 @@ where
 
     fn set_last_run(&mut self, last_run: Tick) {
         self.s.set_last_run(last_run);
+    }
+
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
     }
 
     fn initialize(&mut self, world: &mut World) -> AccessTable {
@@ -633,6 +648,10 @@ where
 
     fn set_last_run(&mut self, last_run: Tick) {
         self.s.set_last_run(last_run);
+    }
+
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
     }
 
     fn initialize(&mut self, world: &mut World) -> AccessTable {

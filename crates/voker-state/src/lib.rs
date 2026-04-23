@@ -6,14 +6,7 @@
 
 extern crate self as voker_state;
 
-crate::cfg::std! { extern crate std; }
 extern crate alloc;
-
-pub mod cfg {
-    voker_cfg::define_alias! {
-        #[cfg(feature = "std")] => std,
-    }
-}
 
 /// Command helpers for queuing state transitions.
 pub mod command;
@@ -39,4 +32,52 @@ pub mod prelude {
     pub use crate::state::{OnEnter, OnExit, OnTransition};
     pub use crate::state::{PreviousState, StateSet, States, SubStates};
     pub use crate::state::{StateTransition, StateTransitionSignal, StateTransitionSystems};
+}
+
+#[cfg(test)]
+mod tests {
+    use voker_app::{App, PreStartup};
+    use voker_ecs::prelude::{Commands, ResMut, Resource};
+
+    use crate::app::{AppStatesExt, StatesPlugin};
+    use crate::derive::{States, SubStates};
+    use crate::state::{OnEnter, State};
+
+    #[test]
+    fn state_transition_before_pre_startup() {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+
+        #[derive(States, Default, PartialEq, Eq, Hash, Debug, Clone)]
+        enum TestState {
+            #[default]
+            A,
+        }
+
+        #[derive(SubStates, Default, PartialEq, Eq, Hash, Debug, Clone)]
+        #[source(TestState = TestState::A)]
+        struct TestSubState;
+
+        #[derive(Resource, Default, PartialEq, Eq, Debug)]
+        struct Thingy(usize);
+
+        app.init_state::<TestState>();
+        app.add_sub_state::<TestSubState>();
+
+        app.add_systems(OnEnter(TestState::A), |mut commands: Commands| {
+            commands.init_resource::<Thingy>();
+        });
+
+        app.add_systems(PreStartup, |mut thingy: ResMut<Thingy>| {
+            thingy.0 += 1;
+        });
+
+        assert!(!app.world().contains_resource::<State<TestSubState>>());
+
+        app.update();
+
+        // This assert only succeeds if first OnEnter(TestState::A) runs, followed by PreStartup.
+        assert_eq!(app.world().resource::<Thingy>(), &Thingy(1));
+        assert!(app.world().contains_resource::<State<TestSubState>>());
+    }
 }

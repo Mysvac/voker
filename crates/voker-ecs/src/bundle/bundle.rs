@@ -171,7 +171,8 @@ macro_rules! impl_bundle_for_tuple {
     };
     (1 : [ $index:tt : $name:ident ]) => {
         #[cfg_attr(docsrs, doc(fake_variadic))]
-        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 8 items long.\n")]
+        #[cfg_attr(docsrs, doc = "For larger data, consider using #[derive(Bundle)] to create custom types.")]
         unsafe impl<$name: Bundle> Bundle for ($name,) {
             fn collect_explicit(collector: &mut ComponentCollector) {
                 <$name>::collect_explicit(collector)
@@ -216,4 +217,4 @@ macro_rules! impl_bundle_for_tuple {
     };
 }
 
-range_invoke!(impl_bundle_for_tuple, 12);
+range_invoke!(impl_bundle_for_tuple, 8);

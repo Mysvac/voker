@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
 use fixedbitset::FixedBitSet;
-use voker_utils::hash::NoOpHashMap;
+use voker_utils::hash::NoopHashMap;
 
 use super::{AccessParam, FilterParam};
 use crate::resource::ResourceId;
@@ -35,7 +35,7 @@ pub struct AccessTable {
     world_ref: bool,          // holding `&world`
     res_reading: FixedBitSet, // resource reading
     res_writing: FixedBitSet, // resource writing
-    filter: NoOpHashMap<FilterParam, AccessParam>,
+    filter: NoopHashMap<FilterParam, AccessParam>,
 }
 
 // `#[derive(Clone)]` does not generate optimized `clone_from`.
@@ -85,7 +85,7 @@ impl AccessTable {
             world_ref: false,
             res_reading: FixedBitSet::new(),
             res_writing: FixedBitSet::new(),
-            filter: NoOpHashMap::new(),
+            filter: NoopHashMap::new(),
         }
     }
 
@@ -262,7 +262,7 @@ impl AccessTable {
         if self.world_mut {
             self.res_reading = FixedBitSet::new();
             self.res_writing = FixedBitSet::new();
-            self.filter = NoOpHashMap::new();
+            self.filter = NoopHashMap::new();
         } else {
             self.res_reading.union_with(&other.res_reading);
             self.res_writing.union_with(&other.res_writing);

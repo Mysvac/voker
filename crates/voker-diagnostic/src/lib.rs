@@ -9,9 +9,10 @@
 // -----------------------------------------------------------------------------
 // no_std support
 
-extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
+
+extern crate alloc;
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -26,8 +27,8 @@ mod system_info;
 // -----------------------------------------------------------------------------
 // Exports
 
+pub use diagnostic::{AppDiagnosticExt, DiagnosticsStore};
 pub use diagnostic::{Diagnostic, DiagnosticMeasurement, DiagnosticPath};
-pub use diagnostic::{DiagnosticsStore, RegisterDiagnostic};
 pub use entity_count::{EntityCount, EntityCountDiagnosticsPlugin, EntityCountPlugin};
 pub use frame_count::{FrameCount, FrameCountDiagnosticsPlugin, FrameCountPlugin};
 pub use log_diagnostic::{LogDiagnosticsPlugin, LogDiagnosticsState};

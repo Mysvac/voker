@@ -172,6 +172,15 @@ impl Ease for Isometry2d {
 
 macro_rules! impl_ease_tuple {
     (0: []) => {};
+    (1: [0: P0]) => {
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.\n")]
+        impl<P0: Ease> Ease for (P0,) {
+            fn interpolating_curve_unbounded(start: Self, end: Self) -> impl Curve<Self> {
+                let curve_tuple = ( <P0 as Ease>::interpolating_curve_unbounded(start.0, end.0), );
+                FunctionCurve::new(Interval::EVERYWHERE, move |t| (curve_tuple.0.sample_unchecked(t),) )
+            }
+        }
+    };
     ($len:tt: [$($n:tt: $T:ident),*]) => {
         impl<$($T: Ease),*> Ease for ($($T,)*) {
             fn interpolating_curve_unbounded(start: Self, end: Self) -> impl Curve<Self> {
@@ -194,7 +203,7 @@ macro_rules! impl_ease_tuple {
     };
 }
 
-voker_utils::range_invoke!(impl_ease_tuple, 11);
+voker_utils::range_invoke!(impl_ease_tuple, 12);
 
 /// A [`Curve`] that is defined by
 ///

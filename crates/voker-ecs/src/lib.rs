@@ -69,9 +69,6 @@ pub mod traversal;
 
 pub mod world;
 
-/// Re-exported macro internals used by derive-generated code.
-pub mod __macro_exports;
-
 // -----------------------------------------------------------------------------
 // prelude
 

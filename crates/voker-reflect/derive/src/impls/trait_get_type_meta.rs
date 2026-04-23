@@ -17,12 +17,10 @@ pub(crate) fn impl_trait_get_type_meta(
     let get_type_meta_ = crate::path::get_type_meta_(voker_reflect_path);
     let type_meta_ = crate::path::type_meta_(voker_reflect_path);
     let from_type_ = crate::path::from_type_(voker_reflect_path);
-    let type_data_from_ptr = crate::path::reflect_from_ptr_(voker_reflect_path);
 
     let outer_ = Ident::new("__ret__", Span::call_site());
 
-    // `1` : ReflectFromPtr
-    let mut data_counter = 1usize;
+    let mut data_counter = 0usize;
 
     // We can only add `ReflectFromReflect` when using the default `FromReflect` implementation.
     // If it is uniformly added, there may be issues with mismatched generic constraints.
@@ -95,7 +93,6 @@ pub(crate) fn impl_trait_get_type_meta(
         impl #impl_generics #get_type_meta_ for #real_ident #ty_generics #where_clause {
             fn get_type_meta() -> #type_meta_ {
                 let mut #outer_ = #type_meta_::with_capacity::<Self>(#data_counter);
-                #type_meta_::insert_data::<#type_data_from_ptr>(&mut #outer_, #from_type_::<Self>::from_type());
                 #insert_from_reflect
                 #insert_default
                 #insert_serialize

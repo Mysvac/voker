@@ -44,7 +44,6 @@ pub mod config;
 
 use crate::system::System;
 use alloc::boxed::Box;
-use config::SystemNode;
 
 // -----------------------------------------------------------------------------
 // Exports

@@ -2,6 +2,7 @@ use core::fmt::Debug;
 
 use super::{Direction, GraphNode};
 use crate::system::{AccessTable, SystemFlags, SystemId};
+use crate::tick::Tick;
 use crate::world::{DeferredWorld, World};
 
 // -----------------------------------------------------------------------------
@@ -125,6 +126,14 @@ impl SystemObject {
         match self {
             SystemObject::Action { system, .. } => system.apply_deferred(world),
             SystemObject::Condition { system, .. } => system.apply_deferred(world),
+        }
+    }
+
+    #[inline]
+    pub fn check_ticks(&mut self, now: Tick) {
+        match self {
+            SystemObject::Action { system, .. } => system.check_ticks(now),
+            SystemObject::Condition { system, .. } => system.check_ticks(now),
         }
     }
 }

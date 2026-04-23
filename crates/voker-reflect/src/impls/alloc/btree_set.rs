@@ -7,7 +7,7 @@ use crate::impls::GenericTypeInfoCell;
 use crate::info::{GenericInfo, Generics, SetInfo, TypeInfo, TypeParamInfo, Typed};
 use crate::ops::{ApplyError, ReflectCloneError, Set};
 use crate::registry::{FromType, GetTypeMeta, TypeMeta, TypeRegistry};
-use crate::registry::{ReflectDefault, ReflectFromPtr, ReflectFromReflect};
+use crate::registry::{ReflectDefault, ReflectFromReflect};
 use crate::{FromReflect, Reflect};
 
 impl_type_path!(::alloc::collections::BTreeSet<T>);
@@ -158,8 +158,7 @@ impl<T: FromReflect + Typed + Ord + Eq> FromReflect for BTreeSet<T> {
 
 impl<T: FromReflect + Typed + Ord + Eq + GetTypeMeta> GetTypeMeta for BTreeSet<T> {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
+        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta

@@ -125,9 +125,6 @@ impl<S: States> Default for ApplyStateTransition<S> {
 }
 
 // -----------------------------------------------------------------------------
-// StateTransitionSystems
-
-// -----------------------------------------------------------------------------
 // Systems
 
 /// Applies one resolved transition for `S`.

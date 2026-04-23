@@ -134,6 +134,8 @@ macro_rules! impl_signal {
 
             fn set_last_run(&mut self, _: Tick) {}
 
+            fn check_ticks(&mut self, _: Tick) {}
+
             fn initialize(&mut self, _: &mut World) -> AccessTable {
                 AccessTable::new()
             }

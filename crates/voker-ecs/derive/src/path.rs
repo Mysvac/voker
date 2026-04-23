@@ -14,13 +14,6 @@ pub(crate) fn voker_ecs() -> syn::Path {
 
 pub(crate) use voker_macro_utils::full_path as fp;
 
-#[inline(always)]
-pub(crate) fn macro_utils_(voker_ecs_path: &syn::Path) -> TokenStream {
-    quote! {
-        #voker_ecs_path::__macro_exports::macro_utils
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Resource
 

@@ -3,6 +3,7 @@
 use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::sync::atomic::Ordering;
+use voker_task::ComputeTaskPool;
 
 use voker_os::sync::atomic::AtomicU32;
 use voker_os::utils::CachePadded;
@@ -175,18 +176,64 @@ impl World {
     /// the previous validation point (`last_check`).
     ///
     /// Returns the [`CheckTicks`] event payload used for this pass.
+    #[inline]
     pub fn check_ticks(&mut self) -> Option<CheckTicks> {
+        #[cold]
+        #[inline(never)]
+        fn check_ticks_cold(world: &mut World) -> CheckTicks {
+            let now = world.this_run_fast();
+            let event = CheckTicks::new(now);
+
+            const TASK_POOL: bool = voker_task::cfg::multi_threaded!();
+
+            let schedules = &mut world.schedules;
+            let resources = &mut world.storages.res_set;
+            let tables = &mut world.storages.tables;
+            let maps = &mut world.storages.maps;
+
+            if TASK_POOL && let Some(pool) = ComputeTaskPool::try_get() {
+                pool.scope(|s| {
+                    for (_, sche) in schedules.iter_mut() {
+                        s.spawn(async move {
+                            sche.check_ticks(now);
+                        });
+                    }
+                    s.spawn(async move {
+                        resources.check_ticks(now);
+                    });
+                    for table in tables.iter_mut() {
+                        s.spawn(async move {
+                            table.check_ticks(now);
+                        });
+                    }
+                    for map in maps.iter_mut() {
+                        s.spawn(async move {
+                            map.check_ticks(now);
+                        });
+                    }
+                });
+            } else {
+                for (_, sche) in schedules.iter_mut() {
+                    sche.check_ticks(now);
+                }
+                resources.check_ticks(now);
+                for table in tables.iter_mut() {
+                    table.check_ticks(now);
+                }
+                for map in maps.iter_mut() {
+                    map.check_ticks(now);
+                }
+            }
+
+            world.trigger::<CheckTicks>(event);
+            event
+        }
+
         let this_run = *self.this_run.get_mut();
         let last_check = self.last_check.get();
 
         if this_run.wrapping_sub(last_check) >= CHECK_CYCLE {
-            voker_utils::cold_path();
-            let this_run = Tick::new(this_run);
-            let checker = CheckTicks::new(this_run);
-            self.storages.check_ticks(checker);
-            self.last_check = this_run;
-            self.trigger(checker);
-            return Some(checker);
+            return Some(check_ticks_cold(self));
         }
 
         None

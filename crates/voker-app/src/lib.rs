@@ -5,19 +5,10 @@
 #![no_std]
 
 // -----------------------------------------------------------------------------
-// Compilation config
-
-/// Some macros used for compilation control.
-pub mod cfg {
-    voker_cfg::define_alias! {
-        #[cfg(feature = "std")] => std,
-    }
-}
-
-// -----------------------------------------------------------------------------
 // no_std support
 
-crate::cfg::std! { extern crate std; }
+#[cfg(feature = "std")]
+extern crate std;
 
 extern crate alloc;
 
@@ -34,6 +25,7 @@ mod sub_app;
 mod main_schedule;
 mod panic_handler;
 mod schedule_runner;
+mod shutdown;
 mod task_pool_plugin;
 
 // -----------------------------------------------------------------------------
@@ -47,38 +39,29 @@ pub use main_schedule::*;
 pub use panic_handler::*;
 pub use plugin::*;
 pub use schedule_runner::*;
+pub use shutdown::*;
 pub use sub_app::*;
 pub use task_pool_plugin::*;
 
-// -----------------------------------------------------------------------------
-// terminal_ctrl_c
-
-#[cfg(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std"))]
-mod terminal_ctrl_c_handler;
-
-#[cfg(not(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std")))]
-mod terminal_ctrl_c_handler {
-    #[derive(Default)]
-    /// No-op fallback when terminal Ctrl+C handling is unavailable.
-    pub struct TerminalCtrlCHandlerPlugin;
-
-    impl Plugin for TerminalCtrlCHandlerPlugin {
-        fn build(&self, _: &mut App) {}
-    }
-}
-
-pub use terminal_ctrl_c_handler::TerminalCtrlCHandlerPlugin;
+pub use voker_app_derive as derive;
+pub use voker_app_derive::{AppLabel, voker_main};
 
 // -----------------------------------------------------------------------------
 // Exports
 
 /// Includes the most common types in this crate.
 pub mod prelude {
-    #[doc(hidden)]
-    pub use crate::{
-        App, AppExit, First, FixedFirst, FixedLast, FixedPostUpdate, FixedPreUpdate, FixedUpdate,
-        Last, Main, Plugin, PluginGroup, PostStartup, PostUpdate, PreStartup, PreUpdate,
-        RunFixedMainLoopSystems, SpawnScene, Startup, SubApp, TaskPoolOptions, TaskPoolPlugin,
-        Update,
-    };
+    pub use crate::{App, AppExit, Plugin, PluginGroup, Plugins, SubApp};
+    pub use crate::{First, Last, PostStartup, PreStartup, SpawnScene, Startup};
+    pub use crate::{FixedFirst, FixedLast, FixedPostUpdate, FixedPreUpdate, FixedUpdate};
+    pub use crate::{PostUpdate, PreUpdate, RunFixedMainLoopSystems, Update};
+    pub use crate::{TaskPoolOptions, TaskPoolPlugin, voker_main};
+}
+
+pub mod exports {
+    voker_os::cfg::android! {
+        use voker_os::sync::OnceLock;
+        pub use voker_os::exports::android_activity;
+        pub static ANDROID_APP: OnceLock<android_activity::AndroidApp> = OnceLock::new();
+    }
 }

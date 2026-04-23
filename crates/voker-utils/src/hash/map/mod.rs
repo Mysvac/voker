@@ -21,5 +21,5 @@ pub use hb::{RawEntryBuilder, RawEntryBuilderMut, RawEntryMut, RawOccupiedEntryM
 // Exports
 
 pub use fixed::HashMap;
-pub use noop::NoOpHashMap;
+pub use noop::NoopHashMap;
 pub use sparse::SparseHashMap;

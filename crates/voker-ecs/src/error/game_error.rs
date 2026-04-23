@@ -438,59 +438,63 @@ pub fn game_error_panic_hook(
 }
 
 impl GameError {
-    #[cfg_attr(not(feature = "backtrace"), inline(always))]
-    fn format_backtrace(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        #[cfg(feature = "backtrace")]
-        {
-            let f = _f;
-            let backtrace = &self.inner.backtrace;
-            if let std::backtrace::BacktraceStatus::Captured = backtrace.status() {
-                let full_backtrace =
-                    std::env::var("VOKER_BACKTRACE").is_ok_and(|val| val == "full");
+    #[inline(always)]
+    #[cfg(not(feature = "backtrace"))]
+    fn format_backtrace(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Ok(())
+    }
 
-                let backtrace_str = alloc::string::ToString::to_string(backtrace);
-                let mut skip_next_location_line = false;
-                for line in backtrace_str.split('\n') {
-                    if !full_backtrace {
-                        if skip_next_location_line {
-                            if line.starts_with("             at") {
-                                continue;
-                            }
-                            skip_next_location_line = false;
-                        }
-                        if line.contains("std::backtrace_rs::backtrace::") {
-                            skip_next_location_line = true;
-                            continue;
-                        }
-                        if line.contains("std::backtrace::Backtrace::") {
-                            skip_next_location_line = true;
-                            continue;
-                        }
-                        if line.contains("<voker_ecs::error::game_error::GameError as core::convert::From<E>>::from") {
-                            skip_next_location_line = true;
-                            continue;
-                        }
-                        if line.contains("<core::result::Result<T,F> as core::ops::try_trait::FromResidual<core::result::Result<core::convert::Infallible,E>>>::from_residual") {
-                            skip_next_location_line = true;
-                            continue;
-                        }
-                        if line.contains("__rust_begin_short_backtrace") {
-                            break;
-                        }
-                        if line.contains("voker_ecs::observer::Observers::invoke::{{closure}}") {
-                            break;
-                        }
-                    }
-                    writeln!(f, "{line}")?;
-                }
+    #[cfg(feature = "backtrace")]
+    fn format_backtrace(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let backtrace = &self.inner.backtrace;
+        if let std::backtrace::BacktraceStatus::Captured = backtrace.status() {
+            let full_backtrace = std::env::var("VOKER_BACKTRACE").is_ok_and(|val| val == "full");
+
+            let backtrace_str = alloc::string::ToString::to_string(backtrace);
+            let mut skip_next_location_line = false;
+            for line in backtrace_str.split('\n') {
                 if !full_backtrace {
-                    if std::thread::panicking() {
-                        SKIP_NORMAL_BACKTRACE.set(true);
+                    if skip_next_location_line {
+                        if line.starts_with("             at") {
+                            continue;
+                        }
+                        skip_next_location_line = false;
                     }
-                    writeln!(f, "{FILTER_MESSAGE}")?;
+                    if line.contains("std::backtrace_rs::backtrace::") {
+                        skip_next_location_line = true;
+                        continue;
+                    }
+                    if line.contains("std::backtrace::Backtrace::") {
+                        skip_next_location_line = true;
+                        continue;
+                    }
+                    if line.contains(
+                        "<voker_ecs::error::game_error::GameError as core::convert::From<E>>::from",
+                    ) {
+                        skip_next_location_line = true;
+                        continue;
+                    }
+                    if line.contains("<core::result::Result<T,F> as core::ops::try_trait::FromResidual<core::result::Result<core::convert::Infallible,E>>>::from_residual") {
+                        skip_next_location_line = true;
+                        continue;
+                    }
+                    if line.contains("__rust_begin_short_backtrace") {
+                        break;
+                    }
+                    if line.contains("voker_ecs::observer::Observers::invoke::{{closure}}") {
+                        break;
+                    }
                 }
+                writeln!(f, "{line}")?;
+            }
+            if !full_backtrace {
+                if std::thread::panicking() {
+                    SKIP_NORMAL_BACKTRACE.set(true);
+                }
+                writeln!(f, "{FILTER_MESSAGE}")?;
             }
         }
+
         Ok(())
     }
 }

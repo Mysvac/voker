@@ -76,6 +76,10 @@ impl<S: 'static> System for ApplyDeferred<S> {
         self.tick = last_run;
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.tick.check_tick(now);
+    }
+
     fn initialize(&mut self, _world: &mut World) -> AccessTable {
         AccessTable::new()
     }

@@ -1,9 +1,9 @@
-//! Provide `FixedHasher` and `NoOpHasher`.
+//! Provide `FixedHasher` and `NoopHasher`.
 //!
 //! `FixedHasher` based on `foldhash` crate,
 //! Provide stable hash results through a fixed hash seed.
 //!
-//! `NoOpHasher` directly use u64 or bit data as hash values.
+//! `NoopHasher` directly use u64 or bit data as hash values.
 
 use core::fmt::Debug;
 use core::hash::{BuildHasher, Hasher};
@@ -61,18 +61,18 @@ impl BuildHasher for FixedHashState {
 }
 
 // -----------------------------------------------------------------------------
-// NoOpHasher
+// NoopHasher
 
 /// A no-op hash that directly pass value through `u64`.
 ///
-/// Which can be created through [`NoOpHashState::build_hasher`].
+/// Which can be created through [`NoopHashState::build_hasher`].
 #[derive(Copy, Clone, Default, Debug)]
 #[repr(transparent)]
-pub struct NoOpHasher {
+pub struct NoopHasher {
     hash: u64,
 }
 
-impl Hasher for NoOpHasher {
+impl Hasher for NoopHasher {
     #[inline(always)]
     fn finish(&self) -> u64 {
         self.hash
@@ -124,23 +124,23 @@ impl Hasher for NoOpHasher {
 ///
 /// ```
 /// use core::hash::{Hash, Hasher, BuildHasher};
-/// use voker_utils::hash::NoOpHashState;
+/// use voker_utils::hash::NoopHashState;
 ///
-/// let mut hasher = NoOpHashState.build_hasher();
+/// let mut hasher = NoopHashState.build_hasher();
 /// 3.hash(&mut hasher);
 /// let result = hasher.finish();
 ///
 /// assert_eq!(result, 3_u64);
 /// ```
 #[derive(Copy, Clone, Default, Debug)]
-pub struct NoOpHashState;
+pub struct NoopHashState;
 
-impl BuildHasher for NoOpHashState {
-    type Hasher = NoOpHasher;
+impl BuildHasher for NoopHashState {
+    type Hasher = NoopHasher;
 
     #[inline(always)]
     fn build_hasher(&self) -> Self::Hasher {
-        NoOpHasher { hash: 0 }
+        NoopHasher { hash: 0 }
     }
 
     #[inline(always)]
@@ -149,7 +149,7 @@ impl BuildHasher for NoOpHashState {
         Self: Sized,
         Self::Hasher: Hasher,
     {
-        let mut hasher = const { NoOpHasher { hash: 0 } };
+        let mut hasher = const { NoopHasher { hash: 0 } };
         x.hash(&mut hasher);
         hasher.hash
     }
@@ -273,8 +273,8 @@ mod tests {
 
     #[test]
     fn noop_typeid_hash() {
-        struct TestNoOpHasher(u64);
-        impl Hasher for TestNoOpHasher {
+        struct TestNoopHasher(u64);
+        impl Hasher for TestNoopHasher {
             fn finish(&self) -> u64 {
                 self.0
             }
@@ -287,7 +287,7 @@ mod tests {
         }
 
         let id = TypeId::of::<u32>();
-        let mut hasher = TestNoOpHasher(0);
+        let mut hasher = TestNoopHasher(0);
         id.hash(&mut hasher);
         core::hint::black_box(id);
     }

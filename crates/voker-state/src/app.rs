@@ -12,11 +12,11 @@ use crate::state::{StateTransition, StateTransitionSignal, StateTransitionSystem
 // -----------------------------------------------------------------------------
 // StatesPlugin
 
-#[derive(Default)]
 /// Registers state-transition processing into the main schedule order.
 ///
 /// This plugin ensures the [`StateTransition`] schedule runs before regular
 /// update logic and startup logic so queued transitions are applied early.
+#[derive(Default)]
 pub struct StatesPlugin;
 
 impl Plugin for StatesPlugin {

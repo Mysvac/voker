@@ -21,7 +21,7 @@ impl WorldId {
         static ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
         let next = ALLOCATOR
-            .fetch_update(Relaxed, Relaxed, |val| val.checked_add(1))
+            .try_update(Relaxed, Relaxed, |val| val.checked_add(1))
             .expect("too many worlds");
 
         // `1..usize::MAX`

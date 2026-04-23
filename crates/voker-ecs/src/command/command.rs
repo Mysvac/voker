@@ -17,7 +17,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 
 /// A [`World`] mutation.
 ///
-/// Should be used with [`Commands::push`](super::Commands::push).
+/// Should be used with [`Commands::queue`](super::Commands::queue).
 ///
 /// The `Output` associated type is the returned "output" of the command.
 ///
@@ -43,7 +43,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// }
 ///
 /// fn some_system(mut commands: Commands) {
-///     commands.push(AddToCounter(123));
+///     commands.queue(AddToCounter(123));
 /// }
 /// ```
 pub trait Command: Send + Sized + 'static {
@@ -127,7 +127,7 @@ pub trait Command: Send + Sized + 'static {
 
 /// A command which gets executed for a given [`Entity`].
 ///
-/// Should be used with [`EntityCommands::push`](super::EntityCommands::push).
+/// Should be used with [`EntityCommands::queue`](super::EntityCommands::queue).
 ///
 /// The `Output` associated type is the returned "output" of the command.
 ///
@@ -142,7 +142,7 @@ pub trait Command: Send + Sized + 'static {
 ///
 /// fn setup(mut commands: Commands) {
 ///     let mut entity_cmd = commands.spawn(());
-///     entity_cmd.push(insert_name);
+///     entity_cmd.queue(insert_name);
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {

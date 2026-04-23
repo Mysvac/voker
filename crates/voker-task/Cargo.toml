@@ -16,6 +16,9 @@ std = [
     "async-task/std",
 ]
 
+# Force single-threaded.
+single_threaded = []
+
 # Use async-io's implementation of block_on instead of futures-lite
 # Can only be used in std env.
 # This is preferred if your application uses async-io.
@@ -38,10 +41,15 @@ futures-lite = { version = "2.6", default-features = false, features = [ "alloc"
 async-channel = { version = "2.5", optional = true }
 async-io = { version = "2.6", optional = true }
 
+web-task = "1"
+
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64")))'.dependencies]
 async-channel = { version = "2.5", optional = true, features = [ "portable-atomic" ] }
 async-task = { version = "4.7", default-features = false, features = [ "portable-atomic" ] }
 atomic-waker = { version = "1", default-features = false, features = [ "portable-atomic" ] }
+
+# [target.'cfg(target_arch = "wasm32")'.dependencies]
+
 
 [lints]
 workspace = true

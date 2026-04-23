@@ -33,8 +33,9 @@ crate::cfg::switch! {
 pub fn thread_hash() -> u64 {
     use core::hash::Hasher;
 
-    struct NoOpHasher(u64);
-    impl Hasher for NoOpHasher {
+    struct NoopHasher(u64);
+
+    impl Hasher for NoopHasher {
         fn finish(&self) -> u64 {
             self.0
         }
@@ -50,7 +51,7 @@ pub fn thread_hash() -> u64 {
         }
     }
 
-    let mut hasher = NoOpHasher(0);
+    let mut hasher = NoopHasher(0);
     // For eliminating clippy hint
     hasher.write_u64(1);
 
@@ -73,14 +74,19 @@ use core::num::NonZeroUsize;
 /// environments (or when the std call fails) this returns `1`.
 pub fn available_parallelism() -> NonZeroUsize {
     crate::cfg::switch! {
+        crate::cfg::wasm => {
+            // TODO: Web Worker
+            #[expect(unsafe_code, reason = "`1` is non-zero")]
+            unsafe { NonZeroUsize::new_unchecked(1) }
+        }
         crate::cfg::std => {
             #[expect(unsafe_code, reason = "`1` is non-zero")]
             std::thread::available_parallelism()
-                .unwrap_or(unsafe{ NonZeroUsize::new_unchecked(1) })
+                .unwrap_or(unsafe { NonZeroUsize::new_unchecked(1) })
         }
         _ => {
             #[expect(unsafe_code, reason = "`1` is non-zero")]
-            unsafe{ NonZeroUsize::new_unchecked(1) }
+            unsafe { NonZeroUsize::new_unchecked(1) }
         }
     }
 }

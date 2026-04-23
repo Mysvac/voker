@@ -7,7 +7,7 @@ use crate::{Real, Time, Timer, TimerMode, Virtual};
 /// Run condition that is active on a regular time interval,
 /// using [`Time`] to advance the timer.
 ///
-/// The timer ticks at the rate of [`Time::relative_speed`].
+/// The timer ticks at the rate of [`Time<Virtual>::relative_speed`][crate::Virtual].
 pub fn on_timer(duration: Duration) -> impl FnMut(Res<Time>) -> bool + Clone {
     let mut timer = Timer::new(duration, TimerMode::Repeating);
     move |time: Res<Time>| {
@@ -31,7 +31,7 @@ pub fn on_real_timer(duration: Duration) -> impl FnMut(Res<Time<Real>>) -> bool 
 /// Run condition that is active *once* after the specified delay,
 /// using [`Time`] to advance the timer.
 ///
-/// The timer ticks at the rate of [`Time::relative_speed`].
+/// The timer ticks at the rate of [`Time<Virtual>::relative_speed`][crate::Virtual].
 pub fn once_after_delay(duration: Duration) -> impl FnMut(Res<Time>) -> bool + Clone {
     let mut timer = Timer::new(duration, TimerMode::Once);
     move |time: Res<Time>| {
@@ -55,7 +55,7 @@ pub fn once_after_real_delay(duration: Duration) -> impl FnMut(Res<Time<Real>>) 
 /// Run condition that is active *indefinitely* after the specified delay,
 /// using [`Time`] to advance the timer.
 ///
-/// The timer ticks at the rate of [`Time::relative_speed`].
+/// The timer ticks at the rate of [`Time<Virtual>::relative_speed`][crate::Virtual].
 pub fn repeating_after_delay(duration: Duration) -> impl FnMut(Res<Time>) -> bool + Clone {
     let mut timer = Timer::new(duration, TimerMode::Once);
     move |time: Res<Time>| {

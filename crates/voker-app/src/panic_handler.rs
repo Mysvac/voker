@@ -14,15 +14,18 @@ use crate::{App, Plugin};
 ///
 /// If you want to setup your own panic handler, you should disable this
 /// plugin from your plugin group:
+///
 /// ```no_run
 /// # use voker_app::{App, PanicHandlerPlugin, PluginGroup, PluginGroupBuilder};
 /// #
 /// # struct BasePlugins;
+/// #
 /// # impl PluginGroup for BasePlugins {
 /// #     fn builder(self) -> PluginGroupBuilder {
 /// #         PluginGroupBuilder::start::<Self>().add(PanicHandlerPlugin)
 /// #     }
 /// # }
+/// #
 /// fn main() {
 ///     App::new()
 ///         .add_plugins(BasePlugins.builder().disable::<PanicHandlerPlugin>())
@@ -33,13 +36,16 @@ use crate::{App, Plugin};
 pub struct PanicHandlerPlugin;
 
 impl Plugin for PanicHandlerPlugin {
-    fn build(&self, _app: &mut App) {
+    fn build(&self, _: &mut App) {
         #[cfg(feature = "std")]
         {
             static SET_HOOK: std::sync::Once = std::sync::Once::new();
 
             SET_HOOK.call_once(|| {
                 voker_cfg::switch! {
+                    #[cfg(target_arch = "wasm32")] => {
+                        std::panic::set_hook(alloc::boxed::Box::new(console_error_panic_hook::hook));
+                    }
                     voker_ecs::cfg::backtrace => {
                         let current_hook = std::panic::take_hook();
                         std::panic::set_hook(alloc::boxed::Box::new(

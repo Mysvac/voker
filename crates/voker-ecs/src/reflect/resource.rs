@@ -32,8 +32,6 @@ pub struct ReflectResourceFns {
     pub reflect: for<'w> fn(&'w World) -> Option<&'w dyn Reflect>,
     /// Returns mutable reflected resource access when present.
     pub reflect_mut: for<'w> fn(&'w mut World) -> Option<Mut<'w, dyn Reflect>>,
-    /// Copies resource value from source world to destination world.
-    pub copy: fn(&World, &mut World, &TypeRegistry),
     /// Registers the resource type and returns `ResourceId`.
     pub register_resource: fn(&mut World) -> ResourceId,
 }
@@ -88,17 +86,6 @@ impl ReflectResource {
         (self.0.reflect_mut)(world)
     }
 
-    /// Copies resource value from source world into destination world.
-    #[inline]
-    pub fn copy(
-        &self,
-        source_world: &World,
-        destination_world: &mut World,
-        registry: &TypeRegistry,
-    ) {
-        (self.0.copy)(source_world, destination_world, registry)
-    }
-
     /// Registers this resource type in the world.
     #[inline]
     pub fn register_resource(&self, world: &mut World) -> ResourceId {
@@ -144,15 +131,6 @@ where
                     .get_resource_mut::<T>()
                     .map(|v| v.map_type(Reflect::as_mut_reflect))
             },
-            copy: |src_world, dst_world, registry| {
-                let source = src_world
-                    .get_resource::<T>()
-                    .unwrap_or_else(|| cannot_copy(DebugName::type_name::<T>()));
-
-                let reflected = source as &dyn Reflect;
-                let value = from_reflect_with_fallback::<T>(dst_world, reflected, registry);
-                dst_world.insert_resource::<T>(value);
-            },
             register_resource: World::register_resource::<T>,
         })
     }
@@ -162,10 +140,4 @@ where
 #[inline(never)]
 fn cannot_apply(name: DebugName) -> ! {
     panic!("cannot apply reflected resource `{name}`: resource is missing")
-}
-
-#[cold]
-#[inline(never)]
-fn cannot_copy(name: DebugName) -> ! {
-    panic!("cannot copy reflected resource `{name}`: source world does not contain it")
 }

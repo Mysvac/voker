@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
+use core::fmt::Debug;
 use core::time::Duration;
+use voker_ecs::reflect::ReflectResource;
 use voker_ecs::world::World;
+use voker_reflect::Reflect;
 
 use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::command::{CommandQueue, Commands};
@@ -13,8 +16,10 @@ use crate::Time;
 // DelayedCommandQueue
 
 /// A delayed command queue that should be submitted at `submit_at`.
+#[derive(Reflect, Debug)]
 pub struct DelayedCommandQueue {
     pub submit_at: Duration,
+    #[reflect(ignore, default)]
     pub queue: CommandQueue,
 }
 
@@ -89,9 +94,19 @@ impl<'w, 's> Drop for DelayedCommands<'w, 's> {
 // DelayedCommandQueues
 
 /// Resource that stores delayed command queues.
-#[derive(Resource, Default)]
+#[derive(Reflect, Resource, Default)]
+#[reflect(NotCloneable, Default, Debug)]
+#[type_data(ReflectResource)]
 pub struct DelayedCommandQueues {
     pub(crate) queues: Vec<DelayedCommandQueue>,
+}
+
+impl Debug for DelayedCommandQueues {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("DelayedCommandQueues")
+            .field(&self.queues.as_slice())
+            .finish()
+    }
 }
 
 /// Appends command queues that reached their due time.

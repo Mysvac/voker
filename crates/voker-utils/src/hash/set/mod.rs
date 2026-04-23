@@ -20,5 +20,5 @@ pub use hb::{Entry, OccupiedEntry, VacantEntry};
 // Exports
 
 pub use fixed::HashSet;
-pub use noop::NoOpHashSet;
+pub use noop::NoopHashSet;
 pub use sparse::SparseHashSet;
