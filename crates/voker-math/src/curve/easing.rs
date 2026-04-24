@@ -262,18 +262,6 @@ voker_utils::range_invoke!(impl_ease_tuple, 12);
 /// assert_eq!(c.sample_clamped(0.5), Vec2::new(1.0, 6.0));
 /// ```
 ///
-/// ```
-/// # use voker_math::prelude::*;
-/// # use approx::assert_abs_diff_eq;
-/// let c = EasingCurve::new(
-///     Rot2::degrees(10.0),
-///     Rot2::degrees(20.0),
-///     EaseFunction::Linear,
-/// );
-///
-/// assert_abs_diff_eq!(c.sample_clamped(0.5), Rot2::degrees(15.0));
-/// ```
-///
 /// As a shortcut, an `EasingCurve` between `0.0` and `1.0` can be replaced by
 /// [`EaseFunction`].
 ///

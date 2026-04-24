@@ -73,7 +73,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                 SystemObject::Action { system, .. } => {
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run_raw((), world.unsafe_world()).unwrap_or_else(|e| {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -83,7 +83,7 @@ impl SystemExecutor for SingleThreadedExecutor {
 
                     #[cfg(feature = "std")]
                     if let Err(payload) = ::std::panic::catch_unwind(func) {
-                        voker_utils::cold_path();
+                        core::hint::cold_path();
                         log::error!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     }
@@ -102,7 +102,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                 SystemObject::Condition { system, .. } => {
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run_raw((), world.unsafe_world()).unwrap_or_else(|e| {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -113,7 +113,7 @@ impl SystemExecutor for SingleThreadedExecutor {
 
                     #[cfg(feature = "std")]
                     let condition = ::std::panic::catch_unwind(func).unwrap_or_else(|payload| {
-                        voker_utils::cold_path();
+                        core::hint::cold_path();
                         log::error!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     });

@@ -17,7 +17,8 @@ use crate::ident::AssetSourceId;
 /// Normalizes the path by collapsing all occurrences of '.' and '..' dot-segments
 /// where possible as per [RFC 1808](https://datatracker.ietf.org/doc/html/rfc1808)
 pub(crate) fn normalize_path(path: &Path) -> PathBuf {
-    let mut result_path = PathBuf::new();
+    let size_hint = path.as_os_str().len();
+    let mut result_path = PathBuf::with_capacity(size_hint);
     for elt in path.iter() {
         if elt == "." {
             // Skip

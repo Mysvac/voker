@@ -122,7 +122,7 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
 
     unsafe {
         if let Err(err) = (*system).run_raw(on, world) {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let handler = state
                 .error_handler
                 .unwrap_or_else(|| world.read_only().fallback_error_handler().0);

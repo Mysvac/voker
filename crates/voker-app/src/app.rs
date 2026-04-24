@@ -195,7 +195,7 @@ impl App {
         use core::mem::replace;
 
         if self.is_building_plugins() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("App::run() was called while a plugin was building.");
         }
 
@@ -422,7 +422,7 @@ impl App {
             self.plugins_state(),
             PluginsState::Finished | PluginsState::Cleaned
         ) {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("Plugins cannot be added after App::finish() or App::cleanup().");
         }
         plugins.add_to_app(self);
@@ -521,7 +521,7 @@ fn run_once(mut app: App) -> AppExit {
     app.build_plugins();
 
     if app.is_building_plugins() {
-        voker_utils::cold_path();
+        core::hint::cold_path();
         panic!("App::run_once() was called while a plugin was building.");
     }
 

@@ -76,7 +76,7 @@ impl Plugin for ScheduleRunnerPlugin {
             app.build_plugins();
 
             if app.is_building_plugins() {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 panic!(
                     "ScheduleRunnerPlugin: `App::run()` was called while a plugin was building."
                 );

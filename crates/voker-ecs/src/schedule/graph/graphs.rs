@@ -183,7 +183,7 @@ impl<const DIRECTED: bool, N: GraphNode> Graph<DIRECTED, N> {
         let exist2 = if a != b {
             self.remove_link(b, a, Incoming)
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             exist1
         };
         let weight = self.edges.remove(&Self::edge_key(a, b));

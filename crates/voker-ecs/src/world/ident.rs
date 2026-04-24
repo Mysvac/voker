@@ -1,7 +1,7 @@
 use core::fmt::{Debug, Display};
 use core::hash::Hash;
 use core::num::NonZeroUsize;
-use voker_os::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use voker_os::atomic::{AtomicUsize, Ordering::Relaxed};
 
 // -----------------------------------------------------------------------------
 // WorldId

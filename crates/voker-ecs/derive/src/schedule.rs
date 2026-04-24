@@ -81,10 +81,10 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
 
         (
             quote! {
-                ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
+                __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
             },
             quote! {
-                ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+                __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
             },
         )
     } else {
@@ -101,7 +101,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                 }
 
                 quote! {
-                    ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
+                    __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, 0>>::new()))
                 }
             }
             Data::Enum(item) => {
@@ -122,7 +122,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                     let tag = index;
                     arms.push(quote! {
                         Self::#variant_ident => {
-                            ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
+                            __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_begin_<Self, #tag>>::new()))
                         }
                     });
                 }
@@ -146,7 +146,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
         let end_body = match &ast.data {
             Data::Struct(_) => {
                 quote! {
-                    ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
+                    __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, 0>>::new()))
                 }
             }
             Data::Enum(item) => {
@@ -157,7 +157,7 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
                     let tag = index;
                     arms.push(quote! {
                         Self::#variant_ident => {
-                            ::alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
+                            __alloc::boxed::Box::new(#into_system_::into_system(<#system_set_end_<Self, #tag>>::new()))
                         }
                     });
                 }
@@ -176,19 +176,19 @@ pub(crate) fn impl_derive_system_set(ast: DeriveInput) -> TokenStream {
 
     quote! {
         const _:() = {
-            extern crate alloc;
+            extern crate alloc as __alloc; // for Box and Vec
 
             impl #impl_generics #system_set_ for #type_ident #ty_generics #where_clause {
-                fn begin(&self) -> ::alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
+                fn begin(&self) -> __alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
                     #begin_body
                 }
 
-                fn end(&self) -> ::alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
+                fn end(&self) -> __alloc::boxed::Box<dyn #system_<Input = (), Output = ()>> {
                     #end_body
                 }
 
-                fn dyn_clone(&self) -> ::alloc::boxed::Box<dyn #system_set_> {
-                    ::alloc::boxed::Box::new(#CloneFP::clone(self))
+                fn dyn_clone(&self) -> __alloc::boxed::Box<dyn #system_set_> {
+                    __alloc::boxed::Box::new(#CloneFP::clone(self))
                 }
             }
         };

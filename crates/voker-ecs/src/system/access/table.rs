@@ -120,7 +120,7 @@ impl AccessTable {
             self.world_mut = true;
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -136,7 +136,7 @@ impl AccessTable {
             }
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -165,7 +165,7 @@ impl AccessTable {
             }
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -180,7 +180,7 @@ impl AccessTable {
             self.res_writing.grow_and_insert(index);
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }

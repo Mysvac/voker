@@ -23,7 +23,7 @@ impl<N: GraphNode> DiGraph<N> {
         // Check explicitly for self-edges.
         // `iter_sccs` won't report them as cycles because they still form components of one node.
         if let Some((node, _)) = self.all_edges().find(|(x, y)| x == y) {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(ToposortError::Loop(node));
         }
 
@@ -43,7 +43,7 @@ impl<N: GraphNode> DiGraph<N> {
             // If an SCC contains more than one node,
             // there must be at least one cycle within them.
             if scc.len() > 1 {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 sccs_with_cycles.push(Vec::from(scc));
             }
         }
@@ -53,7 +53,7 @@ impl<N: GraphNode> DiGraph<N> {
             top_sorted_nodes.reverse();
             Ok(top_sorted_nodes)
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let mut cycles = Vec::new();
             for scc in &sccs_with_cycles {
                 cycles.append(&mut self.simple_cycles_in_component(scc));

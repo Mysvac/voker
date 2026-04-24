@@ -2,8 +2,6 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use std::path::{Path, PathBuf};
 
-use futures_io::AsyncWrite;
-use futures_lite::AsyncWriteExt;
 use thiserror::Error;
 use voker_ecs::error::GameError;
 
@@ -14,16 +12,22 @@ use voker_ecs::error::GameError;
 #[game_error(severity = "error")]
 #[non_exhaustive]
 pub enum AssetWriterError {
-    #[error("The Path is invalid: {}", _0.display())]
-    InvalidPath(PathBuf),
-    #[error("Encountered an I/O error while loading asset: {0}")]
+    #[error("Path not found: {}", _0.display())]
+    NotFound(PathBuf),
+    #[error("Filename is invalid or missing: {}", _0.display())]
+    InvalidFilename(PathBuf),
+    #[error("Expected an empty directory, but it's not empty: {}", _0.display())]
+    DirectoryNotEmpty(PathBuf),
+    #[error("Encountered an I/O error while writing asset: {0}")]
     Io(std::io::Error),
 }
 
 impl Clone for AssetWriterError {
     fn clone(&self) -> Self {
         match self {
-            Self::InvalidPath(arg) => Self::InvalidPath(arg.clone()),
+            Self::NotFound(arg) => Self::NotFound(arg.clone()),
+            Self::InvalidFilename(arg) => Self::InvalidFilename(arg.clone()),
+            Self::DirectoryNotEmpty(arg) => Self::DirectoryNotEmpty(arg.clone()),
             Self::Io(arg) => {
                 // For IO errors, we only compare types,
                 // so `Clone` guarantees equality invariance.
@@ -40,7 +44,9 @@ impl PartialEq for AssetWriterError {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::InvalidPath(p1), Self::InvalidPath(p2)) => *p1 == *p2,
+            (Self::NotFound(p1), Self::NotFound(p2)) => p1 == p2,
+            (Self::InvalidFilename(p1), Self::InvalidFilename(p2)) => p1 == p2,
+            (Self::DirectoryNotEmpty(p1), Self::DirectoryNotEmpty(p2)) => p1 == p2,
             (Self::Io(e1), Self::Io(e2)) => e1.kind() == e2.kind(),
             _ => false,
         }
@@ -58,6 +64,9 @@ impl From<std::io::Error> for AssetWriterError {
 
 // -----------------------------------------------------------------------------
 // Writer
+
+pub use futures_io::AsyncWrite;
+pub use futures_lite::AsyncWriteExt;
 
 pub trait Writer: AsyncWrite + Unpin + Send + Sync {
     #[inline]
@@ -78,8 +87,6 @@ impl Writer for Box<dyn Writer + '_> {
         self
     }
 }
-
-pub use futures_lite::AsyncWriteExt as WriterExt;
 
 // -----------------------------------------------------------------------------
 // AssetWriter

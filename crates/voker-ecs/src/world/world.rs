@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use core::sync::atomic::Ordering;
 use voker_task::ComputeTaskPool;
 
-use voker_os::sync::atomic::AtomicU32;
+use voker_os::atomic::AtomicU32;
 use voker_os::utils::CachePadded;
 
 use super::WorldId;

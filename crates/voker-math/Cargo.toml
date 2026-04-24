@@ -61,11 +61,9 @@ rand_distr = { version = "0.6", optional = true }
 
 [dev-dependencies]
 approx = "0.5"
-# Supply rngs for examples and tests
 rand = "0.10"
 chacha20 = { version = "0.10.0", default-features = false, features = ["rng"] }
 glam = { version = "0.32.0", default-features = false, features = ["approx"] }
-
 
 [lints]
 workspace = true

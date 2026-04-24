@@ -69,7 +69,7 @@ pub trait Relationship: Component + Sized {
         let target_entity = entity_ref.get::<Self>().unwrap().related_target();
 
         if !Self::ALLOW_SELF_REFERENTIAL && target_entity == entity {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             log::warn!(
                 "{}The {}({target_entity:?}) relationship on entity {entity:?} points to itself. This invalid \
                 relationship has been removed.\nIf this is intended behavior self-referential relations can \
@@ -106,7 +106,7 @@ pub trait Relationship: Component + Sized {
                 }
             });
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             log::warn!(
                 "{}The {}({target_entity:?}) linked on entity {entity:?} relates to an entity \
                 that does not exist. This invalid link has been removed.",

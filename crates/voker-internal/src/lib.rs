@@ -1,7 +1,6 @@
 //! Features integration layer
 #![no_std]
 
-pub use voker_asset as asset;
 pub use voker_cfg as cfg;
 pub use voker_ecs as ecs;
 pub use voker_inventory as inventory;
@@ -12,6 +11,9 @@ pub use voker_reflect as reflect;
 pub use voker_state as state;
 pub use voker_task as task;
 pub use voker_utils as utils;
+
+#[cfg(feature = "voker-asset")]
+pub use voker_asset as asset;
 
 #[cfg(feature = "voker-log")]
 pub use voker_log as log;

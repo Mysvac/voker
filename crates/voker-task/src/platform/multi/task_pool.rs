@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use voker_os::thread::available_parallelism;
 use voker_os::utils::SegQueue;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 use futures_lite::FutureExt;
 use async_task::FallibleTask;
 
@@ -671,7 +671,7 @@ impl TaskPool {
                         Err(payload) => std::panic::resume_unwind(payload),
                     }
                 } else {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     panic!("Failed to catch panic!");
                 }
             }

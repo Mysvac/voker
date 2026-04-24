@@ -479,7 +479,7 @@ impl Schedule {
                     }
                 }
             } else {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 unreachable!(
                     "A non-existent uninitialized system: {:?}.",
                     self.allocator.get_id(key)
@@ -687,7 +687,7 @@ impl Schedule {
     /// the first rebuild.
     pub fn update(&mut self, world: &mut World) {
         if self.is_changed {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             // self.recycle_schedule();
             self.init_systems(world);
             self.build_schedule();
@@ -695,7 +695,7 @@ impl Schedule {
         }
 
         if !self.executor_initialized {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             self.executor.init(&self.schedule);
             self.executor_initialized = true;
         }

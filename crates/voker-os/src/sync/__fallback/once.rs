@@ -7,7 +7,7 @@ use core::cell::{Cell, UnsafeCell};
 use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
-use crate::sync::atomic::AtomicU8;
+use crate::atomic::AtomicU8;
 
 /// Fallback implementation of `OnceState` from the standard library.
 ///

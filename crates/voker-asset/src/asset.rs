@@ -66,7 +66,9 @@ impl VisitAssetDependencies for ErasedHandle {
 impl VisitAssetDependencies for Option<ErasedHandle> {
     #[inline]
     fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
-        self.as_ref().map(|handle| visit(handle.id()));
+        if let Some(handle) = self.as_ref() {
+            visit(handle.id())
+        }
     }
 }
 

@@ -1,5 +1,3 @@
-use core::task::Context;
-
 use alloc::vec::Vec;
 
 use atomicow::CowArc;
@@ -55,8 +53,9 @@ impl<'a> LoadContext<'a> {
                 ErasedAssetId::Index { type_id, index } => {
                     self.dependencies.insert(TypedAssetIndex { index, type_id });
                 }
-                // UUID assets can't be loaded anyway, so just ignore this ID.
-                ErasedAssetId::Uuid { .. } => return,
+                ErasedAssetId::Uuid { .. } => {
+                    // UUID assets can't be loaded anyway, so just ignore this ID.
+                }
             };
         });
 

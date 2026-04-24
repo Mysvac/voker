@@ -4,7 +4,7 @@ use voker_app::{DuplicateStrategy, prelude::*};
 use voker_ecs::borrow::Res;
 use voker_ecs::world::World;
 use voker_ecs::{borrow::ResMut, derive::Resource};
-use voker_os::sync::atomic::AtomicU32;
+use voker_os::atomic::AtomicU32;
 
 use crate::{AppDiagnosticExt, DEFAULT_MAX_HISTORY_LENGTH};
 use crate::{Diagnostic, DiagnosticPath, DiagnosticsStore};

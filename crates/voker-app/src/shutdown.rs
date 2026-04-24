@@ -1,7 +1,8 @@
-use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
 
 use voker_ecs::message::MessageWriter;
-use voker_os::{sync::atomic::Ordering, utils::SpinLock};
+use voker_os::atomic::AtomicU32;
+use voker_os::utils::SpinLock;
 
 use crate::{App, AppExit, Plugin, Update};
 

@@ -358,7 +358,7 @@ impl<T> BlockList<T> {
     /// ```
     pub fn pop_front(&mut self) -> Option<T> {
         if self.head_ptr.is_null() {
-            crate::cold_path();
+            core::hint::cold_path();
             return None;
         }
 
@@ -408,7 +408,7 @@ impl<T> BlockList<T> {
     /// ```
     pub fn front(&self) -> Option<&T> {
         if self.head_ptr.is_null() {
-            crate::cold_path();
+            core::hint::cold_path();
             return None;
         }
 
@@ -425,7 +425,7 @@ impl<T> BlockList<T> {
     /// O(1) time complexity.
     pub fn front_mut(&mut self) -> Option<&mut T> {
         if self.head_ptr.is_null() {
-            crate::cold_path();
+            core::hint::cold_path();
             return None;
         }
 

@@ -611,7 +611,7 @@ impl<'w> EntityCloner<'w> {
             let arche_id = match world.entities.locate(source) {
                 Ok(location) => location.arche_id,
                 Err(e) => {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     log::warn!("Try Clone Entity `{source}` but it is not spawned. {e}. {caller}");
                     continue;
                 }

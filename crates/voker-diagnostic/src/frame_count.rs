@@ -4,7 +4,7 @@ use voker_app::{DuplicateStrategy, prelude::*};
 use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::resource::Resource;
 use voker_ecs::system::Local;
-use voker_os::sync::atomic::AtomicU32;
+use voker_os::atomic::AtomicU32;
 use voker_os::time::Instant;
 
 use crate::{AppDiagnosticExt, DEFAULT_MAX_HISTORY_LENGTH};

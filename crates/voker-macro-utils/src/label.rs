@@ -29,11 +29,11 @@ pub fn derive_label(ast: DeriveInput, trait_path: TokenStream2) -> TokenStream {
 
     quote! {
         const _:() = {
-            extern crate alloc;
+            extern crate alloc as __alloc;
 
             impl #impl_generics #trait_path for #type_ident #ty_generics #where_clause {
-                fn dyn_clone(&self) -> alloc::boxed::Box<dyn #trait_path> {
-                    alloc::boxed::Box::new(#CloneFP::clone(self))
+                fn dyn_clone(&self) -> __alloc::boxed::Box<dyn #trait_path> {
+                    __alloc::boxed::Box::new(#CloneFP::clone(self))
                 }
             }
         };

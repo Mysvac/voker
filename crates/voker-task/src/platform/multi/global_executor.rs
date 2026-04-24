@@ -19,7 +19,7 @@ use futures_lite::future::poll_fn;
 use voker_os::sync::{Mutex, PoisonError};
 use voker_os::utils::{CachePadded, ListQueue};
 use voker_os::utils::ArrayQueue;
-use voker_os::sync::atomic::{AtomicBool, Ordering};
+use voker_os::atomic::{AtomicBool, Ordering};
 use voker_utils::extra::ArrayDeque;
 
 use super::XorShift64Star;
@@ -526,7 +526,7 @@ impl Worker {
             return Some(runnable);
         }
 
-        voker_utils::cold_path();
+        core::hint::cold_path();
         self.steal_global_for_work().or_else(|| self.steal_worker_for_work())
     }
 

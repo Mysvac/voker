@@ -5,7 +5,7 @@ members = [ "crates/*" ]
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/voker-engine/voker"
 
@@ -22,17 +22,26 @@ repository.workspace = true
 default = [ "default_app", "default_dev", "default_platform" ]
 
 default_app = [
+  "voker-asset",
   "voker-log",
 ]
 
 default_dev = [
     "debug",
     "backtrace",
+    "file_watcher",
+    "voker-diagnostic",
 ]
 
 default_platform = [
   "std",
+  "http",
+  "https",
   "sysinfo_plugin",
+]
+
+default_no_std = [
+  "libm",
 ]
 
 # Enable dynamic linking
@@ -41,24 +50,12 @@ dynlib = ["dep:voker-dylib", "voker-internal/dynlib"]
 # support std
 std = ["voker-internal/std"]
 
-# Use the `block_on` function of `async_io`.
-# Need to enable `std`.
-# Note that `future-lite::block_on` is default impl in STD Mode.
-async_io = ["voker-internal/async_io"]
+# Output the type name and file location information in the log.
+debug = ["voker-internal/debug"]
 
 # Track stack information during reflection serialization and error handling.
 # Need to enable `std`.
 backtrace = ["voker-internal/backtrace"]
-
-# Uses the `libm` maths library instead of the one provided in `std` and `core`.
-libm = ["voker-internal/libm"]
-
-# Enable libm mathematical functions as a fallback for no_std environments.
-# Can be overridden with std feature.
-nostd-libm = ["voker-internal/nostd-libm"]
-
-# Output the type name and file location information in the log.
-debug = ["voker-internal/debug"]
 
 # Collect document information of reflection types.
 reflect_docs = ["voker-internal/reflect_docs"]
@@ -66,6 +63,11 @@ reflect_docs = ["voker-internal/reflect_docs"]
 # Enable `sysinfo` diagnostic (e.g. CPU and Memory usage).
 # Need to enable `std`.
 sysinfo_plugin = ["voker-internal/sysinfo_plugin"]
+
+# Use the `block_on` function of `async_io`.
+# Need to enable `std`.
+# Note that `future-lite::block_on` is default impl in STD Mode.
+async_io = ["voker-internal/async_io"]
 
 # Enable `tracing` crate for better debugging and error information.
 # Need to enable `std`.
@@ -75,11 +77,29 @@ trace = ["voker-internal/trace"]
 # Need to enable `std`.
 trace_tracy_memory = ["voker-internal/trace_tracy_memory"]
 
+# Uses the `libm` maths library instead of the one provided in `std` and `core`.
+libm = ["voker-internal/libm"]
+
+# Enable libm mathematical functions as a fallback for no_std environments.
+# Can be overridden with std feature.
+nostd-libm = ["voker-internal/nostd-libm"]
+
 # Enable assertions to check the validity of parameters passed to glam
 glam_assert = ["voker-internal/glam_assert"]
 
 # Enable assertions in debug builds to check the validity of parameters passed to glam
 debug_glam_assert = ["voker-internal/debug_glam_assert"]
+
+# Enable HTTP network assets
+http = ["voker-internal/http"]
+
+# Enable HTTPS network assets
+https = ["voker-internal/https"]
+
+# Enable watcher for asset files and embedded asset.
+file_watcher = ["voker-internal/file_watcher"]
+
+voker-asset = ["voker-internal/voker-asset"]
 
 voker-log = ["voker-internal/voker-log"]
 

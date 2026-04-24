@@ -43,8 +43,8 @@ use core::ptr;
 use core::slice;
 use core::sync::atomic::Ordering;
 
-use voker_os::sync::Arc;
-use voker_os::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64};
+use voker_os::Arc;
+use voker_os::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64};
 use voker_os::utils::Backoff;
 use voker_utils::vec::ArrayVec;
 

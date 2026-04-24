@@ -4,11 +4,11 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::pin::Pin;
 use core::task::Poll;
-use futures_io::{AsyncRead, AsyncSeek, AsyncWrite};
-use futures_lite::Stream;
 use std::path::{Path, PathBuf};
 
-use voker_os::sync::Arc;
+use futures_io::{AsyncRead, AsyncSeek, AsyncWrite};
+use futures_lite::Stream;
+use voker_os::Arc;
 use voker_os::sync::{PoisonError, RwLock};
 use voker_utils::hash::HashMap;
 use voker_utils::vec::FastVec;
@@ -24,37 +24,30 @@ use super::{Reader, ReaderNotSeekableError, SeekableReader};
 
 #[derive(Clone)]
 pub enum Value {
-    Borrow(Arc<Vec<u8>>),
+    Borrow(Arc<[u8]>),
     Static(&'static [u8]),
 }
 
 impl Debug for Value {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Borrow(arg) => f
-                .debug_struct("Value::Borrow")
-                .field("ptr", &<[u8]>::as_ptr(arg))
-                .field("len", &<[u8]>::len(arg))
-                .finish(),
-            Self::Static(arg) => f
-                .debug_struct("Value::Static")
-                .field("ptr", &<[u8]>::as_ptr(arg))
-                .field("len", &<[u8]>::len(arg))
-                .finish(),
+            Self::Borrow(arg) => {
+                let ptr = <[u8]>::as_ptr(arg);
+                let size = <[u8]>::len(arg);
+                write!(f, "Value({ptr:p}, {size}B)")
+            }
+            Self::Static(arg) => {
+                let ptr = <[u8]>::as_ptr(arg);
+                let size = <[u8]>::len(arg);
+                write!(f, "Value({ptr:p}, {size}B)")
+            }
         }
     }
 }
 
-impl From<Vec<u8>> for Value {
+impl From<Arc<[u8]>> for Value {
     #[inline]
-    fn from(value: Vec<u8>) -> Self {
-        Self::Borrow(Arc::new(value))
-    }
-}
-
-impl From<Arc<Vec<u8>>> for Value {
-    #[inline]
-    fn from(value: Arc<Vec<u8>>) -> Self {
+    fn from(value: Arc<[u8]>) -> Self {
         Self::Borrow(value)
     }
 }
@@ -84,14 +77,16 @@ pub struct Data {
 
 impl Data {
     /// The path that this data was written to.
+    #[inline]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// The value in bytes that was written here.
+    #[inline]
     pub fn value(&self) -> &[u8] {
         match &self.value {
-            Value::Borrow(vec) => vec,
+            Value::Borrow(value) => value,
             Value::Static(value) => value,
         }
     }
@@ -121,25 +116,10 @@ impl Dir {
         })))
     }
 
-    #[inline]
-    pub fn validate_dir_path(path: &Path) -> bool {
-        path.components()
-            .all(|c| !matches!(c, std::path::Component::Prefix(_)))
-    }
-
-    #[inline]
-    pub fn validate_file_path(path: &Path) -> bool {
-        if let Some(parent) = path.parent() {
-            Dir::validate_dir_path(parent) && path.file_name().is_some()
-        } else {
-            path.file_name().is_some()
-        }
-    }
-
     /// - Get or create a dir.
     /// - `self` must be the Root Dir, otherwise it's UB (the path of new dir may incorrect).
-    /// - `.` and `..` is invalid, but non-existent parent will be ignore and log a warning.
-    /// - the `path` should not contains `Prefix` (e.g. `C:`), otherwise this will panic.
+    /// - `.` and `..` is invalid, but non-existent parent will be ignored and log a warning.
+    /// - `Prefix` (e.g. `C:`) will be ignored and log a warning.
     pub fn resolve_dir(&self, path: &Path) -> Dir {
         let mut dir = self.clone();
 
@@ -164,6 +144,7 @@ impl Dir {
                     if let Some(parent) = data.pop() {
                         dir = parent;
                     } else {
+                        core::hint::cold_path();
                         tracing::warn!(
                             "Parent directory is non-existent, ignoring '..' component: `{}`.",
                             path.display()
@@ -185,9 +166,13 @@ impl Dir {
                         .clone();
                     dir = next_dir;
                 }
-                _ => {
+                std::path::Component::Prefix(prefix) => {
                     core::hint::cold_path();
-                    unreachable!("Path Prefix is unsupported: `{}`.", path.display())
+                    tracing::warn!(
+                        "Prefix is unsupport, ignoring '{:?}' component: `{}`.",
+                        prefix.as_os_str(),
+                        path.display()
+                    )
                 }
             }
         }
@@ -244,14 +229,14 @@ impl Dir {
     /// - the `path` should not contains `Prefix` (e.g. `C:`), otherwise this will panic.
     /// - the `path` should contains file_name, otherwise this will panic.
     pub fn insert_asset_text(&self, path: &Path, asset: &str) {
-        self.insert_asset(path, asset.as_bytes().to_vec());
+        self.insert_asset(path, Arc::<[u8]>::from(asset.as_bytes()));
     }
 
     /// - `self` must be the Root Dir, otherwise it's UB (the path of new dir may incorrect).
     /// - the `path` should not contains `Prefix` (e.g. `C:`), otherwise this will panic.
     /// - the `path` should contains file_name, otherwise this will panic.
     pub fn insert_meta_text(&self, path: &Path, asset: &str) {
-        self.insert_meta(path, asset.as_bytes().to_vec());
+        self.insert_meta(path, Arc::<[u8]>::from(asset.as_bytes()));
     }
 
     /// - self can be not-root dir, then the input should be relative path.
@@ -553,7 +538,8 @@ impl AsyncWrite for DataWriter {
         self: Pin<&mut Self>,
         _: &mut core::task::Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let value = self.current_data.clone();
+        let data = self.current_data.as_slice();
+        let value = Arc::<[u8]>::from(data);
         let path = &self.path;
         if self.is_meta_writer {
             self.dir.insert_meta(path, value);
@@ -583,9 +569,8 @@ pub struct MemoryAssetWriter {
 
 impl AssetWriter for MemoryAssetWriter {
     async fn write<'a>(&'a self, path: &'a Path) -> Result<impl Writer + 'a, AssetWriterError> {
-        if !Dir::validate_file_path(path) {
-            core::hint::cold_path();
-            return Err(AssetWriterError::InvalidPath(path.to_path_buf()));
+        if path.file_name().is_none() {
+            return Err(AssetWriterError::InvalidFilename(path.to_path_buf()));
         }
         Ok(DataWriter {
             dir: self.root.clone(),
@@ -599,9 +584,8 @@ impl AssetWriter for MemoryAssetWriter {
         &'a self,
         path: &'a Path,
     ) -> Result<impl Writer + 'a, AssetWriterError> {
-        if !Dir::validate_file_path(path) {
-            core::hint::cold_path();
-            return Err(AssetWriterError::InvalidPath(path.to_path_buf()));
+        if path.file_name().is_none() {
+            return Err(AssetWriterError::InvalidFilename(path.to_path_buf()));
         }
         Ok(DataWriter {
             dir: self.root.clone(),
@@ -613,18 +597,14 @@ impl AssetWriter for MemoryAssetWriter {
 
     async fn remove<'a>(&'a self, path: &'a Path) -> Result<(), AssetWriterError> {
         if self.root.remove_asset(path).is_none() {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::NotFound(path.to_path_buf()));
         }
         Ok(())
     }
 
     async fn remove_meta<'a>(&'a self, path: &'a Path) -> Result<(), AssetWriterError> {
         if self.root.remove_meta(path).is_none() {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::NotFound(path.to_path_buf()));
         }
         Ok(())
     }
@@ -634,18 +614,18 @@ impl AssetWriter for MemoryAssetWriter {
         old_path: &'a Path,
         new_path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let Some(old_asset) = self.root.get_asset(old_path) else {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
-        };
-        if old_path == new_path {
-            return Ok(());
+        if new_path.file_name().is_none() {
+            return Err(AssetWriterError::InvalidFilename(new_path.to_path_buf()));
         }
-        self.root.insert_asset(new_path, old_asset.value);
-        // Remove the asset after instead of before since otherwise there'd be a
-        // moment where the Dir is unlocked and missing both the old and new paths.
-        self.root.remove_asset(old_path);
+        let Some(old_asset) = self.root.get_asset(old_path) else {
+            return Err(AssetWriterError::NotFound(old_path.to_path_buf()));
+        };
+        if old_path != new_path {
+            // Remove the asset after instead of before since otherwise there'd be a
+            // moment where the Dir is unlocked and missing both the old and new paths.
+            self.root.insert_asset(new_path, old_asset.value);
+            self.root.remove_asset(old_path);
+        }
         Ok(())
     }
 
@@ -654,52 +634,44 @@ impl AssetWriter for MemoryAssetWriter {
         old_path: &'a Path,
         new_path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let Some(old_asset) = self.root.get_meta(old_path) else {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
-        };
-        if old_path == new_path {
-            return Ok(());
+        if new_path.file_name().is_none() {
+            return Err(AssetWriterError::InvalidFilename(new_path.to_path_buf()));
         }
-        self.root.insert_meta(new_path, old_asset.value);
-        // Remove the meta after instead of before since otherwise there'd be a
-        // moment where the Dir is unlocked and missing both the old and new paths.
-        self.root.remove_meta(old_path);
+        let Some(old_asset) = self.root.get_meta(old_path) else {
+            return Err(AssetWriterError::NotFound(old_path.to_path_buf()));
+        };
+
+        if old_path != new_path {
+            // Remove the meta after instead of before since otherwise there'd be a
+            // moment where the Dir is unlocked and missing both the old and new paths.
+            self.root.insert_meta(new_path, old_asset.value);
+            self.root.remove_meta(old_path);
+        }
+
         Ok(())
     }
 
     async fn create_directory<'a>(&'a self, path: &'a Path) -> Result<(), AssetWriterError> {
-        if !Dir::validate_dir_path(path) {
-            core::hint::cold_path();
-            return Err(AssetWriterError::InvalidPath(path.to_path_buf()));
-        }
         self.root.resolve_dir(path);
         Ok(())
     }
 
     async fn remove_directory<'a>(&'a self, path: &'a Path) -> Result<(), AssetWriterError> {
         if self.root.remove_dir(path).is_none() {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::NotFound(path.to_path_buf()));
         }
         Ok(())
     }
 
     async fn remove_empty_directory<'a>(&'a self, path: &'a Path) -> Result<(), AssetWriterError> {
         let Some(dir) = self.root.get_dir(path) else {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::NotFound(path.to_path_buf()));
         };
 
         let dir = dir.0.read().unwrap();
 
         if !dir.assets.is_empty() || !dir.metadata.is_empty() || !dir.dirs.is_empty() {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "not empty");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::DirectoryNotEmpty(path.to_path_buf()));
         }
 
         self.root.remove_dir(path);
@@ -711,9 +683,7 @@ impl AssetWriter for MemoryAssetWriter {
         path: &'a Path,
     ) -> Result<(), AssetWriterError> {
         let Some(dir) = self.root.get_dir(path) else {
-            // TODO: Waiting for stable macro `std::io::const_error!`
-            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no such dir");
-            return Err(AssetWriterError::from(error));
+            return Err(AssetWriterError::NotFound(path.to_path_buf()));
         };
 
         let mut dir = dir.0.write().unwrap();
@@ -732,6 +702,7 @@ impl AssetWriter for MemoryAssetWriter {
 pub mod test {
     use super::Dir;
     use std::path::Path;
+    use voker_os::Arc;
 
     #[test]
     fn memory_dir() {
@@ -740,12 +711,12 @@ pub mod test {
         let a_data = "a".as_bytes().to_vec();
         let a_meta = "ameta".as_bytes().to_vec();
 
-        dir.insert_asset(a_path, a_data.clone());
+        dir.insert_asset(a_path, Arc::from(a_data.as_slice()));
         let asset = dir.get_asset(a_path).unwrap();
         assert_eq!(asset.path(), a_path);
         assert_eq!(asset.value(), a_data);
 
-        dir.insert_meta(a_path, a_meta.clone());
+        dir.insert_meta(a_path, Arc::from(a_meta.as_slice()));
         let meta = dir.get_meta(a_path).unwrap();
         assert_eq!(meta.path(), a_path);
         assert_eq!(meta.value(), a_meta);
@@ -753,8 +724,8 @@ pub mod test {
         let b_path = Path::new("x/y/b.txt");
         let b_data = "b".as_bytes().to_vec();
         let b_meta = "meta".as_bytes().to_vec();
-        dir.insert_asset(b_path, b_data.clone());
-        dir.insert_meta(b_path, b_meta.clone());
+        dir.insert_asset(b_path, Arc::from(b_data.as_slice()));
+        dir.insert_meta(b_path, Arc::from(b_meta.as_slice()));
 
         let asset = dir.get_asset(b_path).unwrap();
         assert_eq!(asset.path(), b_path);

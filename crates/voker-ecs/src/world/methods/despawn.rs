@@ -222,7 +222,7 @@ mod tests {
     use crate::component::Component;
     use crate::world::World;
     use alloc::string::String;
-    use core::sync::atomic::{AtomicUsize, Ordering};
+    use voker_os::atomic::{AtomicUsize, Ordering};
 
     #[derive(Component, Clone, Debug, PartialEq, Eq)]
     struct Foo;

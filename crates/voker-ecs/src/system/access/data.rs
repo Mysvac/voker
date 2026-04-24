@@ -88,7 +88,7 @@ impl AccessParam {
             self.reading = SparseHashSet::new();
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -102,7 +102,7 @@ impl AccessParam {
             self.writing = SparseHashSet::new();
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -116,7 +116,7 @@ impl AccessParam {
             }
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }
@@ -132,7 +132,7 @@ impl AccessParam {
             self.writing.insert(id);
             true
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             false
         }
     }

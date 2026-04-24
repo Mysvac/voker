@@ -98,7 +98,7 @@ impl SubApp {
     /// If no main schedule is configured, this is a no-op.
     pub fn run_main_schedule(&mut self) {
         if self.plugin_build_depth != 0 {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("SubApp::update() was called while a plugin was building.");
         }
 

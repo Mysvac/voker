@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem;
 
 use async_task::Task;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 
 use super::{ThreadExecutor, ThreadExecutorTicker, block_on};
 

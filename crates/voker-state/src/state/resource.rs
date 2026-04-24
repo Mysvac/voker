@@ -130,7 +130,7 @@ impl<S: ManualStates> NextState<S> {
             Self::Pending(next) => Some((next, true)),
             Self::PendingIfNeq(next) => Some((next, false)),
             Self::Unchanged => {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 None
             }
         }

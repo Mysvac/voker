@@ -28,10 +28,20 @@ debug = [
     "voker-ecs/debug",
 ]
 
+# Track stack information during reflection serialization and error handling.
+backtrace = [
+    "std",
+    "voker-ecs/backtrace",
+    "voker-reflect/backtrace",
+]
+
 # Collect document information of reflection types.
 reflect_docs = [
     "voker-reflect/reflect_docs",
 ]
+
+# Enable `sysinfo` diagnostic (e.g. CPU and Memory usage).
+sysinfo_plugin = ["voker-diagnostic/sysinfo_plugin"]
 
 # Use the `block_on` function of `async_io`.
 # Note that `future-lite::block_on` is default impl in STD Mode.
@@ -40,21 +50,11 @@ async_io = [
     "voker-task/async_io",
 ]
 
-# Track stack information during reflection serialization and error handling.
-backtrace = [
-    "std",
-    "voker-ecs/backtrace",
-    "voker-reflect/backtrace",
-]
-
 # Enable `tracing` crate for better debugging and error information.
 trace = ["voker-log/trace",]
 
 # Enable `tracy_client` crate and use custom allocator for memory tracing.
 trace_tracy_memory = ["voker-log/trace_tracy_memory",]
-
-# Enable `sysinfo` diagnostic (e.g. CPU and Memory usage).
-sysinfo_plugin = ["voker-diagnostic/sysinfo_plugin"]
 
 # Uses the `libm` maths library instead of the one provided in `std` and `core`.
 libm = ["voker-math/libm"]
@@ -68,6 +68,17 @@ glam_assert = ["voker-math/glam_assert"]
 
 # Enable assertions in debug builds to check the validity of parameters passed to glam
 debug_glam_assert = ["voker-math/debug_glam_assert"]
+
+# Enable HTTP network assets
+http = ["voker-asset/http"]
+
+# Enable HTTPS network assets
+https = ["voker-asset/https"]
+
+# Enable watcher for asset files and embedded asset.
+file_watcher = ["voker-asset/file_watcher"]
+
+voker-asset = ["std", "dep:voker-asset"]
 
 voker-log = ["std", "dep:voker-log"]
 
@@ -86,10 +97,10 @@ voker-reflect = { path = "../voker-reflect", default-features = false }
 voker-ecs = { path = "../voker-ecs", default-features = false }
 voker-state = { path = "../voker-state", default-features = false }
 voker-math = { path = "../voker-math", default-features = false }
-voker-asset = { path = "../voker-asset", default-features = false }
 
 # std required
 voker-log = { path = "../voker-log", optional = true, default-features = false }
+voker-asset = { path = "../voker-asset", optional = true, default-features = false }
 
 # optional
 voker-diagnostic = { path = "../voker-diagnostic", optional = true, default-features = false }

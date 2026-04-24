@@ -116,7 +116,7 @@ impl Observers {
         let event_id = observer.event_id;
 
         if event_id.index() >= self.runners.len() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             self.runners.resize_with(event_id.index() + 1, CachedObservers::new);
         }
 

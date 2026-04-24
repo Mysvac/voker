@@ -5,7 +5,7 @@ use core::any::Any;
 use core::panic::AssertUnwindSafe;
 use fixedbitset::FixedBitSet;
 
-use voker_os::sync::SyncUnsafeCell;
+use voker_os::utils::SyncUnsafeCell;
 use voker_os::utils::{SegQueue, SpinLock};
 use voker_task::{ComputeTaskPool, Scope, TaskPool};
 use voker_utils::vec::FastVec;
@@ -188,7 +188,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         result: Result<bool, Box<dyn Any + Send>>,
     ) {
         let meet = result.unwrap_or_else(|payload| {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             log::error!("Encountered a panic in system `{}`!", ident);
             *self.executor.panic_payload.lock() = Some(payload);
             deferred = false;
@@ -305,7 +305,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                 #[cfg(feature = "std")]
                 if let Err(e) = ::std::panic::catch_unwind(func) {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     *_panic_payload.lock() = Some(e);
                 }
 
@@ -372,7 +372,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                     let func = AssertUnwindSafe(|| unsafe {
                         if let Err(e) = system.run_raw((), context.world) {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -398,7 +398,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 }
 
                 if non_send {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     self.scope.spawn_remote(task);
                 } else {
                     self.scope.spawn(task);
@@ -414,7 +414,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run_raw((), context.world).unwrap_or_else(|e| {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -439,7 +439,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 }
 
                 if non_send {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     self.scope.spawn_remote(task);
                 } else {
                     self.scope.spawn(task);

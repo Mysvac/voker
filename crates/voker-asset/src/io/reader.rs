@@ -6,7 +6,6 @@ use core::task::{Context, Poll};
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
-use futures_io::{AsyncRead, AsyncSeek};
 use thiserror::Error;
 use voker_ecs::error::GameError;
 
@@ -49,9 +48,9 @@ impl PartialEq for AssetReaderError {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::NotFound(path), Self::NotFound(other_path)) => path == other_path,
-            (Self::Io(error), Self::Io(other_error)) => error.kind() == other_error.kind(),
-            (Self::HttpError(code), Self::HttpError(other_code)) => code == other_code,
+            (Self::NotFound(p1), Self::NotFound(p2)) => p1 == p2,
+            (Self::Io(e1), Self::Io(e2)) => e1.kind() == e2.kind(),
+            (Self::HttpError(c1), Self::HttpError(c2)) => c1 == c2,
             _ => false,
         }
     }
@@ -60,6 +59,7 @@ impl PartialEq for AssetReaderError {
 impl Eq for AssetReaderError {}
 
 impl From<std::io::Error> for AssetReaderError {
+    #[inline]
     fn from(value: std::io::Error) -> Self {
         Self::Io(value)
     }
@@ -67,6 +67,9 @@ impl From<std::io::Error> for AssetReaderError {
 
 // -----------------------------------------------------------------------------
 // Reader
+
+pub use futures_io::AsyncRead;
+pub use futures_lite::AsyncReadExt;
 
 pub trait Reader: AsyncRead + Unpin + Send + Sync {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError>;
@@ -95,10 +98,10 @@ impl Reader for Box<dyn Reader + '_> {
     }
 }
 
-pub use futures_lite::AsyncReadExt as ReaderExt;
-
 // -----------------------------------------------------------------------------
 // SeekableReader
+
+pub use futures_io::AsyncSeek;
 
 pub trait SeekableReader: Reader + AsyncSeek {}
 

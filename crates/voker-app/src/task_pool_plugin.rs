@@ -2,7 +2,7 @@ use crate::{App, Plugin};
 
 use core::fmt::Debug;
 use voker_ecs::system::NonSendMarker;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 use voker_task::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
 use voker_task::{TaskPool, TaskPoolBuilder};
 

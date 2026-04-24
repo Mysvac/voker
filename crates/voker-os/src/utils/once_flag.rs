@@ -1,9 +1,9 @@
-use crate::sync::atomic::{AtomicBool, Ordering};
+use crate::atomic::{AtomicBool, Ordering};
 
 // -----------------------------------------------------------------------------
 // OnceFlag
 
-/// Wrapper around an [`AtomicBool`](crate::sync::atomic::AtomicBool).
+/// Wrapper around an [`AtomicBool`](crate::atomic::AtomicBool).
 ///
 /// This is usually faster than [`Once`](crate::sync::Once)
 /// and generates smaller code.

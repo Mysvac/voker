@@ -1,79 +1,35 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use std::path::PathBuf;
+use core::time::Duration;
+use std::borrow::ToOwned;
 
 use atomicow::CowArc;
 use thiserror::Error;
 use voker_ecs::derive::Resource;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 
 use async_channel::{Receiver, Sender};
 use voker_utils::hash::HashMap;
 
-use super::{AssetWatcher, ErasedAssetReader, ErasedAssetWriter};
+use super::AssetSourceEvent;
 use crate::ident::AssetSourceId;
-
-// -----------------------------------------------------------------------------
-// AssetSourceEvent
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AssetSourceEvent {
-    /// An asset at this path was added.
-    AddedAsset(PathBuf),
-    /// An asset at this path was modified.
-    ModifiedAsset(PathBuf),
-    /// An asset at this path was removed.
-    RemovedAsset(PathBuf),
-    /// An asset at this path was renamed.
-    RenamedAsset { old: PathBuf, new: PathBuf },
-    /// Asset metadata at this path was added.
-    AddedMeta(PathBuf),
-    /// Asset metadata at this path was modified.
-    ModifiedMeta(PathBuf),
-    /// Asset metadata at this path was removed.
-    RemovedMeta(PathBuf),
-    /// Asset metadata at this path was renamed.
-    RenamedMeta { old: PathBuf, new: PathBuf },
-    /// A folder at the given path was added.
-    AddedFolder(PathBuf),
-    /// A folder at the given path was removed.
-    RemovedFolder(PathBuf),
-    /// A folder at the given path was renamed.
-    RenamedFolder { old: PathBuf, new: PathBuf },
-    /// Something of unknown type was removed.
-    ///
-    /// It is the job of the event handler to determine the type.
-    /// This exists because notify-rs produces "untyped" rename events
-    /// without destination paths for unwatched folders, so we can't
-    /// determine the type of the rename.
-    RemovedUnknown {
-        /// The path of the removed asset or folder (undetermined).
-        ///
-        /// This could be an asset path or a folder. This will not be a "meta file" path.
-        path: PathBuf,
-        /// This field is only relevant if `path` is determined to be an asset path (and therefore not a folder).
-        ///
-        /// - If this field is `true`, then this event corresponds to a meta removal (not an asset removal) .
-        /// - If `false`, then this event corresponds to an asset removal (not a meta removal).
-        is_meta: bool,
-    },
-}
+use crate::io::{AssetWatcher, ErasedAssetReader, ErasedAssetWriter};
 
 // -----------------------------------------------------------------------------
 // AssetSourceBuilder & AssetSource
 
+type ReaderBuilder = Box<dyn FnMut() -> Box<dyn ErasedAssetReader> + Send + Sync>;
+type WriterBuilder = Box<dyn FnMut() -> Option<Box<dyn ErasedAssetWriter>> + Send + Sync>;
+type WatcherBuilder =
+    Box<dyn FnMut(Sender<AssetSourceEvent>) -> Option<Box<dyn AssetWatcher>> + Send + Sync>;
+
 pub struct AssetSourceBuilder {
-    pub reader: Box<dyn FnMut() -> Box<dyn ErasedAssetReader> + Send + Sync>,
-    pub writer: Option<Box<dyn FnMut() -> Option<Box<dyn ErasedAssetWriter>> + Send + Sync>>,
-    pub watcher: Option<
-        Box<dyn FnMut(Sender<AssetSourceEvent>) -> Option<Box<dyn AssetWatcher>> + Send + Sync>,
-    >,
-    pub processed_reader: Option<Box<dyn FnMut() -> Box<dyn ErasedAssetReader> + Send + Sync>>,
-    pub processed_writer:
-        Option<Box<dyn FnMut() -> Option<Box<dyn ErasedAssetWriter>> + Send + Sync>>,
-    pub processed_watcher: Option<
-        Box<dyn FnMut(Sender<AssetSourceEvent>) -> Option<Box<dyn AssetWatcher>> + Send + Sync>,
-    >,
+    pub reader: ReaderBuilder,
+    pub writer: Option<WriterBuilder>,
+    pub watcher: Option<WatcherBuilder>,
+    pub processed_reader: Option<ReaderBuilder>,
+    pub processed_writer: Option<WriterBuilder>,
+    pub processed_watcher: Option<WatcherBuilder>,
     pub watch_warning: Option<&'static str>,
     pub processed_watch_warning: Option<&'static str>,
 }
@@ -89,6 +45,9 @@ pub struct AssetSource {
     event_receiver: Option<Receiver<AssetSourceEvent>>,
     processed_event_receiver: Option<Receiver<AssetSourceEvent>>,
 }
+
+// -----------------------------------------------------------------------------
+// AssetSourceBuilder Implementation
 
 impl AssetSourceBuilder {
     #[inline]
@@ -238,7 +197,30 @@ impl AssetSourceBuilder {
     }
 
     pub fn platform_default(path: &str, processed_path: Option<&str>) -> Self {
-        todo!()
+        const WAIT_TIME: Duration = Duration::from_millis(300);
+
+        let default = Self::new(AssetSource::default_reader(path.to_owned(), false))
+            .with_writer(AssetSource::default_writer(path.to_owned(), false))
+            .with_watcher(AssetSource::default_watcher(
+                path.to_owned(),
+                false,
+                WAIT_TIME,
+            ))
+            .with_watch_warning(AssetSource::default_watch_warning());
+
+        if let Some(p_path) = processed_path {
+            default
+                .with_processed_reader(AssetSource::default_reader(p_path.to_owned(), true))
+                .with_processed_writer(AssetSource::default_writer(p_path.to_owned(), true))
+                .with_processed_watcher(AssetSource::default_watcher(
+                    p_path.to_owned(),
+                    true,
+                    WAIT_TIME,
+                ))
+                .with_processed_watch_warning(AssetSource::default_watch_warning())
+        } else {
+            default
+        }
     }
 }
 
@@ -293,44 +275,62 @@ impl AssetSource {
         self.processed_writer.is_some()
     }
 
-    pub fn get_default_reader(
+    pub fn default_reader(
         _path: String,
         _processed: bool,
     ) -> impl FnMut() -> Box<dyn ErasedAssetReader> + Send + Sync {
-        || todo!()
+        move || {
+            cfg_select! {
+                target_arch = "wasm32" => Box::new(crate::io::wasm::HttpWasmAssetReader::new(&_path)),
+                target_os = "android" => Box::new(crate::io::android::AndroidAssetReader),
+                _ => Box::new(crate::io::file::FileAssetReader::new(&_path)),
+            }
+        }
     }
 
-    pub fn get_default_writer(
+    pub fn default_writer(
         _path: String,
         _processed: bool,
     ) -> impl FnMut() -> Option<Box<dyn ErasedAssetWriter>> + Send + Sync {
-        || todo!()
+        move || {
+            cfg_select! {
+                target_arch = "wasm32" => None,
+                target_os = "android" => None,
+                _ => Some(Box::new(crate::io::file::FileAssetWriter::new(&_path, _processed))),
+            }
+        }
     }
 
-    pub fn get_default_watcher(
+    pub fn default_watcher(
         _path: String,
         _processed: bool,
+        _debounce_wait_time: Duration,
     ) -> impl FnMut(Sender<AssetSourceEvent>) -> Option<Box<dyn AssetWatcher>> + Send + Sync {
-        |_| todo!()
+        move |sender: Sender<AssetSourceEvent>| {
+            cfg_select! {
+                target_arch = "wasm32" => None,
+                target_os = "android" => None,
+                feature = "file_watcher" => {
+                    let path = crate::io::file::base_path().join(_path.clone());
+                    if path.exists() {
+                        crate::io::watcher::FileWatcher::new(path, sender, _debounce_wait_time)
+                    } else {
+                        tracing::warn!("Skip creating file watcher because path {path:?} does not exist.");
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
     }
 
-    pub fn get_default_watch_warning() -> &'static str {
-        #[cfg(target_arch = "wasm32")]
-        return "Web does not currently support watching assets.";
-        #[cfg(target_os = "android")]
-        return "Android does not currently support watching assets.";
-        #[cfg(all(
-            not(target_arch = "wasm32"),
-            not(target_os = "android"),
-            not(feature = "file_watcher")
-        ))]
-        return "Consider enabling the `file_watcher` feature.";
-        #[cfg(all(
-            not(target_arch = "wasm32"),
-            not(target_os = "android"),
-            feature = "file_watcher"
-        ))]
-        return "Consider adding an \"assets\" directory.";
+    pub fn default_watch_warning() -> &'static str {
+        cfg_select! {
+            target_arch = "wasm32" => "Web does not currently support watching assets.",
+            target_os = "android" => "Android does not currently support watching assets.",
+            feature = "file_watcher" => "Consider adding an \"assets\" directory.",
+            _ => "Consider enabling the `file_watcher` feature.",
+        }
     }
 }
 

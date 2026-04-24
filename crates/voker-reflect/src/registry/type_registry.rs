@@ -450,8 +450,8 @@ impl Debug for TypeRegistry {
 // -----------------------------------------------------------------------------
 // TypeRegistryArc
 
-use voker_os::sync::{Arc, PoisonError};
-use voker_os::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use voker_os::Arc;
+use voker_os::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Clone, Default)]
 pub struct TypeRegistryArc {

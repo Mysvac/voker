@@ -89,7 +89,7 @@ impl RawCommandQueue {
                     world.flush();
                 } else {
                     // If the input world is `None`, we drop the data directly.
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     ::core::mem::drop(command)
                 }
             },

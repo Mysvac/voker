@@ -7,7 +7,7 @@ use crossbeam_channel::{Receiver, Sender};
 use thiserror::Error;
 use uuid::Uuid;
 use voker_ecs::error::GameError;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 use voker_reflect::Reflect;
 use voker_reflect::info::TypePath;
 use voker_utils::hash::Equivalent;
@@ -483,7 +483,7 @@ impl<A: Asset> TryFrom<ErasedHandle> for Handle<A> {
                     return Ok(Handle::Strong(handle));
                 }
 
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let expect_path = <A as TypePath>::type_path();
                 let expect = TypeId::of::<A>();
                 let actual = handle.type_id;
@@ -498,7 +498,7 @@ impl<A: Asset> TryFrom<ErasedHandle> for Handle<A> {
                     return Ok(Handle::Uuid(uuid, PhantomData));
                 }
 
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let expect_path = <A as TypePath>::type_path();
                 let expect = TypeId::of::<A>();
                 let actual = type_id;

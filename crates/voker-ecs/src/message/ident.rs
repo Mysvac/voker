@@ -29,7 +29,7 @@ impl MessageId {
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id >= u32::MAX as usize {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("MessageId must be < u32::MAX");
         }
         unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }

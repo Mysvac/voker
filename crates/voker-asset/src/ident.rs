@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 use voker_ecs::error::GameError;
-use voker_os::sync::atomic::AtomicU32;
+use voker_os::atomic::AtomicU32;
 use voker_os::utils::SegQueue;
 use voker_reflect::Reflect;
 
@@ -454,7 +454,7 @@ impl<A: Asset> TryFrom<ErasedAssetId> for AssetId<A> {
                         marker: PhantomData,
                     });
                 }
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let type_name = core::any::type_name::<A>();
                 let expect = TypeId::of::<A>();
                 let actual = type_id;
@@ -468,7 +468,7 @@ impl<A: Asset> TryFrom<ErasedAssetId> for AssetId<A> {
                 if type_id == TypeId::of::<A>() {
                     return Ok(AssetId::Uuid { uuid });
                 }
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let type_name = core::any::type_name::<A>();
                 let expect = TypeId::of::<A>();
                 let actual = type_id;

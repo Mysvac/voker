@@ -39,19 +39,7 @@
 //! (See `fallback` module for no_std support)
 
 // -----------------------------------------------------------------------------
-// Modules
-
-mod sync_cell;
-mod sync_unsafe_cell;
-
-pub mod atomic;
-
-// -----------------------------------------------------------------------------
 // Exports
-
-pub use alloc::sync::{Arc, Weak};
-pub use sync_cell::SyncCell;
-pub use sync_unsafe_cell::SyncUnsafeCell;
 
 crate::cfg::switch! {
     crate::cfg::std => {

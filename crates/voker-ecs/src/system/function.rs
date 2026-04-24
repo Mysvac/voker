@@ -328,7 +328,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         } {
             Ok(p) => p,
             Err(e) => {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 return Err(e.with_system::<F>().into());
             }
         };

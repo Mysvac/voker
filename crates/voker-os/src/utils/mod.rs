@@ -16,10 +16,12 @@
 //! - [`SegQueue`]: An unbounded lock-free queue backed by a linked list.
 //! - [`ListQueue`]: An unbounded queue backed by linked blocks with separate locks.
 //!
-//! # Execution Helpers
+//! # Others
 //!
 //! - [`CachePadded`]: Cache-line padding wrapper to reduce false sharing.
 //! - [`Backoff`]: Backoff strategy utility for contention-heavy retry loops.
+//! - [`SyncCell`]: A reimplementation of unstable [`core::sync::Exclusive`]
+//! - [`SyncUnsafeCell`]: A reimplementation of unstable [`core::cell::SyncUnsafeCell`]
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -32,6 +34,8 @@ mod list_queue;
 mod once_flag;
 mod seq_queue;
 mod spin_lock;
+mod sync_cell;
+mod sync_unsafe_cell;
 
 // -----------------------------------------------------------------------------
 // Exports
@@ -44,6 +48,8 @@ pub use list_queue::ListQueue;
 pub use once_flag::OnceFlag;
 pub use seq_queue::SegQueue;
 pub use spin_lock::{SpinLock, SpinLockGuard};
+pub use sync_cell::SyncCell;
+pub use sync_unsafe_cell::SyncUnsafeCell;
 
 // -----------------------------------------------------------------------------
 // Utils for test

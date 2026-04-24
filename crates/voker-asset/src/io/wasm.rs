@@ -1,7 +1,7 @@
 
 
 use alloc::format;
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use core::pin::Pin;
 use core::task::Poll;
@@ -47,7 +47,7 @@ impl HttpWasmAssetReader {
     /// Creates a new `WasmAssetReader`. The path provided will be used to build URLs to query for assets.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            root_path: path.as_ref().to_owned(),
+            root_path: path.as_ref().to_path_buf(),
             request_mapper: None,
         }
     }

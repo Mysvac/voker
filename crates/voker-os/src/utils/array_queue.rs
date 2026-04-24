@@ -13,7 +13,7 @@ use core::mem::{self, MaybeUninit};
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use super::{Backoff, CachePadded};
-use crate::sync::atomic::{self, AtomicUsize, Ordering};
+use crate::atomic::{self, AtomicUsize, Ordering};
 
 /// A slot in a queue.
 struct Slot<T> {

@@ -8,18 +8,33 @@ repository.workspace = true
 
 [features]
 
-file_watcher = []
+file_watcher = [
+    "dep:notify-debouncer-full"
+]
+
+http = [
+    "dep:blocking",
+    "dep:ureq",
+]
+
+https = [
+    "dep:blocking",
+    "dep:ureq",
+    "ureq/rustls",
+    "ureq/platform-verifier",
+]
 
 [dependencies]
 
-voker-app = { path = "../voker-app", default-features = false, features = ["std"]}
-voker-ecs = { path = "../voker-ecs", default-features = false }
-voker-reflect = { path = "../voker-reflect", default-features = false, features = ["uuid"] }
-voker-diagnostic = { path = "../voker-diagnostic", default-features = false }
-voker-task = { path = "../voker-task", default-features = false }
 voker-utils = { path = "../voker-utils", default-features = false }
 voker-ptr = { path = "../voker-ptr", default-features = false }
-voker-os = { path = "../voker-os", default-features = false, features = ["std"]}
+
+voker-os = { path = "../voker-os", default-features = false, features = ["std"] }
+voker-task = { path = "../voker-task", default-features = false, features = ["std"] }
+voker-reflect = { path = "../voker-reflect", default-features = false, features = ["uuid"] }
+voker-ecs = { path = "../voker-ecs", default-features = false, features = ["std"] }
+voker-app = { path = "../voker-app", default-features = false, features = ["std"] }
+voker-diagnostic = { path = "../voker-diagnostic", default-features = false }
 
 bitflags = { version = "2.10", default-features = false }
 ron = { version = "0.12", default-features = false }
@@ -28,20 +43,27 @@ thiserror = { version = "2", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["v4","serde"] }
 tracing = { version = "0.1", default-features = false, features = []}
 atomicow = { version = "1.2", default-features = false, features = ["std"] }
-# stackfuture = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["async-await-macro", "alloc"] }
 futures-io = { version = "0.3", default-features = false, features = ["std"] }
 futures-lite = { version = "2.6", default-features = false, features = ["std"] }
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
-async-channel = { version = "2", default-features = false }
+async-channel = { version = "2.5", default-features = false }
 
+[target.'cfg(not(any(target_os = "windows", target_arch = "wasm32")))'.dependencies]
+async-io = "2.6"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+notify-debouncer-full = { version = "0.7.0", optional = true, default-features = false }
+ureq = { version = "3", optional = true, default-features = false }
+blocking = { version = "1.6", optional = true }
+async-fs = "2.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen = { version = "0.2" }
 web-sys = { version = "0.3", features = ["Window", "Response", "WorkerGlobalScope"] }
-uuid = { version = "1.21.0", default-features = false, features = ["js"] }
+uuid = { version = "1.23", default-features = false, features = ["js"] }
 
 [lints]
 workspace = true

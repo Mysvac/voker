@@ -204,7 +204,7 @@ pub(crate) fn impl_derive_query_data(mut ast: DeriveInput) -> TokenStream {
 
     quote! {
         const _: () = {
-            extern crate alloc; // for Vec
+            extern crate alloc as __alloc; // for Vec
 
             #[expect(unsafe_code, reason = "QueryData implementation is unsafe")]
             unsafe impl #impl_g #query_data_ for #type_ident #ty_g #where_g {
@@ -233,7 +233,7 @@ pub(crate) fn impl_derive_query_data(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                fn build_filter(state: &Self::State, out: &mut ::alloc::vec::Vec<#filter_param_builder_>) {
+                fn build_filter(state: &Self::State, out: &mut __alloc::vec::Vec<#filter_param_builder_>) {
                     #( <#static_field_types as #query_data_>::build_filter(&state.#idx, out); )*
                 }
 

@@ -858,7 +858,7 @@ impl World {
 #[cfg(test)]
 mod tests {
     use core::sync::atomic::Ordering;
-    use voker_os::sync::atomic::AtomicUsize;
+    use voker_os::atomic::AtomicUsize;
 
     use crate::resource::Resource;
     use crate::tick::DetectChanges;

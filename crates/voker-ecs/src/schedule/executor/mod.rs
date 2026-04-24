@@ -55,7 +55,7 @@ impl Default for ExecutorKind {
 // MultiThreadExecutor
 
 use crate::resource::Resource;
-use voker_os::sync::Arc;
+use voker_os::Arc;
 use voker_task::ThreadExecutor;
 
 /// Handle to the main-thread task executor.

@@ -1,5 +1,5 @@
-use crate::sync::atomic::AtomicBool;
-use crate::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use crate::atomic::AtomicBool;
+use crate::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::utils::Backoff;
 
 /// A user level spin-lock without any resources.
