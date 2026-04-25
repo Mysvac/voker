@@ -31,10 +31,8 @@ extern crate alloc;
 // -----------------------------------------------------------------------------
 // Modules
 
-pub use alloc::sync::{Arc, Weak};
-
-pub mod asyn;
 pub mod atomic;
+pub mod cell;
 pub mod sync;
 pub mod thread;
 pub mod time;

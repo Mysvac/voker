@@ -6,7 +6,7 @@ crate::derive::impl_reflect_opaque!(::uuid::Uuid(
     Debug,
     PartialEq,
     PartialOrd,
-    Hash
+    Hash,
 ));
 
 crate::derive::impl_reflect_opaque!(::uuid::NonNilUuid(
@@ -16,5 +16,5 @@ crate::derive::impl_reflect_opaque!(::uuid::NonNilUuid(
     Debug,
     PartialEq,
     PartialOrd,
-    Hash
+    Hash,
 ));

@@ -10,15 +10,15 @@ use futures_io::{AsyncRead, AsyncSeek, AsyncWrite};
 use futures_lite::Stream;
 
 use super::{FileAssetReader, FileAssetWriter};
-use crate::utils::build_meta_path;
-use crate::io::{Reader, SeekableReader, AssetReader, AssetReaderError};
-use crate::io::{Writer, AssetWriter, AssetWriterError, ReaderNotSeekableError};
+use crate::utils::append_meta_extension;
+use crate::io::future::{ReadAllFuture, WriteAllFuture};
+use crate::io::{Reader, SeekableReader, AssetReader, ReaderNotSeekableError};
+use crate::io::{Writer, AssetWriter, AssetWriterError, AssetReaderError};
 use crate::PathStream;
 
 // -----------------------------------------------------------------------------
 // FileReader
 
-#[repr(transparent)]
 struct FileReader(File);
 
 impl AsyncRead for FileReader {
@@ -48,12 +48,16 @@ impl Reader for FileReader {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         Ok(self)
     }
+
+    #[inline(always)]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        ReadAllFuture::async_read::<Self>(self, buf)
+    }
 }
 
 // -----------------------------------------------------------------------------
 // FileWriter
 
-#[repr(transparent)]
 struct FileWriter(File);
 
 impl AsyncWrite for FileWriter {
@@ -84,7 +88,12 @@ impl AsyncWrite for FileWriter {
     }
 }
 
-impl Writer for FileWriter {}
+impl Writer for FileWriter {
+    #[inline(always)]
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a> {
+        WriteAllFuture::async_write::<Self>(self, buf)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // FileStream
@@ -133,7 +142,7 @@ impl AssetReader for FileAssetReader {
         &'a self,
         path: &'a Path,
     ) -> Result<impl Reader + 'a, AssetReaderError> {
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
         match File::open(&full_path) {
             Ok(file) => Ok(FileReader(file)),
@@ -223,7 +232,7 @@ impl AssetWriter for FileAssetWriter {
         &'a self,
         path: &'a Path,
     ) -> Result<impl Writer + 'a, AssetWriterError> {
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
         if let Some(parent) = full_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -246,7 +255,7 @@ impl AssetWriter for FileAssetWriter {
         &'a self,
         path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
         std::fs::remove_file(&full_path).map_err(|e|map_write_error(e, full_path))
     }
@@ -270,8 +279,8 @@ impl AssetWriter for FileAssetWriter {
         old_path: &'a Path,
         new_path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let old_meta_path = build_meta_path(old_path);
-        let new_meta_path = build_meta_path(new_path);
+        let old_meta_path = append_meta_extension(old_path);
+        let new_meta_path = append_meta_extension(new_path);
         let full_old_path = self.root_path.join(old_meta_path);
         let full_new_path = self.root_path.join(new_meta_path);
         if let Some(parent) = full_new_path.parent() {

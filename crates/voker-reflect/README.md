@@ -167,18 +167,13 @@ assert_eq!(dynamic.take::<MyStruct>().unwrap(), value);
 
 ### `default`
 
-Includes `std` , `debug` and `auto_register`.
+Includes `std` .
 
 ### `std`
 
 Enabled by default.
 
-Provide reflection implementations for standard library containers like `HashMap`.
-
-### `debug`
-
-Enabled by default, when turned on, we will record type information
-stack during serialization and deserialization.
+Provide reflection implementations for standard library containers like `HashMap` and `PathBuf` .
 
 ### `reflect_docs`
 
@@ -189,6 +184,10 @@ When disabled, documentation functions remain available but always return empty 
 
 See [`TypeInfo::docs`](crate::info::TypeInfo::docs) for details.
 
-[`Struct`]: ops::Struct
-[`Enum`]: ops::Enum
-[`Tuple`]: ops::Tuple
+### `uuid`
+
+Reflect `uuid` crate's `Uuid` type. Auto enabled when you imported `voker-asset` crate.
+
+### `glam`
+
+Reflect `glam` crate's types. Auto enabled when you imported `voker-math` crate.

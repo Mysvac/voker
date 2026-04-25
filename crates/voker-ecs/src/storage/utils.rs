@@ -26,7 +26,7 @@ impl Drop for AbortOnPanic {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
-        log::error!("Aborting due to allocator error.");
+        tracing::error!("Aborting due to allocator error.");
 
         crate::cfg::std! {
             if {

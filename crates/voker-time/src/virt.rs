@@ -1,6 +1,5 @@
 use core::time::Duration;
 
-use log::debug;
 use serde::{Deserialize, Serialize};
 use voker_reflect::Reflect;
 
@@ -121,7 +120,7 @@ impl Time<Virtual> {
     fn advance_with_raw_delta(&mut self, raw_delta: Duration) {
         let max_delta = self.context().max_delta;
         let clamped_delta = if raw_delta > max_delta {
-            debug!(
+            tracing::debug!(
                 "delta time larger than maximum delta, clamping delta to {:?} and skipping {:?}",
                 max_delta,
                 raw_delta - max_delta

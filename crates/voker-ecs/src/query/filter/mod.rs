@@ -1,3 +1,9 @@
+//! [`QueryFilter`] implementations — the predicate half of a query.
+//!
+//! Filters refine which entities a query visits without changing what data
+//! is fetched: `With<T>`, `Without<T>`, `Added<T>`, `Changed<T>`, and
+//! logical combinators `And`/`Or`.
+
 mod added;
 mod and;
 mod changed;
@@ -20,7 +26,7 @@ use alloc::vec::Vec;
 use crate::archetype::Archetype;
 use crate::entity::Entity;
 use crate::storage::{Table, TableRow};
-use crate::system::{AccessParam, FilterParamBuilder};
+use crate::system::{AccessParam, AccessTable, FilterParamBuilder};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -90,7 +96,7 @@ pub unsafe trait QueryFilter {
     fn build_state(world: &mut World) -> Self::State;
 
     /// Try get the static state from given world without mutable reference.
-    fn fetch_state(world: &World) -> Option<Self::State>;
+    fn try_build_state(world: &World) -> Option<Self::State>;
 
     /// Builds a per-execution cache for this filter.
     ///
@@ -148,6 +154,15 @@ pub unsafe trait QueryFilter {
     /// [`QueryData::build_access`]: crate::query::QueryData::build_access
     fn build_access(state: &Self::State, out: &mut AccessParam);
 
+    /// Explicitly edit access table.
+    ///
+    /// This is usually only used for queries that require access to resources.
+    ///
+    /// ## TODO:
+    /// It doesn't seem good to directly open this interface, a better approach
+    /// is to provide an interface that only allows access to editing resources.
+    fn edit_access_table(state: &Self::State, table: &mut AccessTable) -> bool;
+
     /// Updates the cache for a specific archetype.
     ///
     /// Called when the query begins processing a new archetype. The filter
@@ -202,7 +217,7 @@ unsafe impl QueryFilter for () {
 
     fn build_state(_world: &mut World) -> Self::State {}
 
-    fn fetch_state(_world: &World) -> Option<Self::State> {
+    fn try_build_state(_world: &World) -> Option<Self::State> {
         Some(())
     }
 
@@ -219,6 +234,10 @@ unsafe impl QueryFilter for () {
     }
 
     fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+
+    fn edit_access_table(_state: &Self::State, _table: &mut AccessTable) -> bool {
+        true
+    }
 
     unsafe fn set_for_arche<'w>(
         _state: &Self::State,

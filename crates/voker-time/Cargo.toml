@@ -26,7 +26,7 @@ voker-app = { path = "../voker-app", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
 
 serde = { version = "1", default-features = false, features = ["derive"] }
-log = { version = "0.4", default-features = false }
+tracing = { version = "0.1", default-features = false }
 
 [lints]
 workspace = true

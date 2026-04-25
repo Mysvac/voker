@@ -102,25 +102,6 @@ impl<T> SparseIndexSet<T> {
 }
 
 // -----------------------------------------------------------------------------
-// Transmute
-
-// impl<T> Deref for SparseIndexSet<T> {
-//     type Target = InternalSet<T>;
-//
-//     #[inline(always)]
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
-// impl<T> DerefMut for SparseIndexSet<T> {
-//     #[inline(always)]
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.0
-//     }
-// }
-
-// -----------------------------------------------------------------------------
 // Re-export the underlying method
 
 impl<T> Clone for SparseIndexSet<T>

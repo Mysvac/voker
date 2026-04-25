@@ -5,7 +5,7 @@ use core::any::Any;
 use voker_ptr::PtrMut;
 use voker_utils::hash::SparseHashSet;
 
-use crate::bundle::Bundle;
+use crate::bundle::DataBundle;
 use crate::entity::Entity;
 use crate::error::ErrorContext;
 use crate::event::{Event, EventContext};
@@ -19,7 +19,7 @@ impl Observer {
     pub(crate) fn build<E, B, M, S>(world: &mut World, system: S) -> Observer
     where
         E: Event,
-        B: Bundle,
+        B: DataBundle,
         S: IntoObserverSystem<E, B, M>,
     {
         let mut system = Box::new(IntoObserverSystem::into_system(system));
@@ -62,16 +62,21 @@ pub trait IntoObserver<Marker>: Send + 'static {
 }
 
 impl IntoObserver<()> for Observer {
+    #[inline(always)]
     fn into_observer(self, _: &mut World) -> Observer {
         self
     }
 }
 
-impl<E: Event, B: Bundle, M, T: IntoObserverSystem<E, B, M>> IntoObserver<(E, B, M)> for T {
+impl<E: Event, B: DataBundle, M, T: IntoObserverSystem<E, B, M>> IntoObserver<(E, B, M)> for T {
+    #[track_caller]
     fn into_observer(self, world: &mut World) -> Observer {
         Observer::build(world, self)
     }
 }
+
+// -----------------------------------------------------------------------------
+// IntoEntityObserver
 
 /// Converts a value into an entity-scoped [`Observer`].
 ///
@@ -91,7 +96,7 @@ impl<M, T: IntoObserver<M>> IntoEntityObserver<M> for T {
 // -----------------------------------------------------------------------------
 // observer_system_runner
 
-fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
+fn observer_system_runner<E: Event, B: DataBundle, S: ObserverSystem<E, B>>(
     world: DeferredWorld,
     context: EventContext,
     observer: ObserverId,
@@ -114,14 +119,14 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
 
     let on: On<E, B> = On::new(event, trigger, observer, context);
 
-    let system: *mut dyn ObserverSystem<E, B> = unsafe {
+    let system: &mut dyn ObserverSystem<E, B> = unsafe {
         let system: &mut dyn Any = state.system.as_mut();
         let system = system.downcast_mut::<S>().debug_checked_unwrap();
         &mut *system
     };
 
     unsafe {
-        if let Err(err) = (*system).run_raw(on, world) {
+        if let Err(err) = system.run_raw(on, world) {
             core::hint::cold_path();
             let handler = state
                 .error_handler
@@ -130,12 +135,12 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
             handler(
                 err.into(),
                 ErrorContext::Observer {
-                    name: (*system).id().name(),
-                    last_run: (*system).last_run(),
+                    name: system.id().name(),
+                    last_run: system.last_run(),
                 },
             );
         }
 
-        (*system).queue_deferred(world.deferred());
+        system.queue_deferred(world.deferred());
     }
 }

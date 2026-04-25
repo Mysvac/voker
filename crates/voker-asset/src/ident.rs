@@ -10,7 +10,6 @@ use atomicow::CowArc;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
-use voker_ecs::error::GameError;
 use voker_os::atomic::AtomicU32;
 use voker_os::utils::SegQueue;
 use voker_reflect::Reflect;
@@ -72,7 +71,7 @@ impl Hash for AssetIndex {
 }
 
 impl Serialize for AssetIndex {
-    #[inline(always)]
+    #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -82,6 +81,7 @@ impl Serialize for AssetIndex {
 }
 
 impl<'de> Deserialize<'de> for AssetIndex {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -94,9 +94,9 @@ impl<'de> Deserialize<'de> for AssetIndex {
 // AssetIndexAllocator
 
 pub(crate) struct AssetIndexAllocator {
-    next_index: AtomicU32,
-    recycled_queue: SegQueue<AssetIndex>,
-    recycled: SegQueue<AssetIndex>,
+    pub next_index: AtomicU32,
+    pub recycled_queue: SegQueue<AssetIndex>,
+    pub recycled: SegQueue<AssetIndex>,
 }
 
 impl AssetIndexAllocator {
@@ -157,12 +157,17 @@ pub enum AssetId<A: Asset> {
     },
 }
 
-impl<A: Asset> AssetId<A> {
-    /// The uuid for the default [`AssetId`].
-    pub const DEFAULT_UUID: Uuid = Uuid::from_u128(200809721996911295814598172825939264631);
+const INVALID_UUID_D4: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+const DEFAULT_UUID_D4: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 1];
 
+impl<A: Asset> AssetId<A> {
     /// This asset id _should_ never be valid.
-    pub const INVALID_UUID: Uuid = Uuid::from_u128(108428345662029828789348721013522787528);
+    pub const INVALID_UUID: Uuid =
+        Uuid::from_fields(u32::MAX, u16::MAX, u16::MAX, &INVALID_UUID_D4);
+
+    /// The uuid for the default [`AssetId`].
+    pub const DEFAULT_UUID: Uuid =
+        Uuid::from_fields(u32::MAX, u16::MAX, u16::MAX, &DEFAULT_UUID_D4);
 
     #[inline]
     pub const fn invalid() -> Self {
@@ -423,8 +428,7 @@ impl Debug for ErasedAssetId {
 // ErasedAssetId & AssetId - Conversion
 
 /// Errors preventing the conversion of to/from an [`ErasedAssetId`] and an [`AssetId`].
-#[derive(GameError, Error, Debug, PartialEq, Clone)]
-#[game_error(severity = "error")]
+#[derive(Error, Debug, PartialEq, Clone)]
 #[error("ErasedAssetId({actual:?}) cannot be converted into AssetId<{type_name}>({expect:?})")]
 pub struct AssetIdTypedError {
     /// The [`TypePath`] that we are trying to convert to.
@@ -679,6 +683,13 @@ pub struct TypedAssetIndex {
     pub type_id: TypeId,
 }
 
+impl TypedAssetIndex {
+    #[inline(always)]
+    pub const fn new(index: AssetIndex, type_id: TypeId) -> Self {
+        Self { index, type_id }
+    }
+}
+
 impl Display for TypedAssetIndex {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TypedAssetIndex")
@@ -689,8 +700,7 @@ impl Display for TypedAssetIndex {
     }
 }
 
-#[derive(GameError, Error, Debug)]
-#[game_error(severity = "error")]
+#[derive(Error, Debug)]
 #[error("Attempted to create a TypedAssetIndex from a Uuid({0})")]
 pub struct UuidNotSupportedError(pub(crate) Uuid);
 

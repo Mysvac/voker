@@ -4,7 +4,9 @@ use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::message::{Message, MessageReader, MessageWriter};
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{InternedScheduleLabel, SingleThreadedExecutor};
-use voker_ecs::schedule::{IntoSystemConfig, Schedule, ScheduleLabel, SystemSet};
+use voker_ecs::schedule::{
+    IntoSystemConfig, IntoSystemSetConfig, Schedule, ScheduleLabel, SystemSet,
+};
 use voker_ecs::system::Local;
 use voker_ecs::world::World;
 
@@ -372,21 +374,21 @@ impl Plugin for MainSchedulePlugin {
         }
 
         sub.edit_schedule(Main, |sched| {
-            sched.add_systems(Main::run_main.after(main_begin));
+            sched.add_systems((), Main::run_main.after(main_begin));
         });
 
         sub.edit_schedule(FixedMain, |sched| {
-            sched.add_systems(FixedMain::run_fixed_main.after(fixed_main_begin));
+            sched.add_systems((), FixedMain::run_fixed_main.after(fixed_main_begin));
         });
 
         sub.edit_schedule(First, |sched| {
-            sched.add_systems(World::update_messages.run_if(message_update_condition));
+            sched.add_systems((), World::update_messages.run_if(message_update_condition));
         });
 
         sub.edit_schedule(RunFixedMainLoop, |sched| {
             use RunFixedMainLoopSystems::*;
-            sched.config(BeforeFixedMainLoop.end().before_set(FixedMainLoop));
-            sched.config(FixedMainLoop.end().before_set(AfterFixedMainLoop));
+            sched.config_set(BeforeFixedMainLoop.run_before(FixedMainLoop));
+            sched.config_set(FixedMainLoop.run_before(AfterFixedMainLoop));
         });
     }
 

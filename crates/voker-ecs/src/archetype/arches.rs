@@ -58,6 +58,7 @@ impl Archetypes {
         if index >= self.bundles.len() {
             resize_bundle_map(&mut self.bundles, index + 1);
         }
+        // SAFETY: just resize above.
         unsafe {
             *self.bundles.get_unchecked_mut(index) = Some(arche_id);
         }

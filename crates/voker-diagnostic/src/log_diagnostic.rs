@@ -114,7 +114,7 @@ impl Plugin for LogDiagnosticsPlugin {
             filter: self.filter.clone(),
         });
 
-        app.add_systems(PostUpdate, Self::log_diagnostics_system);
+        app.add_systems(PostUpdate, (), Self::log_diagnostics_system);
     }
 }
 

@@ -98,7 +98,9 @@ use crate::world::{UnsafeWorld, World};
 ///
 /// 2. **Thin handle**: [`Query`] itself is a lightweight handle (essentially a pointer to
 ///    [`QueryState`]) that doesn't perform entity-level filtering. The actual filtering
-///    occurs when creating and iterating a [`QueryIter`].
+///    occurs when creating and iterating a [`QueryIter`]. For read-only queries
+///    (`D: ReadOnlyQueryData`) [`Query`] is [`Copy`]. Use [`Query::as_readonly`] to
+///    obtain a read-only view from a mutable query at zero cost.
 ///
 /// 3. **Filter elimination**: Simple filters (like `With`/`Without`) can be evaluated
 ///    entirely at the archetype level. If no complex filters (e.g., `Changed`/`Added`)
@@ -209,6 +211,25 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
         }
     }
 
+    /// Returns a read-only view of this query.
+    ///
+    /// Mutable accessors are downgraded to their read-only counterparts:
+    /// `&mut T` / `Mut<T>` → `Ref<T>`, `EntityMut` → `EntityRef`.
+    /// This is zero-cost — no data is copied.
+    ///
+    /// The returned query carries the full `'w` world lifetime, so it can
+    /// outlive the `&self` borrow that was used to call this method.
+    /// For already-read-only queries (`D: ReadOnlyQueryData`), [`Query`]
+    /// is [`Copy`] so this method is equivalent to a copy.
+    pub fn as_readonly(&self) -> Query<'w, 's, D::ReadOnly, F> {
+        Query {
+            world: self.world,
+            state: self.state.as_readonly(),
+            last_run: self.last_run,
+            this_run: self.this_run,
+        }
+    }
+
     /// Returns a reborrowed query with a shorter world lifetime.
     ///
     /// This is mainly useful when the query contains mutable borrows and you
@@ -232,22 +253,30 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     }
 
     /// Returns a read-only iterator over query results.
-    pub fn iter(&self) -> QueryIter<'w, 's, D, F>
-    where
-        D: ReadOnlyQueryData,
-    {
-        unsafe { QueryIter::new(self.world, self.state, self.last_run, self.this_run) }
+    pub fn iter(&self) -> QueryIter<'w, 's, D::ReadOnly, F> {
+        unsafe {
+            QueryIter::new(
+                self.world,
+                self.state.as_readonly(),
+                self.last_run,
+                self.this_run,
+            )
+        }
     }
 
     pub fn single_mut(&mut self) -> Result<Single<'_, D, F>, QuerySingleError> {
         unsafe { Single::new(self.world, self.state, self.last_run, self.this_run) }
     }
 
-    pub fn single(&self) -> Result<Single<'w, D, F>, QuerySingleError>
-    where
-        D: ReadOnlyQueryData,
-    {
-        unsafe { Single::new(self.world, self.state, self.last_run, self.this_run) }
+    pub fn single(&self) -> Result<Single<'w, D::ReadOnly, F>, QuerySingleError> {
+        unsafe {
+            Single::new(
+                self.world,
+                self.state.as_readonly(),
+                self.last_run,
+                self.this_run,
+            )
+        }
     }
 
     /// Fetches one entity from this query with mutable query access.
@@ -260,11 +289,11 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     }
 
     /// Fetches one entity from this query with read-only query access.
-    pub fn get(&self, entity: Entity) -> Result<D::Item<'w>, QueryEntityError>
-    where
-        D: ReadOnlyQueryData,
-    {
-        unsafe { self.get_impl(entity) }
+    pub fn get(
+        &self,
+        entity: Entity,
+    ) -> Result<<D::ReadOnly as QueryData>::Item<'w>, QueryEntityError> {
+        unsafe { self.as_readonly().get_impl(entity) }
     }
 
     /// Fetches multiple entities from this query with mutable query access.
@@ -282,11 +311,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     pub fn get_many<const N: usize>(
         &self,
         entities: [Entity; N],
-    ) -> Result<[D::Item<'w>; N], QueryEntityError>
-    where
-        D: ReadOnlyQueryData,
-    {
-        unsafe { self.get_many_impl(entities) }
+    ) -> Result<[<D::ReadOnly as QueryData>::Item<'w>; N], QueryEntityError> {
+        unsafe { self.as_readonly().get_many_impl(entities) }
     }
 
     /// Returns `true` if this query currently has no matches.

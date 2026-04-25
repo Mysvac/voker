@@ -1,6 +1,12 @@
-crate::derive::impl_reflect_opaque!(::core::any::TypeId(
-    Debug, Clone, Hash, PartialEq, PartialOrd
-));
+crate::derive::impl_reflect_opaque! {
+    ::core::any::TypeId(
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+    )
+}
 
 #[cfg(test)]
 mod tests {

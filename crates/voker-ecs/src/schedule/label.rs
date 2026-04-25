@@ -1,3 +1,11 @@
+//! Schedule label definition and interning.
+//!
+//! [`ScheduleLabel`] identifies a schedule within a [`Schedules`] collection.
+//! Labels are interned so comparison and hashing use pointer equality on the
+//! interned value rather than full structural comparison.
+//!
+//! [`Schedules`]: crate::schedule::Schedules
+
 use voker_ecs_derive::ScheduleLabel;
 
 use crate::define_label;

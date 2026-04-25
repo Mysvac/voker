@@ -2,12 +2,12 @@ use alloc::vec::Vec;
 use core::any::TypeId;
 use core::fmt::Debug;
 
+use voker_utils::debug::DebugName;
 use voker_utils::extra::TypeIdMap;
 
 use super::{Message, MessageId, MessageQueue};
 use crate::prelude::ResourceId;
 use crate::resource::Resources;
-use crate::utils::DebugName;
 use crate::world::World;
 
 // -----------------------------------------------------------------------------
@@ -141,6 +141,12 @@ impl Messages {
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<MessageId> {
         self.mapper.get(type_id).copied()
+    }
+
+    /// Returns the message debug name for the given ID.
+    #[inline]
+    pub fn get_name(&self, id: MessageId) -> Option<DebugName> {
+        self.metas.get(id.index()).map(MessageMeta::name)
     }
 
     /// Returns the message info for the given ID.

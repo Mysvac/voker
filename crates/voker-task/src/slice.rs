@@ -243,6 +243,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
                         scope.spawn(async move { chunk.iter().for_each(func); });
                     }
                 });
+                return;
             }
         }
         self.iter().for_each(f);
@@ -259,6 +260,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
                         scope.spawn(async move { chunk.iter_mut().for_each(func); });
                     }
                 });
+                return;
             }
         }
         self.iter_mut().for_each(f);

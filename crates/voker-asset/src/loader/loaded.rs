@@ -4,9 +4,11 @@ use core::any::{Any, TypeId};
 
 use atomicow::CowArc;
 use voker_ecs::world::World;
+use voker_reflect::info::{DynamicTypePath, TypePath};
 use voker_utils::hash::{HashMap, HashSet};
 
-use crate::asset::Asset;
+use crate::asset::{Asset, VisitAssetDependencies};
+use crate::assets::Assets;
 use crate::handle::ErasedHandle;
 use crate::ident::{AssetIndex, ErasedAssetId, TypedAssetIndex};
 use crate::meta::AssetHash;
@@ -15,19 +17,35 @@ use crate::path::AssetPath;
 // -----------------------------------------------------------------------------
 // AssetContainer
 
-pub(crate) trait AssetContainer: Any + Send + Sync + 'static {
-    fn asset_insert(self: Box<Self>, id: AssetIndex, world: &mut World);
-    fn asset_type_name(&self) -> &'static str;
+pub(crate) trait AssetContainer: DynamicTypePath + Any + Send + Sync + 'static {
+    fn apply_asset(self: Box<Self>, id: AssetIndex, world: &mut World);
 }
 
 impl<A: Asset> AssetContainer for A {
-    fn asset_insert(self: Box<Self>, index: AssetIndex, world: &mut World) {
-        todo!()
+    fn apply_asset(self: Box<Self>, index: AssetIndex, world: &mut World) {
+        world
+            .resource_mut::<Assets<A>>()
+            .insert(index, *self)
+            .expect("the AssetIndex is still valid");
     }
+}
 
-    #[inline]
-    fn asset_type_name(&self) -> &'static str {
-        core::any::type_name::<A>()
+// --------------------------------------------------------------
+// LoadedFolder
+
+#[derive(TypePath)]
+#[type_path = "voker_asset::loader::LoadedFolder"]
+pub struct LoadedFolder {
+    pub handles: Vec<ErasedHandle>,
+}
+
+impl Asset for LoadedFolder {}
+
+impl VisitAssetDependencies for LoadedFolder {
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        for handle in &self.handles {
+            visit(handle.id());
+        }
     }
 }
 
@@ -103,6 +121,17 @@ impl<A: Asset> LoadedAsset<A> {
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
+
+    pub fn erased(self) -> ErasedLoadedAsset {
+        ErasedLoadedAsset {
+            value: Box::new(self.value),
+            dependencies: self.dependencies,
+            loader_dependencies: self.loader_dependencies,
+            labeled_assets: self.labeled_assets,
+            label_to_asset_index: self.label_to_asset_index,
+            asset_id_to_asset_index: self.asset_id_to_asset_index,
+        }
+    }
 }
 
 impl<A: Asset> From<A> for LoadedAsset<A> {
@@ -115,14 +144,7 @@ impl<A: Asset> From<A> for LoadedAsset<A> {
 impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
     #[inline]
     fn from(asset: LoadedAsset<A>) -> Self {
-        ErasedLoadedAsset {
-            value: Box::new(asset.value),
-            dependencies: asset.dependencies,
-            loader_dependencies: asset.loader_dependencies,
-            labeled_assets: asset.labeled_assets,
-            label_to_asset_index: asset.label_to_asset_index,
-            asset_id_to_asset_index: asset.asset_id_to_asset_index,
-        }
+        asset.erased()
     }
 }
 
@@ -138,12 +160,16 @@ impl ErasedLoadedAsset {
         <dyn Any>::downcast_ref::<A>(&self.value)
     }
 
+    pub fn get_mut<A: Asset>(&mut self) -> Option<&mut A> {
+        <dyn Any>::downcast_mut::<A>(&mut self.value)
+    }
+
     pub fn asset_type_id(&self) -> TypeId {
         self.value.as_ref().type_id()
     }
 
-    pub fn asset_type_name(&self) -> &'static str {
-        self.value.asset_type_name()
+    pub fn asset_type_path(&self) -> &'static str {
+        self.value.reflect_type_path()
     }
 
     pub fn get_labeled(&self, label: impl AsRef<str>) -> Option<&ErasedLoadedAsset> {
@@ -163,13 +189,12 @@ impl ErasedLoadedAsset {
     }
 
     #[inline]
+    #[expect(clippy::result_large_err, reason = "Err(self) is not a error")]
     pub fn downcast<A: Asset>(self) -> Result<LoadedAsset<A>, ErasedLoadedAsset> {
         if self.value.as_ref().type_id() == TypeId::of::<A>() {
-            #[expect(unsafe_code, reason = "already checked")]
-            let value: Box<A> =
-                unsafe { <Box<dyn Any>>::downcast::<A>(self.value).unwrap_unchecked() };
             Ok(LoadedAsset {
-                value: *value,
+                #[expect(unsafe_code, reason = "already checked")]
+                value: unsafe { *<Box<dyn Any>>::downcast::<A>(self.value).unwrap_unchecked() },
                 dependencies: self.dependencies,
                 loader_dependencies: self.loader_dependencies,
                 labeled_assets: self.labeled_assets,
@@ -179,5 +204,24 @@ impl ErasedLoadedAsset {
         } else {
             Err(self)
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// LoadedAsset Implementation
+
+#[derive(TypePath)]
+#[type_path = "voker_asset::loader::LoadedUntypedAsset"]
+pub struct LoadedUntypedAsset {
+    /// The handle to the loaded asset.
+    pub handle: ErasedHandle,
+}
+
+impl Asset for LoadedUntypedAsset {}
+
+impl VisitAssetDependencies for LoadedUntypedAsset {
+    #[inline]
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        visit(self.handle.id())
     }
 }

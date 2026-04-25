@@ -32,7 +32,7 @@ pub struct EntityCountPlugin;
 impl Plugin for EntityCountPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EntityCount>();
-        app.add_system(PreUpdate, count_entities);
+        app.add_systems(PreUpdate, (), count_entities);
     }
 
     fn duplicate_strategy(&self) -> DuplicateStrategy {
@@ -82,6 +82,6 @@ impl Plugin for EntityCountDiagnosticsPlugin {
         app.register_diagnostic(
             Diagnostic::new(Self::ENTITY_COUNT).with_max_history_length(self.max_history_length),
         )
-        .add_systems(Update, Self::diagnostic_system);
+        .add_systems(Update, (), Self::diagnostic_system);
     }
 }

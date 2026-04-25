@@ -1,15 +1,5 @@
 use crate::derive::impl_reflect_opaque;
 
-impl_reflect_opaque!(bool(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
 impl_reflect_opaque!(char(
     Default,
     Debug,
@@ -18,143 +8,315 @@ impl_reflect_opaque!(char(
     PartialEq,
     PartialOrd,
     Serialize,
-    Deserialize
+    Deserialize,
 ));
-impl_reflect_opaque!(u8(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(u16(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(u32(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(u64(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(u128(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(usize(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(i8(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(i16(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(i32(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(i64(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(i128(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(isize(
-    Default,
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(f32(
-    Default,
-    Debug,
-    Clone,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
-impl_reflect_opaque!(f64(
-    Default,
-    Debug,
-    Clone,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize
-));
+
+impl_reflect_opaque!(
+    bool(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<u8>,
+        Into<u16>,
+        Into<u32>,
+        Into<u64>,
+        Into<u128>,
+        Into<usize>,
+        Into<i8>,
+        Into<i16>,
+        Into<i32>,
+        Into<i64>,
+        Into<i128>,
+        Into<isize>,
+    )
+);
+
+impl_reflect_opaque!(
+    u8(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f32>,
+        Into<f64>,
+        Into<u16>,
+        Into<u32>,
+        Into<u64>,
+        Into<u128>,
+        Into<usize>,
+        Into<i16>,
+        Into<i32>,
+        Into<i64>,
+        Into<i128>,
+        Into<isize>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    u16(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f32>,
+        Into<f64>,
+        Into<u32>,
+        Into<u64>,
+        Into<u128>,
+        Into<usize>,
+        Into<i32>,
+        Into<i64>,
+        Into<i128>,
+        From<u8>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    u32(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f64>,
+        Into<u64>,
+        Into<u128>,
+        Into<i64>,
+        Into<i128>,
+        From<u8>,
+        From<u16>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    u64(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<u128>,
+        Into<i128>,
+        From<u8>,
+        From<u16>,
+        From<u32>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    u128(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        From<u8>,
+        From<u16>,
+        From<u32>,
+        From<u64>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    usize(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        From<u8>,
+        From<u16>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    i8(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f32>,
+        Into<f64>,
+        Into<i16>,
+        Into<i32>,
+        Into<i64>,
+        Into<i128>,
+        Into<isize>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    i16(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f32>,
+        Into<f64>,
+        Into<i32>,
+        Into<i64>,
+        Into<i128>,
+        Into<isize>,
+        From<u8>,
+        From<i8>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    i32(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f64>,
+        Into<i64>,
+        Into<i128>,
+        From<u8>,
+        From<u16>,
+        From<i8>,
+        From<i16>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    i64(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<i128>,
+        From<u8>,
+        From<u16>,
+        From<u32>,
+        From<i8>,
+        From<i16>,
+        From<i32>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    i128(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        From<u8>,
+        From<u16>,
+        From<u32>,
+        From<u64>,
+        From<i8>,
+        From<i16>,
+        From<i32>,
+        From<i64>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    isize(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        From<u8>,
+        From<i8>,
+        From<i16>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    f32(
+        Default,
+        Debug,
+        Clone,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        Into<f64>,
+        From<u8>,
+        From<u16>,
+        From<i8>,
+        From<i16>,
+        From<bool>,
+    )
+);
+
+impl_reflect_opaque!(
+    f64(
+        Default,
+        Debug,
+        Clone,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+        From<f32>,
+        From<u16>,
+        From<u32>,
+        From<i8>,
+        From<i16>,
+        From<i32>,
+        From<bool>,
+    )
+);

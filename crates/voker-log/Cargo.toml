@@ -14,7 +14,7 @@ trace_tracy_memory = ["dep:tracy-client"]
 voker-os = { path = "../voker-os", default-features = false, features = ["std"] }
 voker-app = { path = "../voker-app", default-features = false, features = ["std"] }
 
-tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "env-filter", "fmt"] }
 tracing-error = { version = "0.2", optional = true }

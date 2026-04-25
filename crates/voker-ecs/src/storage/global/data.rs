@@ -6,11 +6,12 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::ptr::{self, NonNull};
 
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
+use voker_utils::debug::DebugName;
 
 use crate::borrow::{UntypedMut, UntypedRef};
 use crate::resource::{Resource, ResourceId, ResourceInfo};
 use crate::tick::{Tick, TicksMut, TicksRef};
-use crate::utils::{DebugName, Dropper};
+use crate::utils::Dropper;
 
 // -----------------------------------------------------------------------------
 // Drop Guard
@@ -22,7 +23,7 @@ impl Drop for AbortOnDropFail {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
-        log::error!("Aborting due to drop component panicked.");
+        tracing::error!("Aborting due to drop component panicked.");
 
         crate::cfg::std! {
             if {
@@ -35,12 +36,12 @@ impl Drop for AbortOnDropFail {
 }
 
 // -----------------------------------------------------------------------------
-// ResData
+// ResourceData
 
 /// Raw storage for a single resource instance.
 ///
 /// Manages memory allocation, initialization state, and change tracking ticks.
-pub struct ResData {
+pub struct ResourceData {
     id: ResourceId,
     name: DebugName,
     layout: Layout,
@@ -53,8 +54,8 @@ pub struct ResData {
 // -----------------------------------------------------------------------------
 // Private
 
-impl ResData {
-    /// Creates a new `ResData` from resource type information.
+impl ResourceData {
+    /// Creates a new `ResourceData` from resource type information.
     ///
     /// # Safety
     /// - `info` must correctly describe the resource type
@@ -116,12 +117,12 @@ impl ResData {
 // -----------------------------------------------------------------------------
 // Basic
 
-unsafe impl Sync for ResData {}
-unsafe impl Send for ResData {}
-impl UnwindSafe for ResData {}
-impl RefUnwindSafe for ResData {}
+unsafe impl Sync for ResourceData {}
+unsafe impl Send for ResourceData {}
+impl UnwindSafe for ResourceData {}
+impl RefUnwindSafe for ResourceData {}
 
-impl Debug for ResData {
+impl Debug for ResourceData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Res")
             .field("id", &self.id)
@@ -131,7 +132,7 @@ impl Debug for ResData {
     }
 }
 
-impl Drop for ResData {
+impl Drop for ResourceData {
     fn drop(&mut self) {
         unsafe {
             self.clear();
@@ -139,7 +140,7 @@ impl Drop for ResData {
     }
 }
 
-impl ResData {
+impl ResourceData {
     /// Returns whether the resource is currently initialized.
     #[inline(always)]
     pub fn is_active(&self) -> bool {
@@ -218,7 +219,7 @@ impl ResData {
 // -----------------------------------------------------------------------------
 // Insert & Remove
 
-impl ResData {
+impl ResourceData {
     /// Drops the resource data if initialized.
     ///
     /// # Safety

@@ -4,41 +4,37 @@
 extern crate alloc;
 extern crate std;
 
+// -----------------------------------------------------------------------------
+// Modules
+
+mod render_asset;
+mod utils;
+
 pub mod asset;
+pub mod assets;
 pub mod changes;
+pub mod direct_access_ext;
+pub mod event;
 pub mod handle;
 pub mod ident;
 pub mod io;
 pub mod loader;
 pub mod meta;
 pub mod path;
-pub mod render_asset;
+pub mod plugin;
+pub mod processor;
+pub mod saver;
 pub mod server;
-
-mod utils;
+pub mod transformer;
 
 // -----------------------------------------------------------------------------
-// Inline
+// Exports
 
-use alloc::boxed::Box;
-use core::pin::Pin;
-use core::task::Poll;
-use futures_lite::Stream;
-use std::path::PathBuf;
-
-pub type BoxedFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-pub type PathStream = dyn Stream<Item = PathBuf> + Unpin + Send;
-
-/// A [`PathBuf`] [`Stream`] implementation that immediately returns nothing.
-pub struct EmptyPathStream;
-
-impl Stream for EmptyPathStream {
-    type Item = PathBuf;
-    #[inline(always)]
-    fn poll_next(
-        self: Pin<&mut Self>,
-        _cx: &mut core::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        Poll::Ready(None)
-    }
-}
+pub use asset::{Asset, AssetComponent, VisitAssetDependencies};
+pub use assets::Assets;
+pub use changes::AssetChanges;
+pub use handle::{ErasedHandle, Handle};
+pub use render_asset::RenderAssetUsages;
+pub use server::AssetServer;
+pub use utils::{BoxedFuture, EmptyPathStream, PathStream};
+pub use uuid;

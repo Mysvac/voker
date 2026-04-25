@@ -3,11 +3,10 @@ use core::fmt::Debug;
 use core::hash::Hash;
 use core::marker::PhantomData;
 
+use alloc::sync::Arc;
 use crossbeam_channel::{Receiver, Sender};
 use thiserror::Error;
 use uuid::Uuid;
-use voker_ecs::error::GameError;
-use voker_os::Arc;
 use voker_reflect::Reflect;
 use voker_reflect::info::TypePath;
 use voker_utils::hash::Equivalent;
@@ -452,14 +451,13 @@ impl From<&mut ErasedHandle> for ErasedAssetId {
 // ErasedHandle & Handle - Conversion
 
 /// Errors preventing the conversion of to/from an [`ErasedHandle`] and an [`Handle`].
-#[derive(GameError, Error, Debug, PartialEq, Clone)]
-#[game_error(severity = "error")]
+#[derive(Error, Debug, PartialEq, Clone)]
 #[error(
-    "This ErasedHandle({actual:?}) cannot be converted into an Handle<{expect_path}>({expect:?})"
+    "This ErasedHandle({actual:?}) cannot be converted into an Handle<{type_name}>({expect:?})"
 )]
 pub struct AssetHandleTypedError {
     /// The [`TypePath`] that we are trying to convert to.
-    expect_path: &'static str,
+    type_name: &'static str,
     /// The [`TypeId`] that we are trying to convert to.
     expect: TypeId,
     /// The [`TypeId`] that we are trying to convert from.
@@ -484,11 +482,11 @@ impl<A: Asset> TryFrom<ErasedHandle> for Handle<A> {
                 }
 
                 core::hint::cold_path();
-                let expect_path = <A as TypePath>::type_path();
+                let type_name = core::any::type_name::<A>();
                 let expect = TypeId::of::<A>();
                 let actual = handle.type_id;
                 Err(AssetHandleTypedError {
-                    expect_path,
+                    type_name,
                     expect,
                     actual,
                 })
@@ -499,11 +497,11 @@ impl<A: Asset> TryFrom<ErasedHandle> for Handle<A> {
                 }
 
                 core::hint::cold_path();
-                let expect_path = <A as TypePath>::type_path();
+                let type_name = core::any::type_name::<A>();
                 let expect = TypeId::of::<A>();
                 let actual = type_id;
                 Err(AssetHandleTypedError {
-                    expect_path,
+                    type_name,
                     expect,
                     actual,
                 })
@@ -530,7 +528,11 @@ impl ErasedHandle {
             TypeId::of::<A>(),
             "The target Handle<A>'s TypeId does not match the TypeId of this ErasedHandle"
         );
-        self.typed_unchecked()
+        // Manually inline
+        match self {
+            ErasedHandle::Strong(handle) => Handle::Strong(handle),
+            ErasedHandle::Uuid { uuid, .. } => Handle::Uuid(uuid, PhantomData),
+        }
     }
 
     /// Converts to a typed Handle. This will panic if the internal [`TypeId`] does not match the given asset type `A`

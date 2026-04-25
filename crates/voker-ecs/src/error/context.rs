@@ -2,8 +2,9 @@ use alloc::string::String;
 use alloc::string::ToString;
 use core::fmt::{Debug, Display};
 
+use voker_utils::debug::DebugName;
+
 use crate::tick::Tick;
-use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // ErrorContext
@@ -16,24 +17,18 @@ use crate::utils::DebugName;
 pub enum ErrorContext {
     /// Failure raised while running a system.
     System { name: DebugName, last_run: Tick },
-    /// Failure raised while evaluating a run condition.
-    Condition { name: DebugName, last_run: Tick },
     /// Failure raised while running an observer callback.
     Observer { name: DebugName, last_run: Tick },
     /// Failure raised while applying a command.
     Command { name: DebugName },
-    /// User-defined context string for non-standard error locations.
-    Custom { info: String },
 }
 
 impl Display for ErrorContext {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::System { name, .. } => write!(f, "System `{name}` failed"),
-            Self::Condition { name, .. } => write!(f, "Condition `{name}` failed"),
             Self::Observer { name, .. } => write!(f, "Observer `{name}` failed"),
             Self::Command { name, .. } => write!(f, "Command `{name}` failed"),
-            Self::Custom { info, .. } => write!(f, "`{info}`"),
         }
     }
 }
@@ -47,10 +42,8 @@ impl ErrorContext {
     pub fn name(&self) -> String {
         match self {
             Self::System { name, .. } => name.to_string(),
-            Self::Condition { name, .. } => name.to_string(),
             Self::Observer { name, .. } => name.to_string(),
             Self::Command { name, .. } => name.to_string(),
-            Self::Custom { info, .. } => info.to_string(),
         }
     }
 
@@ -61,9 +54,7 @@ impl ErrorContext {
         match self {
             Self::System { .. } => "system",
             Self::Command { .. } => "command",
-            Self::Condition { .. } => "condition",
             Self::Observer { .. } => "observer",
-            Self::Custom { .. } => "custom",
         }
     }
 }

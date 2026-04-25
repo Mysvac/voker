@@ -25,7 +25,7 @@ pub use voker_state_derive as derive;
 /// Common imports for state-driven gameplay code.
 pub mod prelude {
     pub use crate::app::{AppStatesExt, StatesPlugin};
-    pub use crate::command::CommandExt;
+    pub use crate::command::StateCommandExt;
     pub use crate::cond::{in_state, state_changed, state_exists};
     pub use crate::scoped::{DespawnOnEnter, DespawnOnExit, DespawnWhen};
     pub use crate::state::{DerivedStates, ManualStates, NextState, State};
@@ -64,11 +64,11 @@ mod tests {
         app.init_state::<TestState>();
         app.add_sub_state::<TestSubState>();
 
-        app.add_systems(OnEnter(TestState::A), |mut commands: Commands| {
+        app.add_systems(OnEnter(TestState::A), (), |mut commands: Commands| {
             commands.init_resource::<Thingy>();
         });
 
-        app.add_systems(PreStartup, |mut thingy: ResMut<Thingy>| {
+        app.add_systems(PreStartup, (), |mut thingy: ResMut<Thingy>| {
             thingy.0 += 1;
         });
 

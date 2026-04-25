@@ -27,9 +27,9 @@ async_io = [ "dep:async-io" ]
 [dependencies]
 
 voker-cfg = { path = "../voker-cfg" }
-voker-utils = { path = "../voker-utils" }
 
 voker-os = { path = "../voker-os", default-features = false }
+voker-utils = { path = "../voker-utils", default-features = false }
 
 # -------------------- External  --------------------
 
@@ -41,15 +41,13 @@ futures-lite = { version = "2.6", default-features = false, features = [ "alloc"
 async-channel = { version = "2.5", optional = true }
 async-io = { version = "2.6", optional = true }
 
-web-task = "1"
-
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64")))'.dependencies]
 async-channel = { version = "2.5", optional = true, features = [ "portable-atomic" ] }
 async-task = { version = "4.7", default-features = false, features = [ "portable-atomic" ] }
 atomic-waker = { version = "1", default-features = false, features = [ "portable-atomic" ] }
 
-# [target.'cfg(target_arch = "wasm32")'.dependencies]
-
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-task = "1"
 
 [lints]
 workspace = true

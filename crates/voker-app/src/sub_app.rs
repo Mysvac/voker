@@ -9,7 +9,7 @@ use voker_reflect::info::Typed;
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{InternedScheduleLabel, IntoSystemConfig};
 use voker_ecs::schedule::{Schedule, ScheduleLabel};
-use voker_ecs::system::IntoSystem;
+use voker_ecs::system::{IntoSystem, SystemSet};
 use voker_ecs::world::{FromWorld, World};
 use voker_reflect::registry::{FromType, GetTypeMeta, TypeData};
 use voker_reflect::{Reflect, info::TypePath};
@@ -162,26 +162,40 @@ impl SubApp {
         self
     }
 
-    /// Registers a fallible conversion route from `T` to `U` in [`AppTypeRegistry`].
-    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    /// Registers a fallible conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    ///
+    /// This function will register `X -> Y` in X's `ReflectConvert`
+    /// and `Y <- X` in Y's `ReflectConvert`.
+    pub fn register_type_conversion<X, Y, F>(&mut self, function: F) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath,
-        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+        X: Reflect + TypePath,
+        Y: Reflect + TypePath,
+        F: Fn(X) -> Result<Y, X> + Clone + Send + Sync + 'static,
     {
         let registry = self.world().resource::<AppTypeRegistry>();
-        registry.write().register_type_conversion::<T, U, F>(function);
+        registry.write().register_type_conversion::<X, Y, F>(function);
         self
     }
 
-    /// Registers an infallible `Into` conversion route from `T` to `U` in [`AppTypeRegistry`].
-    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    /// Registers an infallible `Into` conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    pub fn register_type_into<X, Y>(&mut self) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath + From<T>,
+        X: Reflect + TypePath + Into<Y>,
+        Y: Reflect + TypePath,
     {
         let registry = self.world().resource::<AppTypeRegistry>();
-        registry.write().register_into_type_conversion::<T, U>();
+        registry.write().register_type_into::<X, Y>();
+        self
+    }
+
+    /// Registers an infallible `From` conversion route obtain `X` from `Y` in [`AppTypeRegistry`].
+    pub fn register_type_from<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + From<Y>,
+        Y: Reflect + TypePath,
+    {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register_type_from::<X, Y>();
         self
     }
 
@@ -221,14 +235,14 @@ impl SubApp {
         self
     }
 
-    /// Returns a mutable reference to the schedule associated with label, if it exists.
-    pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
-        self.world_mut().schedules.get_mut(label.intern())
-    }
-
     /// Returns a reference to the schedule associated with label, if it exists.
     pub fn get_schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
         self.world().schedules.get(label.intern())
+    }
+
+    /// Returns a mutable reference to the schedule associated with label, if it exists.
+    pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
+        self.world_mut().schedules.get_mut(label.intern())
     }
 
     /// Edits a schedule in place, creating it if necessary.
@@ -241,25 +255,25 @@ impl SubApp {
         self
     }
 
-    /// Adds one system to the given schedule label.
-    ///
-    /// This function is faster then `add_systems`.
+    /// Adds one system into `set` on the given schedule label.
     pub fn add_system<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         system: impl IntoSystem<(), (), M>,
     ) -> &mut Self {
-        self.world_mut().add_system(label.intern(), system);
+        self.world_mut().add_system(label.intern(), set, system);
         self
     }
 
-    /// Adds systems/configuration to the given schedule label.
+    /// Adds one or many systems into `set` on the given schedule label.
     pub fn add_systems<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.world_mut().add_systems(label.intern(), systems);
+        self.world_mut().add_systems(label.intern(), set, systems);
         self
     }
 
@@ -328,6 +342,9 @@ impl SubApp {
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.plugins.len() {
             core::mem::swap(&mut self.plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_finish_span =
+                tracing::info_span!("plugin finish", plugin = placeholder.name()).entered();
             self.run_as_app(|app| {
                 placeholder.finish(app);
             });
@@ -341,6 +358,9 @@ impl SubApp {
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.plugins.len() {
             core::mem::swap(&mut self.plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_cleanup_span =
+                tracing::info_span!("plugin cleanup", plugin = placeholder.name()).entered();
             self.run_as_app(|app| {
                 placeholder.cleanup(app);
             });

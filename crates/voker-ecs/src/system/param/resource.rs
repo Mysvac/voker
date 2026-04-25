@@ -1,3 +1,5 @@
+use voker_utils::debug::DebugName;
+
 use super::SystemParam;
 use crate::borrow::{NonSend, NonSendMut, NonSendRef};
 use crate::borrow::{Res, ResMut, ResRef};
@@ -5,7 +7,6 @@ use crate::error::Severity;
 use crate::resource::{Resource, ResourceId};
 use crate::system::{AccessTable, SystemParamError};
 use crate::tick::Tick;
-use crate::utils::DebugName;
 use crate::world::{UnsafeWorld, World};
 
 #[cold]
@@ -44,7 +45,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Res<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            if let Some(data) = world.storages.res_set.get(*state)
+            if let Some(data) = world.storages.resources.get(*state)
                 && let Some(ptr) = data.get_data()
             {
                 ptr.debug_assert_aligned::<T>();
@@ -83,7 +84,7 @@ unsafe impl<T: Resource + Sync> SystemParam for ResRef<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            if let Some(data) = world.storages.res_set.get(*state)
+            if let Some(data) = world.storages.resources.get(*state)
                 && let Some(untyped) = data.get_ref(last_run, this_run)
             {
                 Ok(untyped.into_resource::<T>())
@@ -119,7 +120,7 @@ unsafe impl<T: Resource + Send> SystemParam for ResMut<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
-            if let Some(data) = world.storages.res_set.get_mut(*state)
+            if let Some(data) = world.storages.resources.get_mut(*state)
                 && let Some(untyped) = data.get_mut(last_run, this_run)
             {
                 Ok(untyped.into_resource::<T>())
@@ -155,7 +156,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<Res<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            let Some(data) = world.storages.res_set.get(*state) else {
+            let Some(data) = world.storages.resources.get(*state) else {
                 return Ok(None);
             };
             let Some(ptr) = data.get_data() else {
@@ -194,7 +195,7 @@ unsafe impl<T: Resource + Sync> SystemParam for Option<ResRef<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            let Some(data) = world.storages.res_set.get(*state) else {
+            let Some(data) = world.storages.resources.get(*state) else {
                 return Ok(None);
             };
             let Some(untyped) = data.get_ref(last_run, this_run) else {
@@ -230,7 +231,7 @@ unsafe impl<T: Resource + Send> SystemParam for Option<ResMut<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
-            let Some(data) = world.storages.res_set.get_mut(*state) else {
+            let Some(data) = world.storages.resources.get_mut(*state) else {
                 return Ok(None);
             };
             let Some(untyped) = data.get_mut(last_run, this_run) else {
@@ -268,7 +269,7 @@ unsafe impl<T: Resource> SystemParam for NonSend<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            if let Some(data) = world.storages.res_set.get(*state)
+            if let Some(data) = world.storages.resources.get(*state)
                 && let Some(ptr) = data.get_data()
             {
                 ptr.debug_assert_aligned::<T>();
@@ -311,7 +312,7 @@ unsafe impl<T: Resource> SystemParam for NonSendRef<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            if let Some(data) = world.storages.res_set.get(*state)
+            if let Some(data) = world.storages.resources.get(*state)
                 && let Some(ptr) = data.get_ref(last_run, this_run)
             {
                 Ok(ptr.into_non_send::<T>())
@@ -349,7 +350,7 @@ unsafe impl<T: Resource> SystemParam for NonSendMut<'_, T> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
-            if let Some(data) = world.storages.res_set.get_mut(*state)
+            if let Some(data) = world.storages.resources.get_mut(*state)
                 && let Some(ptr) = data.get_mut(last_run, this_run)
             {
                 Ok(ptr.into_non_send::<T>())
@@ -387,7 +388,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSend<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            let Some(data) = world.storages.res_set.get(*state) else {
+            let Some(data) = world.storages.resources.get(*state) else {
                 return Ok(None);
             };
             let Some(ptr) = data.get_data() else {
@@ -428,7 +429,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSendRef<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.read_only();
-            let Some(data) = world.storages.res_set.get(*state) else {
+            let Some(data) = world.storages.resources.get(*state) else {
                 return Ok(None);
             };
             let Some(untyped) = data.get_ref(last_run, this_run) else {
@@ -466,7 +467,7 @@ unsafe impl<T: Resource> SystemParam for Option<NonSendMut<'_, T>> {
     ) -> Result<Self::Item<'w, 's>, SystemParamError> {
         unsafe {
             let world = world.data_mut();
-            let Some(data) = world.storages.res_set.get_mut(*state) else {
+            let Some(data) = world.storages.resources.get_mut(*state) else {
                 return Ok(None);
             };
             let Some(untyped) = data.get_mut(last_run, this_run) else {

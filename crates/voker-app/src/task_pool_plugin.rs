@@ -1,8 +1,8 @@
 use crate::{App, Plugin};
 
+use alloc::sync::Arc;
 use core::fmt::Debug;
 use voker_ecs::system::NonSendMarker;
-use voker_os::Arc;
 use voker_task::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
 use voker_task::{TaskPool, TaskPoolBuilder};
 
@@ -26,7 +26,7 @@ impl Plugin for TaskPoolPlugin {
             while ticker.try_tick() {}
         }
 
-        app.add_systems(crate::Last, tick_global_task_pools);
+        app.add_system(crate::Last, (), tick_global_task_pools);
     }
 }
 
@@ -159,7 +159,7 @@ impl TaskPoolOptions {
             .get()
             .clamp(self.min_total_threads, self.max_total_threads);
 
-        log::debug!("Assigning {total_threads} cores to default task pools");
+        tracing::debug!("Assigning {total_threads} cores to default task pools");
 
         let mut remaining_threads = total_threads;
 
@@ -167,7 +167,7 @@ impl TaskPoolOptions {
             // Determine the number of IO threads we will use
             let io_threads = self.io.get_thread_num(remaining_threads, total_threads);
 
-            log::debug!("IO Threads: {io_threads}");
+            tracing::debug!("IO Threads: {io_threads}");
             remaining_threads = remaining_threads.saturating_sub(io_threads);
 
             IoTaskPool::get_or_init(|| {
@@ -192,7 +192,7 @@ impl TaskPoolOptions {
             let async_compute_threads =
                 self.async_compute.get_thread_num(remaining_threads, total_threads);
 
-            log::debug!("Async Compute Threads: {async_compute_threads}");
+            tracing::debug!("Async Compute Threads: {async_compute_threads}");
             remaining_threads = remaining_threads.saturating_sub(async_compute_threads);
 
             AsyncComputeTaskPool::get_or_init(|| {
@@ -217,7 +217,7 @@ impl TaskPoolOptions {
             // This is intentionally last so that an end user can specify 1.0 as the percent
             let compute_threads = self.compute.get_thread_num(remaining_threads, total_threads);
 
-            log::debug!("Compute Threads: {compute_threads}");
+            tracing::debug!("Compute Threads: {compute_threads}");
 
             ComputeTaskPool::get_or_init(|| {
                 let mut builder = TaskPoolBuilder::new()

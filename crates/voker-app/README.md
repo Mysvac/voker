@@ -44,8 +44,8 @@ fn tick() {
 
 fn main() {
     App::new()
-        .add_systems(Startup, setup)
-        .add_systems(Update, tick)
+        .add_systems(Startup, (), setup)
+        .add_systems(Update, (), tick)
         .run();
 }
 ```

@@ -1,3 +1,9 @@
+//! Schedule graph node types.
+//!
+//! [`SystemKey`] is the slotmap key used to identify nodes in the schedule DAG.
+//! [`SystemObject`] wraps either an action system or a condition system together
+//! with its compiled [`AccessTable`], and is stored per node in the graph.
+
 use core::fmt::Debug;
 
 use super::{Direction, GraphNode};

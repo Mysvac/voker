@@ -104,6 +104,7 @@ impl ComponentView {
 unsafe impl<T: Component> ReadOnlyQueryData for &T {}
 
 unsafe impl<T: Component> QueryData for &T {
+    type ReadOnly = Self;
     type State = ComponentId;
     type Cache<'world> = DataView;
     type Item<'world> = &'world T;
@@ -114,7 +115,7 @@ unsafe impl<T: Component> QueryData for &T {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -194,6 +195,7 @@ unsafe impl<T: Component> QueryData for &T {
 unsafe impl<T: Component> ReadOnlyQueryData for Option<&T> {}
 
 unsafe impl<T: Component> QueryData for Option<&T> {
+    type ReadOnly = Self;
     type State = ComponentId;
     type Cache<'world> = DataView;
     type Item<'world> = Option<&'world T>;
@@ -205,7 +207,7 @@ unsafe impl<T: Component> QueryData for Option<&T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -263,6 +265,7 @@ unsafe impl<T: Component> QueryData for Option<&T> {
 unsafe impl<T: Component> ReadOnlyQueryData for Ref<'_, T> {}
 
 unsafe impl<T: Component> QueryData for Ref<'_, T> {
+    type ReadOnly = Self;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Ref<'world, T>;
@@ -273,7 +276,7 @@ unsafe impl<T: Component> QueryData for Ref<'_, T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -353,6 +356,7 @@ unsafe impl<T: Component> QueryData for Ref<'_, T> {
 unsafe impl<T: Component> ReadOnlyQueryData for Option<Ref<'_, T>> {}
 
 unsafe impl<T: Component> QueryData for Option<Ref<'_, T>> {
+    type ReadOnly = Self;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Option<Ref<'world, T>>;
@@ -364,7 +368,7 @@ unsafe impl<T: Component> QueryData for Option<Ref<'_, T>> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -416,6 +420,8 @@ unsafe impl<T: Component> QueryData for Option<Ref<'_, T>> {
 // &mut T
 
 unsafe impl<T: Component> QueryData for &mut T {
+    // Downgrade to Ref<T> to preserve change-tick metadata in read-only mode.
+    type ReadOnly = Ref<'static, T>;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Mut<'world, T>;
@@ -426,7 +432,7 @@ unsafe impl<T: Component> QueryData for &mut T {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -504,6 +510,7 @@ unsafe impl<T: Component> QueryData for &mut T {
 // Option<&mut T>
 
 unsafe impl<T: Component> QueryData for Option<&mut T> {
+    type ReadOnly = Option<Ref<'static, T>>;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Option<Mut<'world, T>>;
@@ -515,7 +522,7 @@ unsafe impl<T: Component> QueryData for Option<&mut T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -567,6 +574,7 @@ unsafe impl<T: Component> QueryData for Option<&mut T> {
 // Mut
 
 unsafe impl<T: Component> QueryData for Mut<'_, T> {
+    type ReadOnly = Ref<'static, T>;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Mut<'world, T>;
@@ -577,8 +585,8 @@ unsafe impl<T: Component> QueryData for Mut<'_, T> {
         <&mut T as QueryData>::build_state(world)
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
-        <&mut T as QueryData>::fetch_state(world)
+    fn try_build_state(world: &World) -> Option<Self::State> {
+        <&mut T as QueryData>::try_build_state(world)
     }
 
     unsafe fn build_cache<'w>(
@@ -633,6 +641,7 @@ unsafe impl<T: Component> QueryData for Mut<'_, T> {
 // Option<Mut<'_, T>>
 
 unsafe impl<T: Component> QueryData for Option<Mut<'_, T>> {
+    type ReadOnly = Option<Ref<'static, T>>;
     type State = ComponentId;
     type Cache<'world> = ComponentView;
     type Item<'world> = Option<Mut<'world, T>>;
@@ -644,8 +653,8 @@ unsafe impl<T: Component> QueryData for Option<Mut<'_, T>> {
         <&mut T as QueryData>::build_state(world)
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
-        <&mut T as QueryData>::fetch_state(world)
+    fn try_build_state(world: &World) -> Option<Self::State> {
+        <&mut T as QueryData>::try_build_state(world)
     }
 
     unsafe fn build_cache<'w>(

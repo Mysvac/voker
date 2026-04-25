@@ -1,10 +1,18 @@
+//! World-level schedule registry.
+//!
+//! [`Schedules`] is a [`Resource`] that maps [`ScheduleLabel`]s to their
+//! [`Schedule`] instances. It provides insertion and lookup helpers and is
+//! the authoritative store consulted when a world runs a schedule by label.
+//!
+//! [`Resource`]: crate::resource::Resource
+
 use core::fmt::Debug;
 
 use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel};
-use crate::schedule::{IntoSystemConfig, SystemSet};
-use crate::system::IntoSystem;
+use crate::schedule::IntoSystemConfig;
+use crate::system::{IntoSystem, SystemSet};
 
 // -----------------------------------------------------------------------------
 // Schedules
@@ -93,84 +101,29 @@ impl Schedules {
         self.mapper.iter_mut().map(|(label, schedule)| (&**label, schedule))
     }
 
-    /// Adds one action system to the schedule identified by `label`.
+    /// Adds one or many systems into `set` on the schedule identified by `label`.
     ///
-    /// This is a chainable helper around [`Schedule::add_system`].
-    pub fn add_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        self.entry(label).add_system(system);
-        self
-    }
-
-    /// Removes one action system from the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::del_system`].
-    pub fn del_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        self.entry(label).del_system(system);
-        self
-    }
-
-    /// Adds one condition system to the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::add_condition`].
-    pub fn add_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        self.entry(label).add_condition(system);
-        self
-    }
-
-    /// Removes one condition system from the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::del_condition`].
-    pub fn del_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        self.entry(label).del_condition(system);
-        self
-    }
-
-    /// Adds one or many systems/configurations to the schedule identified by
-    /// `label`.
-    ///
-    /// This is equivalent to calling [`Schedules::config`].
+    /// All systems in `config` have their [`SystemId`] updated to include `set`
+    /// membership. Equivalent to calling [`Schedule::add_systems`].
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_systems<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.entry(label).config(systems.into_config());
+        self.entry(label).add_systems(set, systems);
         self
     }
 
-    /// Applies a full [`IntoSystemConfig`] to the schedule identified by
-    /// `label`.
-    ///
-    /// This can insert systems and update dependency/run-condition edges.
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn config<M>(
+    /// Add one system.
+    pub fn add_system<M>(
         &mut self,
         label: impl ScheduleLabel,
-        systems: impl IntoSystemConfig<M>,
+        set: impl SystemSet,
+        system: impl IntoSystem<(), (), M>,
     ) -> &mut Self {
-        self.entry(label).config(systems.into_config());
-        self
-    }
-
-    pub fn init_system_set(
-        &mut self,
-        label: impl ScheduleLabel,
-        system_set: impl SystemSet,
-    ) -> &mut Self {
-        self.entry(label).init_system_set(system_set.intern());
+        self.entry(label).add_system(set, system);
         self
     }
 }

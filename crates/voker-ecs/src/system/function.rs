@@ -1,5 +1,7 @@
 use super::{AccessTable, System, SystemFlags, SystemMeta};
-use crate::system::{IntoSystem, SystemError, SystemId, UninitializedSystemError};
+use crate::system::{
+    InternedSystemSet, IntoSystem, SystemError, SystemId, UninitializedSystemError,
+};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, World, WorldId};
 
@@ -285,6 +287,14 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         self.meta.last_run.check_tick(now);
     }
 
+    fn system_set(&self) -> InternedSystemSet {
+        self.meta.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.meta.id = self.meta.id.with_system_set(set);
+    }
+
     /// Initializes parameter state and registers access declarations.
     ///
     /// The returned table is consumed by schedule conflict analysis.
@@ -295,7 +305,7 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
             world_id: world.id(),
         });
         if !<F::Param as SystemParam>::mark_access(&mut table, &state.param) {
-            invalid_system_access(self.meta.id());
+            invalid_system_access(self.meta.id(), &table, world);
         }
         self.meta.set_last_run(world.last_run());
         table
@@ -311,6 +321,9 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         input: <Self::Input as SystemInput>::Data<'_>,
         world: crate::world::UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError> {
+        #[cfg(feature = "trace")]
+        let _span_guard = self.meta.system_span.enter();
+
         let Some(state) = &mut self.state else {
             return Err(UninitializedSystemError::new::<F>().into());
         };
@@ -334,6 +347,9 @@ impl<M: 'static, F: SystemFunction<M> + 'static> System for FunctionSystem<M, F>
         };
 
         let output = <F as SystemFunction<M>>::run(&mut self.func, input, param);
+
+        #[cfg(feature = "trace")]
+        ::core::mem::drop(_span_guard);
 
         self.meta.set_last_run(this_run);
 
@@ -372,8 +388,9 @@ fn uninitialized_system(system_id: SystemId) -> ! {
 
 #[cold]
 #[inline(never)]
-fn invalid_system_access(name: SystemId) -> ! {
-    panic!("System {name} params access conflict.")
+fn invalid_system_access(name: SystemId, table: &AccessTable, world: &World) -> ! {
+    let error_info = table.display(world);
+    panic!("System {name} params access conflict. \n{error_info}\n")
 }
 
 #[cold]

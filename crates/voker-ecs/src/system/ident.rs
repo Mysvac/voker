@@ -1,8 +1,16 @@
+//! System identity — stable unique IDs for each system in the ECS.
+//!
+//! [`SystemId`] wraps a `TypeId` (derived from the system's concrete type) and
+//! an optional [`InternedSystemSet`] tag that disambiguates instances of the
+//! same system type placed in different sets (e.g., `SystemSetBegin`/`SystemSetEnd`).
+
 use core::any::TypeId;
 use core::fmt::{Debug, Display};
 use core::hash::Hash;
 
-use crate::utils::DebugName;
+use voker_utils::debug::DebugName;
+
+use crate::system::{InternedSystemSet, SystemSet};
 
 // -----------------------------------------------------------------------------
 // SystemId
@@ -12,27 +20,16 @@ use crate::utils::DebugName;
 pub struct SystemId {
     name: DebugName,
     type_id: TypeId,
+    in_set: InternedSystemSet,
 }
 
 impl PartialEq for SystemId {
     fn eq(&self, other: &Self) -> bool {
-        self.type_id == other.type_id
+        self.type_id == other.type_id && self.in_set == other.in_set
     }
 }
 
 impl Eq for SystemId {}
-
-impl PartialOrd for SystemId {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SystemId {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.type_id.cmp(&other.type_id)
-    }
-}
 
 impl Hash for SystemId {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
@@ -42,32 +39,48 @@ impl Hash for SystemId {
 
 impl SystemId {
     #[inline(always)]
-    pub const fn of<T: 'static>() -> Self {
+    pub fn of<T: 'static>() -> Self {
         Self {
             name: DebugName::type_name::<T>(),
             type_id: TypeId::of::<T>(),
+            in_set: ().intern(),
         }
     }
 
     #[inline(always)]
-    pub const fn type_id(&self) -> TypeId {
+    pub fn type_id(&self) -> TypeId {
         self.type_id
     }
 
     #[inline(always)]
-    pub const fn name(&self) -> DebugName {
+    pub fn name(&self) -> DebugName {
         self.name
+    }
+
+    #[inline(always)]
+    pub fn system_set(&self) -> InternedSystemSet {
+        self.in_set
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn with_system_set(self, set: InternedSystemSet) -> Self {
+        Self {
+            name: self.name,
+            type_id: self.type_id,
+            in_set: set,
+        }
     }
 }
 
 impl Debug for SystemId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}({:?})", self.name, self.type_id)
+        write!(f, "{}<{:?}>({:?})", self.name, self.type_id, self.in_set)
     }
 }
 
 impl Display for SystemId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.name)
+        write!(f, "{}({:?})", self.name, self.in_set)
     }
 }

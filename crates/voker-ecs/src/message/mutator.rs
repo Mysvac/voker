@@ -2,14 +2,16 @@ use crate::borrow::ResMut;
 use crate::message::{Message, MessageCursor, MessageQueue};
 use crate::message::{MessageMutIterator, MessageMutWithKeyIter};
 use crate::system::{AccessTable, Local, SystemParam, SystemParamError};
+use crate::world::{UnsafeWorld, World};
 
 /// Mutable reader parameter for consuming and editing unread messages of type `M`.
 ///
-/// Like [`crate::message::MessageReader`], each system instance maintains its
-/// own local cursor.
+/// Like [`MessageReader`], each system instance maintains its own local cursor.
 ///
 /// Reading mutably still follows unread semantics: this parameter only yields
 /// messages not yet observed by this system's cursor.
+///
+/// [`MessageReader`]: crate::message::MessageReader
 ///
 /// # Example
 ///
@@ -75,7 +77,7 @@ unsafe impl<M: Message> SystemParam for MessageMutator<'_, '_, M> {
     const NON_SEND: bool = false;
     const EXCLUSIVE: bool = false;
 
-    fn init_state(world: &mut crate::world::World) -> Self::State {
+    fn init_state(world: &mut World) -> Self::State {
         <InternalParam<M> as SystemParam>::init_state(world)
     }
 
@@ -84,7 +86,7 @@ unsafe impl<M: Message> SystemParam for MessageMutator<'_, '_, M> {
     }
 
     unsafe fn build_param<'w, 's>(
-        world: crate::world::UnsafeWorld<'w>,
+        world: UnsafeWorld<'w>,
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,

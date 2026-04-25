@@ -1,5 +1,8 @@
+use alloc::borrow::Cow;
+use alloc::string::String;
+
 use crate::info::{OpaqueInfo, TypeInfo, TypePath, Typed};
-use crate::registry::{FromType, GetTypeMeta, ReflectDefault, TypeMeta};
+use crate::registry::{FromType, GetTypeMeta, ReflectConvert, ReflectDefault, TypeMeta};
 use crate::registry::{ReflectFromReflect, ReflectSerialize};
 use crate::{FromReflect, Reflect};
 
@@ -34,10 +37,14 @@ impl Reflect for &'static str {
 
 impl GetTypeMeta for &'static str {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
+        let mut type_meta = TypeMeta::with_capacity::<Self>(4);
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
+        let mut converter = ReflectConvert::new::<Self>();
+        converter.register_into::<Self, String>();
+        converter.register_into::<Self, Cow<'static, str>>();
+        type_meta.insert_data(converter);
         type_meta
     }
 }

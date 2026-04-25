@@ -56,3 +56,10 @@ pub(crate) fn reflect_deserialize_(voker_reflect_path: &syn::Path) -> TokenStrea
         #voker_reflect_path::registry::ReflectDeserialize
     }
 }
+
+#[inline]
+pub(crate) fn reflect_convert_(voker_reflect_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_reflect_path::registry::ReflectConvert
+    }
+}

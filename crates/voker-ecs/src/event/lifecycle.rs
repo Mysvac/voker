@@ -8,8 +8,9 @@ use crate::entity::Entity;
 ///
 /// This runs before [`Insert`].
 ///
-/// See [`ComponentHooks::on_add`](crate::component::ComponentHooks::on_add)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_add`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_add`]: crate::component::ComponentHooks::on_add
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Add {
@@ -23,8 +24,9 @@ pub struct Add {
 ///
 /// This runs before [`Add`] and [`Insert`] for cloned components.
 ///
-/// See [`ComponentHooks::on_clone`](crate::component::ComponentHooks::on_clone)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_clone`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_clone`]: crate::component::ComponentHooks::on_clone
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Clone {
@@ -38,8 +40,9 @@ pub struct Clone {
 ///
 /// If the component was newly added, [`Add`] runs before this event.
 ///
-/// See [`ComponentHooks::on_insert`](crate::component::ComponentHooks::on_insert)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_insert`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_insert`]: crate::component::ComponentHooks::on_insert
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Insert {
@@ -54,8 +57,9 @@ pub struct Insert {
 /// This runs before the old value is discarded, so observers can still inspect
 /// pre-change state.
 ///
-/// See [`ComponentHooks::on_discard`](crate::component::ComponentHooks::on_discard)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_discard`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_discard`]: crate::component::ComponentHooks::on_discard
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Discard {
@@ -69,8 +73,9 @@ pub struct Discard {
 /// This runs before removal is finalized, so observers can still inspect
 /// relevant component state in the same flush.
 ///
-/// See [`ComponentHooks::on_remove`](crate::component::ComponentHooks::on_remove)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_remove`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_remove`]: crate::component::ComponentHooks::on_remove
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Remove {
@@ -82,8 +87,9 @@ pub struct Remove {
 /// Lifecycle event emitted for each component on an entity when that entity is
 /// despawned.
 ///
-/// See [`ComponentHooks::on_despawn`](crate::component::ComponentHooks::on_despawn)
-/// for hook-level behavior.
+/// See [`ComponentHooks::on_despawn`] for hook-level behavior.
+///
+/// [`ComponentHooks::on_despawn`]: crate::component::ComponentHooks::on_despawn
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = EntityComponentsTrigger<'a>)]
 pub struct Despawn {

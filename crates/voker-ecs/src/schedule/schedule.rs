@@ -1,3 +1,14 @@
+//! Core schedule type: system graph construction and execution.
+//!
+//! A [`Schedule`] owns a directed acyclic graph (DAG) of systems connected by
+//! ordering, condition, and set-membership edges. Before first run (and after
+//! any structural change) the graph is compiled into a [`SystemSchedule`] —
+//! a flattened, executor-ready representation.
+//!
+//! Main entry points:
+//! - [`Schedule::add_systems`] — insert one or many systems into a set.
+//! - [`Schedule::config_set`] — apply ordering/condition constraints to a set.
+//! - [`Schedule::run`] — compile (if needed) and execute one tick.
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
 use core::fmt::Debug;
@@ -10,14 +21,15 @@ use slotmap::{SecondaryMap, SlotMap};
 use voker_utils::extra::PagePool;
 use voker_utils::hash::{HashMap, HashSet, NoopHashMap, NoopHashSet, SparseHashMap};
 
+use super::IntoSystemConfig;
 use super::config::SystemEntry;
+use super::set_config::{IntoSystemSetConfig, SystemSetConfig};
 use super::{ActionSystem, ConditionSystem, SystemKey, SystemObject};
-use super::{AnonymousSchedule, AnonymousSystemSet, InternedSystemSet};
+use super::{AnonymousSchedule, SystemConfig, ToposortError};
 use super::{Dag, InternedScheduleLabel, ScheduleLabel, SystemExecutor};
 use super::{ExecutorKind, MultiThreadedExecutor, SingleThreadedExecutor};
-use super::{SystemConfig, SystemSet, ToposortError};
-use crate::prelude::IntoSystemConfig;
-use crate::system::{IntoSystem, SystemId};
+use crate::system::{InternedSystemSet, SystemSet};
+use crate::system::{IntoSystem, System, SystemId};
 use crate::tick::Tick;
 use crate::world::World;
 
@@ -98,6 +110,7 @@ pub struct Schedule {
     conflict: ConflictGraph,
     schedule: SystemSchedule,
     system_sets: SystemSets,
+    set_hierarchy: SetHierarchy,
     executor: Box<dyn SystemExecutor>,
     executor_initialized: bool,
     is_changed: bool,
@@ -107,6 +120,19 @@ pub struct Schedule {
 // SystemSets
 
 type SystemSets = HashMap<InternedSystemSet, NoopHashSet<SystemId>>;
+
+// -----------------------------------------------------------------------------
+// SetHierarchy
+
+/// Tracks parent–child relationships between system sets for recursive removal.
+///
+/// The anonymous set `()` is the implicit root. Sets without an explicit parent
+/// are direct children of `()`.
+#[derive(Default)]
+struct SetHierarchy {
+    children: HashMap<InternedSystemSet, NoopHashSet<InternedSystemSet>>,
+    parents: HashMap<InternedSystemSet, InternedSystemSet>,
+}
 
 // -----------------------------------------------------------------------------
 // Allocator
@@ -336,16 +362,8 @@ impl OrderingGraph {
         self.dependency.insert_edge(before, after);
     }
 
-    fn remove_order(&mut self, before: SystemKey, after: SystemKey) -> bool {
-        self.dependency.remove_edge(before, after)
-    }
-
     fn insert_condition_order(&mut self, condition: SystemKey, runnable: SystemKey) {
         self.condition.insert_edge(condition, runnable);
-    }
-
-    fn remove_condition_order(&mut self, condition: SystemKey, runnable: SystemKey) -> bool {
-        self.condition.remove_edge(condition, runnable)
     }
 
     fn insert_node(&mut self, key: SystemKey) {
@@ -456,6 +474,9 @@ impl Default for Schedule {
         Self::new(AnonymousSchedule)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Internal build pipeline
 
 impl Schedule {
     fn init_systems(&mut self, world: &mut World) {
@@ -734,6 +755,7 @@ impl Schedule {
             is_changed: false,
             allocator: Default::default(),
             system_sets: Default::default(),
+            set_hierarchy: Default::default(),
             buffer: Default::default(),
             ordering: Default::default(),
             conflict: Default::default(),
@@ -750,6 +772,7 @@ impl Schedule {
             label: label.intern(),
             allocator: Default::default(),
             system_sets: Default::default(),
+            set_hierarchy: Default::default(),
             buffer: Default::default(),
             ordering: Default::default(),
             conflict: Default::default(),
@@ -834,7 +857,7 @@ impl Schedule {
     ///
     /// This also ensures the set boundary marker systems exist and wires
     /// run-condition edges so the system executes within `set` boundaries.
-    pub fn insert_action(&mut self, system: ActionSystem, set: InternedSystemSet) {
+    fn insert_action(&mut self, system: ActionSystem, set: InternedSystemSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -863,7 +886,7 @@ impl Schedule {
     /// This also ensures the set boundary marker systems exist and wires
     /// run-condition edges so the condition is evaluated within `set`
     /// boundaries.
-    pub fn insert_condition(&mut self, system: ConditionSystem, set: InternedSystemSet) {
+    fn insert_condition(&mut self, system: ConditionSystem, set: InternedSystemSet) {
         let id = system.id();
 
         if !self.is_changed {
@@ -891,7 +914,7 @@ impl Schedule {
     ///
     /// If absent, this inserts the set's begin/end markers and a direct
     /// `begin -> end` condition edge.
-    pub fn init_system_set(&mut self, set: InternedSystemSet) {
+    fn init_system_set(&mut self, set: InternedSystemSet) {
         if !self.system_sets.contains_key(&set) {
             if !self.is_changed {
                 self.recycle_schedule();
@@ -926,7 +949,7 @@ impl Schedule {
     /// Removes `set` and all systems currently tracked inside it.
     ///
     /// This includes set boundary marker systems.
-    pub fn remove_system_set(&mut self, set: InternedSystemSet) {
+    fn remove_system_set_inner(&mut self, set: InternedSystemSet) {
         if let Some(sets) = self.system_sets.remove(&set) {
             for id in sets {
                 self.remove(id);
@@ -937,7 +960,7 @@ impl Schedule {
     /// Removes a system by name.
     ///
     /// Returns `true` if a system was removed.
-    pub fn remove(&mut self, name: SystemId) -> bool {
+    fn remove(&mut self, name: SystemId) -> bool {
         let Some(key) = self.allocator.remove(name) else {
             return false;
         };
@@ -960,7 +983,7 @@ impl Schedule {
     /// Inserts an explicit dependency edge `before -> after`.
     ///
     /// Returns `false` if either system is not registered.
-    pub fn insert_order(&mut self, before: SystemId, after: SystemId) -> bool {
+    fn insert_order(&mut self, before: SystemId, after: SystemId) -> bool {
         let Some(b) = self.allocator.get_key(before) else {
             return false;
         };
@@ -978,29 +1001,10 @@ impl Schedule {
         true
     }
 
-    /// Removes an explicit dependency edge `before -> after`.
-    ///
-    /// Returns `false` if either system is not registered.
-    pub fn remove_order(&mut self, before: SystemId, after: SystemId) -> bool {
-        let Some(b) = self.allocator.get_key(before) else {
-            return false;
-        };
-        let Some(a) = self.allocator.get_key(after) else {
-            return false;
-        };
-
-        if !self.is_changed {
-            self.recycle_schedule();
-            self.is_changed = true;
-        }
-
-        self.ordering.remove_order(b, a)
-    }
-
     /// Adds a run-condition edge `condition -> runnable`.
     ///
     /// Returns `false` if either system is not registered.
-    pub fn insert_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
+    fn insert_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
         let Some(r) = self.allocator.get_key(runnable) else {
             return false;
         };
@@ -1016,25 +1020,6 @@ impl Schedule {
         self.ordering.insert_condition_order(c, r);
 
         true
-    }
-
-    /// Removes a run-condition edge `condition -> runnable`.
-    ///
-    /// Returns `false` if either system is not registered.
-    pub fn remove_run_if(&mut self, runnable: SystemId, condition: SystemId) -> bool {
-        let Some(r) = self.allocator.get_key(runnable) else {
-            return false;
-        };
-        let Some(c) = self.allocator.get_key(condition) else {
-            return false;
-        };
-
-        if !self.is_changed {
-            self.recycle_schedule();
-            self.is_changed = true;
-        }
-
-        self.ordering.remove_condition_order(c, r)
     }
 
     /// Returns the internal key for a system name.
@@ -1064,67 +1049,15 @@ impl Schedule {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Public API
+
 impl Schedule {
-    /// Adds a single action system.
-    pub fn add_system<S, M>(&mut self, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        let system = Box::new(IntoSystem::into_system(system));
-        let set = AnonymousSystemSet.intern();
-        self.insert_action(system, set);
-        self
-    }
-
-    /// Removes a single action system.
-    pub fn del_system<S, M>(&mut self, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        self.remove(system.system_id());
-        self
-    }
-
-    /// Adds a single condition system.
-    pub fn add_condition<S, M>(&mut self, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        let system = Box::new(IntoSystem::into_system(system));
-        let set = AnonymousSystemSet.intern();
-        self.insert_condition(system, set);
-        self
-    }
-
-    /// Removes a single condition system.
-    pub fn del_condition<S, M>(&mut self, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        self.remove(system.system_id());
-        self
-    }
-
-    /// Creates `set` markers if needed.
+    /// Adds one or many systems into `set`.
     ///
-    /// This is useful when external code wants a stable ordering anchor before
-    /// any concrete systems are inserted.
-    pub fn add_system_set(&mut self, set: impl SystemSet) -> &mut Self {
-        self.init_system_set(set.intern());
-        self
-    }
-
-    /// Removes `set` and all tracked members.
-    pub fn del_system_set(&mut self, set: impl SystemSet) -> &mut Self {
-        self.remove_system_set(set.intern());
-        self
-    }
-
-    /// Adds one or many systems through [`IntoSystemConfig`].
-    ///
-    /// This is equivalent to calling [`Schedule::config`]. It accepts a
-    /// single system, a condition, a tuple of systems/configs, or an already
-    /// built [`SystemConfig`].
+    /// All systems in `config` have their [`SystemId`] updated to include `set`
+    /// membership via [`System::set_system_set`], ensuring identity uniqueness
+    /// across sets. The set's begin/end boundary markers are created if needed.
     ///
     /// # Examples
     ///
@@ -1136,70 +1069,38 @@ impl Schedule {
     /// fn can_run() -> bool { true }
     ///
     /// let mut schedule = Schedule::default();
-    ///
-    /// schedule.add_systems((startup, gameplay).chain().run_if(can_run));
+    /// schedule.add_systems((), (startup, gameplay).chain().run_if(can_run));
     /// ```
-    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn add_systems<M>(&mut self, config: impl IntoSystemConfig<M>) -> &mut Self {
-        self.config(config)
-    }
+    pub fn add_systems<M>(
+        &mut self,
+        set: impl SystemSet,
+        config: impl IntoSystemConfig<M>,
+    ) -> &mut Self {
+        let set = set.intern();
+        self.init_system_set(set);
+        let mut cfg = config.into_config();
+        cfg.apply_to_set(set);
 
-    /// Applies a [`SystemConfig`] into this schedule.
-    ///
-    /// The provided configuration may insert:
-    /// - action and condition systems,
-    /// - deferred apply helper systems,
-    /// - explicit dependency edges,
-    /// - run-condition edges.
-    ///
-    /// Existing systems with the same `SystemId` are kept and not overwritten.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use voker_ecs::schedule::{IntoSystemConfig, Schedule};
-    ///
-    /// fn a() {}
-    /// fn b() {}
-    ///
-    /// let config = a.before(b);
-    ///
-    /// let mut schedule = Schedule::default();
-    /// schedule.config(config);
-    /// ```
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn config<M>(&mut self, config: impl IntoSystemConfig<M>) -> &mut Self {
         let SystemConfig {
             systems,
             deferred,
             dependencies,
             conditions,
-            set_anchors,
-            set,
             ..
-        } = config.into_config();
-
-        // Ensure set boundaries referenced by before_set/after_set are registered.
-        for anchor_set in set_anchors {
-            self.init_system_set(anchor_set);
-        }
-
-        let set = set.unwrap_or(AnonymousSystemSet.intern());
+        } = cfg;
 
         for (_, entry) in systems {
             match entry {
-                SystemEntry::Action(system) => {
-                    self.insert_action(system, set);
-                }
-                SystemEntry::Condition(system) => {
-                    self.insert_condition(system, set);
-                }
+                SystemEntry::Action(system) => self.insert_action(system, set),
+                SystemEntry::Condition(system) => self.insert_condition(system, set),
             }
         }
 
-        for (_, apply) in deferred {
+        for (id, apply) in deferred {
+            let def_id = apply.id();
             self.insert_action(apply, set);
+            self.insert_order(id, def_id);
         }
 
         for (before, after) in dependencies {
@@ -1208,6 +1109,91 @@ impl Schedule {
 
         for (condition, runnable) in conditions {
             self.insert_run_if(runnable, condition);
+        }
+
+        self
+    }
+
+    pub fn add_system<M>(
+        &mut self,
+        set: impl SystemSet,
+        system: impl IntoSystem<(), (), M>,
+    ) -> &mut Self {
+        let mut system = IntoSystem::into_system(system);
+        let set = set.intern();
+        self.init_system_set(set);
+        system.set_system_set(set);
+        self.insert_action(Box::new(system), set);
+        self
+    }
+
+    /// Removes `set` and all its children recursively.
+    ///
+    /// Children are removed depth-first before the parent, so all membership
+    /// and boundary edges are cleaned up in order.
+    pub fn remove_system_set(&mut self, set: impl SystemSet) -> &mut Self {
+        let set = set.intern();
+        self.remove_set_recursive(set);
+        self
+    }
+
+    fn remove_set_recursive(&mut self, set: InternedSystemSet) {
+        if let Some(children) = self.set_hierarchy.children.remove(&set) {
+            for child in children {
+                self.set_hierarchy.parents.remove(&child);
+                self.remove_set_recursive(child);
+            }
+        }
+        self.set_hierarchy.parents.remove(&set);
+        self.remove_system_set_inner(set);
+    }
+
+    /// Applies a [`SystemSetConfig`] to this schedule.
+    ///
+    /// This can initialize a set, establish parent–child nesting, add ordering
+    /// relative to other sets, and attach run conditions to an entire set.
+    pub fn config_set(&mut self, config: impl IntoSystemSetConfig) -> &mut Self {
+        let SystemSetConfig {
+            set,
+            parent,
+            run_after,
+            run_before,
+            conditions,
+        } = config.into_set_config();
+
+        self.init_system_set(set);
+
+        if let Some(parent) = parent {
+            self.init_system_set(parent);
+            // Wire child's begin and end markers into the parent set so they
+            // run within the parent's execution window.
+            let begin: ActionSystem = set.begin();
+            let end: ActionSystem = set.end();
+            self.insert_action(begin, parent);
+            self.insert_action(end, parent);
+            self.set_hierarchy.children.entry(parent).or_default().insert(set);
+            self.set_hierarchy.parents.insert(set, parent);
+        }
+
+        for other in run_after {
+            self.init_system_set(other);
+            let other_end_id = other.end().id();
+            let self_begin_id = set.begin().id();
+            self.insert_order(other_end_id, self_begin_id);
+        }
+
+        for other in run_before {
+            self.init_system_set(other);
+            let self_end_id = set.end().id();
+            let other_begin_id = other.begin().id();
+            self.insert_order(self_end_id, other_begin_id);
+        }
+
+        for cond in conditions {
+            let cond_id = cond.id();
+            self.insert_condition(cond, ().intern());
+            let begin_id = set.begin().id();
+            self.insert_run_if(begin_id, cond_id);
         }
 
         self

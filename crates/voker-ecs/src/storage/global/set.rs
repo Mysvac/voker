@@ -2,27 +2,27 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::iter::FusedIterator;
 
-use super::ResData;
+use super::ResourceData;
 use crate::resource::{ResourceId, ResourceInfo};
 use crate::storage::AbortOnPanic;
 use crate::tick::Tick;
 use crate::utils::DebugCheckedUnwrap;
 
 // -----------------------------------------------------------------------------
-// ResSet
+// ResourceStorage
 
 /// A collection of all resources in the world.
 ///
 /// Provides indexed access to resources by their [`ResourceId`] with
 /// O(1) lookup through a sparse index map.
-pub struct ResSet {
-    data: Vec<Option<ResData>>,
+pub struct ResourceStorage {
+    data: Vec<Option<ResourceData>>,
 }
 
 // -----------------------------------------------------------------------------
 // Private
 
-impl ResSet {
+impl ResourceStorage {
     /// Creates a new empty resource collection.
     #[inline]
     pub(crate) const fn new() -> Self {
@@ -45,7 +45,7 @@ impl ResSet {
     pub(crate) fn prepare(&mut self, info: &ResourceInfo) {
         #[cold]
         #[inline(never)]
-        fn resize_data(this: &mut ResSet, len: usize) {
+        fn resize_data(this: &mut ResourceStorage, len: usize) {
             let abort_guard = AbortOnPanic;
             this.data.reserve(len - this.data.len());
             this.data.resize_with(this.data.capacity(), || None);
@@ -54,7 +54,7 @@ impl ResSet {
 
         #[cold]
         #[inline(never)]
-        fn prepare_internal(this: &mut ResSet, info: &ResourceInfo) {
+        fn prepare_internal(this: &mut ResourceStorage, info: &ResourceInfo) {
             let id = info.id();
             let index = id.index();
             unsafe {
@@ -62,7 +62,7 @@ impl ResSet {
                     resize_data(this, index + 1);
                 }
 
-                let data = ResData::new(info);
+                let data = ResourceData::new(info);
                 *this.data.get_unchecked_mut(index) = Some(data);
             }
         }
@@ -76,7 +76,7 @@ impl ResSet {
 // -----------------------------------------------------------------------------
 // Basic
 
-impl Debug for ResSet {
+impl Debug for ResourceStorage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
             .entries(self.data.iter().filter_map(Option::as_ref))
@@ -84,7 +84,7 @@ impl Debug for ResSet {
     }
 }
 
-impl ResSet {
+impl ResourceStorage {
     /// Returns the number of Maps.
     #[inline]
     #[expect(clippy::len_without_is_empty, reason = "consistency")]
@@ -94,13 +94,13 @@ impl ResSet {
 
     /// Returns a shared reference to the resource data for the given ID, if it exists.
     #[inline]
-    pub fn get(&self, id: ResourceId) -> Option<&ResData> {
+    pub fn get(&self, id: ResourceId) -> Option<&ResourceData> {
         self.data.get(id.index()).and_then(Option::as_ref)
     }
 
     /// Returns a mutable reference to the resource data for the given ID, if it exists.
     #[inline]
-    pub fn get_mut(&mut self, id: ResourceId) -> Option<&mut ResData> {
+    pub fn get_mut(&mut self, id: ResourceId) -> Option<&mut ResourceData> {
         self.data.get_mut(id.index()).and_then(Option::as_mut)
     }
 
@@ -109,7 +109,7 @@ impl ResSet {
     /// # Safety
     /// - The caller must ensure the resource is prepared (instead of registered)..
     #[inline(always)]
-    pub unsafe fn get_unchecked(&self, id: ResourceId) -> &ResData {
+    pub unsafe fn get_unchecked(&self, id: ResourceId) -> &ResourceData {
         debug_assert!(id.index() < self.data.len());
         unsafe { self.data.get_unchecked(id.index()).as_ref().debug_checked_unwrap() }
     }
@@ -119,7 +119,7 @@ impl ResSet {
     /// # Safety
     /// - The caller must ensure the resource is prepared (instead of registered).
     #[inline(always)]
-    pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResData {
+    pub unsafe fn get_unchecked_mut(&mut self, id: ResourceId) -> &mut ResourceData {
         debug_assert!(id.index() < self.data.len());
         unsafe {
             self.data
@@ -131,13 +131,13 @@ impl ResSet {
 
     /// Returns an iterator over the resources.
     #[inline]
-    pub fn iter(&self) -> impl FusedIterator<Item = &'_ ResData> {
+    pub fn iter(&self) -> impl FusedIterator<Item = &'_ ResourceData> {
         self.data.iter().filter_map(Option::as_ref)
     }
 
     /// Returns an iterator that allows modifying each resource.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl FusedIterator<Item = &'_ mut ResData> {
+    pub fn iter_mut(&mut self) -> impl FusedIterator<Item = &'_ mut ResourceData> {
         self.data.iter_mut().filter_map(Option::as_mut)
     }
 }

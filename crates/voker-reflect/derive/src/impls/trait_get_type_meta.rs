@@ -75,6 +75,23 @@ pub(crate) fn impl_trait_get_type_meta(
         None => TokenStream::new(),
     };
 
+    let insert_convert = if meta.attrs().into_types.is_empty() && meta.attrs().from_types.is_empty()
+    {
+        TokenStream::new()
+    } else {
+        data_counter += 1;
+        let reflect_convert_ = crate::path::reflect_convert_(voker_reflect_path);
+        let into_types = &meta.attrs().into_types;
+        let from_types = &meta.attrs().from_types;
+
+        quote! {
+            let mut __reflect_converter = #reflect_convert_::new::<Self>();
+            #( __reflect_converter.register_into::<Self, #into_types>(); )*
+            #( __reflect_converter.register_from::<Self, #from_types>(); )*
+            #type_meta_::insert_data::<#reflect_convert_>(&mut #outer_, __reflect_converter);
+        }
+    };
+
     data_counter += meta.attrs().extra_type_data.len();
 
     let insert_extra_traits = meta.attrs().extra_type_data.iter().map(|extra_path| {
@@ -97,6 +114,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #insert_default
                 #insert_serialize
                 #insert_deserialize
+                #insert_convert
                 #(#insert_extra_traits)*
                 #outer_
             }

@@ -6,9 +6,7 @@
 //! # Synchronization Primitives
 //!
 //! - [`OnceFlag`]: A lightweight one-time state flag.
-//! - [`Futex`]: A minimal spin-based synchronization primitive.
 //! - [`SpinLock`]: A mutex-like lock where waiters spin instead of parking.
-//! - [`SpinLockGuard`]: RAII guard returned by [`SpinLock`].
 //!
 //! # Queue Structures
 //!
@@ -20,8 +18,6 @@
 //!
 //! - [`CachePadded`]: Cache-line padding wrapper to reduce false sharing.
 //! - [`Backoff`]: Backoff strategy utility for contention-heavy retry loops.
-//! - [`SyncCell`]: A reimplementation of unstable [`core::sync::Exclusive`]
-//! - [`SyncUnsafeCell`]: A reimplementation of unstable [`core::cell::SyncUnsafeCell`]
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -34,22 +30,19 @@ mod list_queue;
 mod once_flag;
 mod seq_queue;
 mod spin_lock;
-mod sync_cell;
-mod sync_unsafe_cell;
 
 // -----------------------------------------------------------------------------
 // Exports
 
+pub(crate) use futex::Futex;
+
 pub use array_queue::ArrayQueue;
 pub use backoff::Backoff;
 pub use cache_paded::CachePadded;
-pub use futex::Futex;
 pub use list_queue::ListQueue;
 pub use once_flag::OnceFlag;
 pub use seq_queue::SegQueue;
 pub use spin_lock::{SpinLock, SpinLockGuard};
-pub use sync_cell::SyncCell;
-pub use sync_unsafe_cell::SyncUnsafeCell;
 
 // -----------------------------------------------------------------------------
 // Utils for test

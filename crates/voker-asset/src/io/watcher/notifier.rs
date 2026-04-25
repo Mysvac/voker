@@ -8,7 +8,7 @@ use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
 
 use crate::io::AssetSourceEvent;
-use crate::path::normalize_path;
+use crate::utils::normalize_path;
 
 // -----------------------------------------------------------------------------
 // EventNotifier

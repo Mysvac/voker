@@ -1,4 +1,9 @@
-
+//! I/O implementation for the local filesystem.
+//!
+//! This asset I/O is fully featured but it's not available on `android` and `wasm` targets.
+//!
+//! - On android, this module will be compiled but it's unused.
+//! - On wasm32, this module will not be compiled, and cannot be used.
 
 voker_task::cfg::single_threaded! {
     mod sync_asset;
@@ -11,16 +16,16 @@ voker_task::cfg::multi_threaded! {
 // -----------------------------------------------------------------------------
 // base_path
 
-use std::env;
 use std::path::{Path, PathBuf};
 
-pub(crate) fn base_path() -> PathBuf {
-    if let Ok(manifest_dir) = env::var("VOKER_ASSET_ROOT") {
+pub fn base_path() -> PathBuf {
+    if let Ok(manifest_dir) = std::env::var("VOKER_ASSET_ROOT") {
         PathBuf::from(manifest_dir)
-    } else if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+    } else if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         PathBuf::from(manifest_dir)
     } else {
-        env::current_exe().unwrap()
+        std::env::current_exe()
+            .unwrap()
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_default()
@@ -30,12 +35,16 @@ pub(crate) fn base_path() -> PathBuf {
 // -----------------------------------------------------------------------------
 // FileAssetReader
 
+/// A simple file reader.
+///
+/// Managed by asset plugin, users do not need to use this.
 #[derive(Debug, Clone)]
 pub struct FileAssetReader {
     root_path: PathBuf,
 }
 
 impl FileAssetReader {
+    /// Creates a new [`FileAssetReader`] at a path relative to the executable's directory.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         let root_path = base_path().join(path.as_ref());
         tracing::debug!(
@@ -45,21 +54,36 @@ impl FileAssetReader {
         Self { root_path }
     }
 
+    /// Returns the base path of the assets directory.
+    ///
+    /// Which is normally the executable's parent directory.
+    /// (e.g. for `foo/main.exe`, this is `foo`).
+    #[inline]
     pub fn base_path() -> PathBuf {
         base_path()
     }
 
+    /// Returns the root directory where assets are loaded from.
+    ///
+    /// To change this, set [`AssetPlugin::file_path`].
+    ///
+    /// [`AssetPlugin::file_path`]: crate::plugin::AssetPlugin::file_path
+    #[inline]
     pub fn root_path(&self) -> &PathBuf {
         &self.root_path
     }
 }
 
+/// A file writer.
+///
+/// Managed by asset plugin, users do not need to use this.
 #[derive(Debug, Clone)]
 pub struct FileAssetWriter {
     root_path: PathBuf,
 }
 
 impl FileAssetWriter {
+    /// Creates a new [`FileAssetWriter`] at a path relative to the executable's directory.
     pub fn new<P: AsRef<Path>>(path: P, create_root: bool) -> Self {
         let root_path = base_path().join(path.as_ref());
         if create_root && let Err(e) = std::fs::create_dir_all(&root_path) {
@@ -71,13 +95,22 @@ impl FileAssetWriter {
         Self { root_path }
     }
 
+    /// Returns the base path of the assets directory.
+    ///
+    /// Which is normally the executable's parent directory.
+    /// (e.g. for `foo/main.exe`, this is `foo`).
+    #[inline]
     pub fn base_path() -> PathBuf {
         base_path()
     }
 
+    /// Returns the root directory where assets are loaded from.
+    ///
+    /// To change this, set [`AssetPlugin::file_path`].
+    ///
+    /// [`AssetPlugin::file_path`]: crate::plugin::AssetPlugin::file_path
+    #[inline]
     pub fn root_path(&self) -> &PathBuf {
         &self.root_path
     }
 }
-
-

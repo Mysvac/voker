@@ -1,5 +1,6 @@
+use voker_utils::debug::DebugName;
+
 use crate::component::{Component, ComponentHooks};
-use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {

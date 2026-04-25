@@ -4,6 +4,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
+use voker_utils::vec::FastVec;
+
 use crate::Reflect;
 use crate::access::{AccessError, AccessPath, OffsetAccessor, ParseError};
 use crate::ops::{Array, Enum, List, Struct, Tuple, TupleStruct};
@@ -105,6 +107,7 @@ impl From<Box<[OffsetAccessor<'static>]>> for PathAccessor {
 
 impl PathAccessor {
     /// Parses the path string and creates a [`PathAccessor`].
+    ///
     /// Returns [`ParseError`] if parsing fails.
     ///
     /// This function will create a [`String`] for each path segment.
@@ -122,23 +125,22 @@ impl PathAccessor {
     /// [`String`]: alloc::string::String
     /// [`parse_static`]: crate::access::PathAccessor::parse_static
     pub fn parse<'a>(path: impl AccessPath<'a>) -> Result<Self, ParseError<'a>> {
-        let mut vec: Vec<OffsetAccessor> = Vec::new();
+        let mut vec: FastVec<OffsetAccessor, 4> = FastVec::new();
+        let data = vec.data();
 
         for res in path.parse_to_accessor() {
-            vec.push(res?.into_owned());
+            data.push(res?.into_owned());
         }
 
         Ok(Self(vec.into_boxed_slice()))
     }
 
     /// Parses the path and creates a [`PathAccessor`].
+    ///
     /// Returns [`ParseError`] if parsing fails.
     ///
     /// For `&'static str` or `impl AccessPath<'static>`; stores string references without
     /// creating additional [`String`]s.
-    ///
-    /// This API requires `'static` path input because the accessor can outlive
-    /// the call site and is intended for reuse.
     ///
     /// # Examples
     ///
@@ -149,10 +151,11 @@ impl PathAccessor {
     ///
     /// [`String`]: alloc::string::String
     pub fn parse_static(path: impl AccessPath<'static>) -> Result<Self, ParseError<'static>> {
-        let mut vec: Vec<OffsetAccessor> = Vec::new();
+        let mut vec: FastVec<OffsetAccessor, 4> = FastVec::new();
+        let data = vec.data();
 
         for res in path.parse_to_accessor() {
-            vec.push(res?);
+            data.push(res?);
         }
 
         Ok(Self(vec.into_boxed_slice()))
@@ -168,9 +171,24 @@ impl PathAccessor {
     /// assert_eq!(accessor.len(), 3);
     /// ```
     #[inline]
-    #[expect(clippy::len_without_is_empty, reason = "useless")]
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Return `true` if the path is empty.
+    ///
+    /// At this point, path access directly returns the input value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_reflect::access::PathAccessor;
+    /// let accessor = PathAccessor::parse_static("").unwrap();
+    /// assert!(accessor.is_empty());
+    /// ```
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Returns a reference to the value specified by `path`.

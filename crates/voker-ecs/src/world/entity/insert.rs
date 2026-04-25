@@ -33,7 +33,7 @@ impl EntityOwned<'_> {
     /// struct Foo;
     ///
     /// #[derive(Component, Clone)]
-    /// #[component(required = Foo)]
+    /// #[require(Foo)]
     /// struct Bar;
     ///
     /// let mut world = World::alloc();
@@ -115,18 +115,27 @@ impl EntityOwned<'_> {
 
         voker_ptr::into_owning!(bundle);
 
+        let mut ptr = bundle;
+        let data = unsafe { ptr.borrow_mut().promote() };
+
         if old_arche_id == new_arche_id {
-            insert_local(self, bundle, explicit_bundle_id, B::write_explicit, caller);
+            insert_local(self, data, explicit_bundle_id, B::write_explicit, caller);
         } else {
             insert_moved(
                 self,
-                bundle,
+                data,
                 new_arche_id,
                 explicit_bundle_id,
                 B::write_explicit,
                 B::write_required,
                 caller,
             );
+        }
+
+        if B::NEED_APPLY_EFFECT {
+            unsafe {
+                B::apply_effect(ptr, self);
+            }
         }
 
         ::core::mem::forget(clear_guard);
@@ -138,7 +147,7 @@ fn insert_local(
     this: &mut EntityOwned,
     data: OwningPtr<'_>,
     explicit_bundle_id: BundleId,
-    write_explicit: unsafe fn(&mut ComponentWriter, usize),
+    write_explicit: unsafe fn(OwningPtr<'_>, &mut ComponentWriter),
     caller: DebugLocation,
 ) {
     let entity = this.entity;
@@ -180,13 +189,13 @@ fn insert_local(
 
     unsafe {
         // write date
-        let mut writer = ComponentWriter::new(unsafe_world, data, entity, table_id, table_row);
+        let mut writer = ComponentWriter::new(unsafe_world, entity, table_id, table_row);
 
         arche.components().iter().for_each(|&id| {
             writer.set_writed(id);
         });
 
-        write_explicit(&mut writer, 0);
+        write_explicit(data, &mut writer);
     }
 
     {
@@ -225,7 +234,7 @@ fn insert_moved(
     data: OwningPtr<'_>,
     new_arche_id: ArcheId,
     explicit_bundle_id: BundleId,
-    write_explicit: unsafe fn(&mut ComponentWriter, usize),
+    write_explicit: unsafe fn(data: OwningPtr<'_>, &mut ComponentWriter),
     write_required: unsafe fn(&mut ComponentWriter),
     caller: DebugLocation,
 ) {
@@ -318,13 +327,13 @@ fn insert_moved(
         let table_row = location.table_row;
         let table_id = location.table_id;
 
-        let mut writer = ComponentWriter::new(unsafe_world, data, entity, table_id, table_row);
+        let mut writer = ComponentWriter::new(unsafe_world, entity, table_id, table_row);
 
         old_arche.components().iter().for_each(|&id| {
             writer.set_writed(id);
         });
 
-        write_explicit(&mut writer, 0);
+        write_explicit(data, &mut writer);
         write_required(&mut writer);
 
         world.entities.update_location(entity, location).unwrap();

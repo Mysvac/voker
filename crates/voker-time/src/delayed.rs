@@ -110,7 +110,7 @@ impl Debug for DelayedCommandQueues {
 }
 
 /// Appends command queues that reached their due time.
-pub fn check_delayed_command_queues(
+pub fn queue_delayed_commands(
     mut queues: ResMut<DelayedCommandQueues>,
     time: Res<Time>,
     mut commands: Commands,
@@ -168,7 +168,7 @@ mod tests {
 
         let mut app = App::new();
         app.add_plugins(TimePlugin)
-            .add_systems(Startup, queue_commands)
+            .add_systems(Startup, (), queue_commands)
             .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
                 0.2,
             )));
@@ -198,7 +198,7 @@ mod tests {
 
         let mut app = App::new();
         app.add_plugins(TimePlugin)
-            .add_systems(Startup, queue_commands)
+            .add_systems(Startup, (), queue_commands)
             .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
                 0.2,
             )));

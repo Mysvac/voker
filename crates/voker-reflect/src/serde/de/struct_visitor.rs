@@ -4,7 +4,6 @@ use serde_core::de::{MapAccess, SeqAccess, Visitor};
 
 use super::DeserializeProcessor;
 use super::struct_like_utils::{visit_struct, visit_struct_seq};
-
 use crate::info::StructInfo;
 use crate::ops::DynamicStruct;
 use crate::registry::TypeRegistry;

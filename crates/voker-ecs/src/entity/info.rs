@@ -200,11 +200,11 @@ impl Entities {
 
         let (new_tag, wrapping) = info.tag.checked_add(version);
 
-        info.tag = new_tag;
         if wrapping {
-            log::warn!("Entity({id}) tag wrapped on Entities::free, aliasing may occur.");
+            tracing::warn!("Entity({id}) tag wrapped on Entities::free, aliasing may occur.");
         }
 
+        info.tag = new_tag;
         Entity::new(id, new_tag)
     }
 
@@ -254,7 +254,7 @@ impl Entities {
                 self.infos.get_unchecked_mut(index).tag = entity.tag();
             }
         }
-
+        // SAFETY: just resize above.
         let info = unsafe { self.infos.get_unchecked_mut(index) };
 
         if info.tag != entity.tag() {
@@ -336,7 +336,6 @@ impl Entities {
         let Some(entity) = moved.entity else {
             return Ok(());
         };
-
         let Some(info) = self.infos.get_mut(entity.index()) else {
             core::hint::cold_path();
             return Err(MoveError::NotFound(entity.id()));
@@ -361,6 +360,7 @@ impl Entities {
     /// Returns an iterator over spawned entities.
     pub fn iter(&self) -> impl FusedIterator<Item = (Entity, EntityLocation)> {
         self.infos.iter().enumerate().filter_map(|(idx, info)| {
+            // The location of invalid index `0` must be `None`.
             if let Some(location) = info.location {
                 // Faster than `without_provenance` in this hot path.
                 let temp = Entity::from_bits(idx as u64);

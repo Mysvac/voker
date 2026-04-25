@@ -187,7 +187,7 @@ impl World {
             const TASK_POOL: bool = voker_task::cfg::multi_threaded!();
 
             let schedules = &mut world.schedules;
-            let resources = &mut world.storages.res_set;
+            let resources = &mut world.storages.resources;
             let tables = &mut world.storages.tables;
             let maps = &mut world.storages.maps;
 
@@ -273,7 +273,7 @@ impl World {
 }
 
 // -----------------------------------------------------------------------------
-// Other
+// Error Handling
 
 impl World {
     /// Returns the active default error handler resource.

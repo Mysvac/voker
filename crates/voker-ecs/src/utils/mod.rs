@@ -6,7 +6,6 @@
 //!
 //! # Public Exports
 //! - [`DebugLocation`]: lightweight call-site metadata.
-//! - [`DebugName`]: debug-oriented type/name formatter.
 //! - [`Dropper`]: type-erased drop callback wrapper.
 //!
 //! # Internal Exports
@@ -17,7 +16,6 @@
 // Modules
 
 mod debug_location;
-mod debug_name;
 mod debug_unwrap;
 mod dropper;
 mod helper;
@@ -28,8 +26,8 @@ mod on_panic;
 // Exports
 
 pub use debug_location::DebugLocation;
-pub use debug_name::DebugName;
 pub use dropper::Dropper;
+pub use voker_ptr::OwningPtr;
 
 pub(crate) use debug_unwrap::DebugCheckedUnwrap;
 pub(crate) use helper::*;

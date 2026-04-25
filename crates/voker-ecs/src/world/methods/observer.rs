@@ -53,7 +53,7 @@ impl World {
                         observer.entities.remove(&entity);
                         let name = observer.system_name();
 
-                        log::warn!(
+                        tracing::warn!(
                             "Observer `{name}` try to observe a despawned entity, the target has been removed. {e}"
                         );
 

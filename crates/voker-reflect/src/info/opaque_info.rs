@@ -1,4 +1,4 @@
-use voker_os::Arc;
+use alloc::sync::Arc;
 
 use crate::Reflect;
 use crate::info::{CustomAttributes, Generics, Type, TypePath};

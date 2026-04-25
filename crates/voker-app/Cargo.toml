@@ -16,6 +16,8 @@ std = [
     "dep:ctrlc",
 ]
 
+trace = []
+
 [dependencies]
 voker-cfg = { path = "../voker-cfg" }
 voker-utils = { path = "../voker-utils" }
@@ -28,7 +30,7 @@ voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
 
 cfg-if = "1.0"
-log = { version = "0.4", default-features = false }
+tracing = { version = "0.1", default-features = false, features = ["log"] }
 
 [target.'cfg(any(all(unix, not(target_os = "horizon")), windows))'.dependencies]
 ctrlc = { version = "3.5", optional = true }

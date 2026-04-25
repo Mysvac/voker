@@ -6,7 +6,7 @@ use crate::utils::Backoff;
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use core::cell::Cell;
 /// use voker_os::utils::Futex;
 ///

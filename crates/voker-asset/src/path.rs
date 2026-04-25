@@ -10,46 +10,10 @@ use thiserror::Error;
 use voker_reflect::Reflect;
 
 use crate::ident::AssetSourceId;
+use crate::utils::normalize_path;
 
 // -----------------------------------------------------------------------------
 // AssetPath
-
-/// Normalizes the path by collapsing all occurrences of '.' and '..' dot-segments
-/// where possible as per [RFC 1808](https://datatracker.ietf.org/doc/html/rfc1808)
-pub(crate) fn normalize_path(path: &Path) -> PathBuf {
-    let size_hint = path.as_os_str().len();
-    let mut result_path = PathBuf::with_capacity(size_hint);
-    for elt in path.iter() {
-        if elt == "." {
-            // Skip
-        } else if elt == ".." {
-            // Note: If the result_path ends in `..`, Path::file_name returns None,
-            // so we'll end up preserving it.
-            if result_path.file_name().is_some() {
-                // This assert is just a sanity check - we already know the path
-                // has a file_name, so we know there is something to pop.
-                assert!(result_path.pop());
-            } else {
-                // Preserve ".." if insufficient matches (per RFC 1808).
-                result_path.push(elt);
-            }
-        } else {
-            result_path.push(elt);
-        }
-    }
-    result_path
-}
-
-// -----------------------------------------------------------------------------
-// AssetPath
-
-#[derive(Default, Clone, PartialEq, Eq, Hash, Reflect)]
-#[reflect(Opaque, Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
-pub struct AssetPath<'a> {
-    source: AssetSourceId<'a>,
-    path: CowArc<'a, Path>,
-    label: Option<CowArc<'a, str>>,
-}
 
 /// An error that occurs when parsing a string type to create an [`AssetPath`] fails, such as during [`AssetPath::parse`].
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -70,6 +34,17 @@ pub enum ParseAssetPathError {
         "Asset label must be at least one character. Either specify the label after the '#' or remove the '#'"
     )]
     MissingLabel,
+}
+
+// -----------------------------------------------------------------------------
+// AssetPath
+
+#[derive(Default, Clone, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Opaque, Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+pub struct AssetPath<'a> {
+    source: AssetSourceId<'a>,
+    path: CowArc<'a, Path>,
+    label: Option<CowArc<'a, str>>,
 }
 
 impl<'a> AssetPath<'a> {
@@ -196,7 +171,10 @@ impl<'a> AssetPath<'a> {
     /// # Panics
     /// Panics if the asset path is in an invalid format. Use [`AssetPath::try_parse`] for a fallible variant
     pub fn parse(asset_path: &'a str) -> AssetPath<'a> {
-        Self::try_parse(asset_path).unwrap()
+        Self::try_parse(asset_path).unwrap_or_else(|e| {
+            core::hint::cold_path();
+            panic!("{e}: {asset_path}")
+        })
     }
 
     /// Creates a new [`AssetPath`] from a static string in the asset path format:
@@ -229,12 +207,17 @@ impl<'a> AssetPath<'a> {
     /// # Panics
     /// Panics if the asset path is in an invalid format. Use [`AssetPath::try_parse`] for a fallible variant
     pub fn parse_static(asset_path: &'static str) -> AssetPath<'static> {
-        Self::try_parse_static(asset_path).unwrap()
+        Self::try_parse_static(asset_path).unwrap_or_else(|e| {
+            core::hint::cold_path();
+            panic!("{e}: {asset_path}")
+        })
     }
 
     /// Creates a new [`AssetPath`] from a [`PathBuf`].
+    ///
+    /// The asset source is default and the label is none.
     #[inline]
-    pub fn from_path_buf(path_buf: PathBuf) -> AssetPath<'a> {
+    pub fn from_path_buf(path_buf: PathBuf) -> AssetPath<'static> {
         AssetPath {
             path: CowArc::Owned(path_buf.into()),
             source: AssetSourceId::Default,
@@ -243,6 +226,8 @@ impl<'a> AssetPath<'a> {
     }
 
     /// Creates a new [`AssetPath`] from a [`Path`].
+    ///
+    /// The asset source is default and the label is none.
     #[inline]
     pub fn from_path(path: &'a Path) -> AssetPath<'a> {
         AssetPath {
@@ -252,8 +237,9 @@ impl<'a> AssetPath<'a> {
         }
     }
 
-    /// Gets the "asset source", if one was defined. If none was defined, the default source
-    /// will be used.
+    /// Gets the "asset source", if one was defined.
+    ///
+    /// If none was defined, the default source will be used.
     #[inline]
     pub fn source(&self) -> &AssetSourceId<'_> {
         &self.source
@@ -289,6 +275,17 @@ impl<'a> AssetPath<'a> {
         self.label.take()
     }
 
+    /// Returns this asset path with the given asset source. This will replace the previous asset
+    /// source if it exists.
+    #[inline]
+    pub fn with_source(self, source: impl Into<AssetSourceId<'a>>) -> AssetPath<'a> {
+        AssetPath {
+            source: source.into(),
+            path: self.path,
+            label: self.label,
+        }
+    }
+
     /// Returns this asset path with the given label.
     ///
     /// This will replace the previous label if it exists.
@@ -311,17 +308,6 @@ impl<'a> AssetPath<'a> {
         }
     }
 
-    /// Returns this asset path with the given asset source. This will replace the previous asset
-    /// source if it exists.
-    #[inline]
-    pub fn with_source(self, source: impl Into<AssetSourceId<'a>>) -> AssetPath<'a> {
-        AssetPath {
-            source: source.into(),
-            path: self.path,
-            label: self.label,
-        }
-    }
-
     /// Returns an [`AssetPath`] for the parent folder of this path, if there is a parent folder in the path.
     pub fn parent(&self) -> Option<AssetPath<'a>> {
         let path = match &self.path {
@@ -334,6 +320,38 @@ impl<'a> AssetPath<'a> {
             label: None,
             path,
         })
+    }
+
+    /// Returns the last extension, excluding multiple `.` values.
+    ///
+    /// Ex: Returns `"ron"` for `"my_asset.config.ron"`
+    ///
+    /// Also strips out anything follow a `?` to handle query parameters in URIs.
+    pub fn extension(&self) -> Option<&str> {
+        let full_extension = self.full_extension()?;
+        Some(match full_extension.rfind(".") {
+            None => full_extension,
+            Some(index) => &full_extension[(index + 1)..],
+        })
+    }
+
+    /// Returns the full extension (including multiple '.' values).
+    ///
+    /// Ex: Returns `"config.ron"` for `"my_asset.config.ron"`
+    ///
+    /// Also strips out anything following a `?` to handle query parameters in URIs
+    pub fn full_extension(&self) -> Option<&str> {
+        let file_name = self.path().file_name()?.to_str()?;
+        let index = file_name.find('.')?;
+        let mut extension = &file_name[index + 1..];
+
+        // Strip off any query parameters
+        let query = extension.find('?');
+        if let Some(offset) = query {
+            extension = &extension[..offset];
+        }
+
+        Some(extension)
     }
 
     /// Converts this into an "owned" value. If internally a value is borrowed, it will be cloned into an "owned [`Arc`]".
@@ -368,7 +386,7 @@ impl<'a> AssetPath<'a> {
     /// - Relative segments are concatenated and normalized (`.`/`..` removal), preserving extra `..` if the base underflows.
     ///
     /// ```
-    /// # use voker_asset::AssetPath;
+    /// # use voker_asset::path::AssetPath;
     /// let base = AssetPath::parse("a/b");
     /// assert_eq!(base.resolve(&AssetPath::parse("c")), AssetPath::parse("a/b/c"));
     /// assert_eq!(base.resolve(&AssetPath::parse("./c")), AssetPath::parse("a/b/c"));
@@ -382,11 +400,13 @@ impl<'a> AssetPath<'a> {
     /// See also [`AssetPath::resolve_str`].
     pub fn resolve(&self, path: &AssetPath<'_>) -> AssetPath<'static> {
         let is_label_only = matches!(path.source(), AssetSourceId::Default)
-            && path.path().as_os_str().is_empty()
-            && path.label().is_some();
+            && path.path.as_os_str().is_empty()
+            && path.label.is_some();
 
         if is_label_only {
-            self.clone_owned().with_label(path.label().unwrap().to_owned())
+            // path.label.is_some is checked above
+            self.clone_owned()
+                .with_label(path.label.as_ref().unwrap().clone_owned())
         } else {
             let explicit_source = match path.source() {
                 AssetSourceId::Default => None,
@@ -404,7 +424,7 @@ impl<'a> AssetPath<'a> {
     /// - Otherwise identical to [`AssetPath::resolve`].
     ///
     /// ```
-    /// # use voker_asset::AssetPath;
+    /// # use voker_asset::path::AssetPath;
     /// let base = AssetPath::parse("a/b");
     /// assert_eq!(base.resolve_embed(&AssetPath::parse("c")), AssetPath::parse("a/c"));
     /// assert_eq!(base.resolve_embed(&AssetPath::parse("./c")), AssetPath::parse("a/c"));
@@ -418,11 +438,13 @@ impl<'a> AssetPath<'a> {
     /// See also [`AssetPath::resolve_embed_str`].
     pub fn resolve_embed(&self, path: &AssetPath<'_>) -> AssetPath<'static> {
         let is_label_only = matches!(path.source(), AssetSourceId::Default)
-            && path.path().as_os_str().is_empty()
-            && path.label().is_some();
+            && path.path.as_os_str().is_empty()
+            && path.label.is_some();
 
         if is_label_only {
-            self.clone_owned().with_label(path.label().unwrap().to_owned())
+            // path.label.is_some is checked above
+            self.clone_owned()
+                .with_label(path.label.as_ref().unwrap().clone_owned())
         } else {
             let explicit_source = match path.source() {
                 AssetSourceId::Default => None,
@@ -507,53 +529,13 @@ impl<'a> AssetPath<'a> {
         }
     }
 
-    /// Returns the full extension (including multiple '.' values).
-    /// Ex: Returns `"config.ron"` for `"my_asset.config.ron"`
-    ///
-    /// Also strips out anything following a `?` to handle query parameters in URIs
-    pub fn get_full_extension(&self) -> Option<&str> {
-        let file_name = self.path().file_name()?.to_str()?;
-        let index = file_name.find('.')?;
-        let mut extension = &file_name[index + 1..];
-
-        // Strip off any query parameters
-        let query = extension.find('?');
-        if let Some(offset) = query {
-            extension = &extension[..offset];
-        }
-
-        Some(extension)
-    }
-
-    /// Returns the extension, excluding multiple `.` values.
-    ///
-    /// Ex: Returns `"ron"` for `"my_asset.config.ron"`
-    ///
-    /// Also strips out anything follow a `?` to handle query parameters in URIs.
-    pub fn get_extension(&self) -> Option<&str> {
-        let full_extension = self.get_full_extension()?;
-        Some(match full_extension.rfind(".") {
-            None => full_extension,
-            Some(index) => &full_extension[(index + 1)..],
-        })
-    }
-
-    pub(crate) fn iter_secondary_extensions(full_extension: &str) -> impl Iterator<Item = &str> {
-        full_extension.char_indices().filter_map(|(i, c)| {
-            if c == '.' {
-                Some(&full_extension[i + 1..])
-            } else {
-                None
-            }
-        })
-    }
-
     /// Returns `true` if this [`AssetPath`] points to a file that is
     /// outside of its [`AssetSourceId`](crate::AssetSourceId) folder.
     ///
-    /// ## Example
+    /// # Example
+    ///
     /// ```
-    /// # use voker_asset::AssetPath;
+    /// # use voker_asset::path::AssetPath;
     /// // Inside the default AssetSource.
     /// let path = AssetPath::parse("thingy.png");
     /// assert!( ! path.is_unapproved());
@@ -576,7 +558,8 @@ impl<'a> AssetPath<'a> {
     /// ```
     pub fn is_unapproved(&self) -> bool {
         use std::path::Component;
-        let mut simplified = PathBuf::new();
+        let size_hint: usize = self.path.as_os_str().len();
+        let mut simplified = PathBuf::with_capacity(size_hint);
         for component in self.path.components() {
             match component {
                 Component::Prefix(_) | Component::RootDir => return true,
@@ -640,14 +623,20 @@ impl<'de> Deserialize<'de> for AssetPath<'static> {
             where
                 E: serde::de::Error,
             {
-                Ok(AssetPath::parse(v).into_owned())
+                match AssetPath::try_parse(v) {
+                    Ok(val) => Ok(val.into_owned()),
+                    Err(err) => Err(serde::de::Error::custom(alloc::format!("{err}: `{v}`"))),
+                }
             }
 
             fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
-                Ok(AssetPath::from(v))
+                match AssetPath::try_parse(v.as_str()) {
+                    Ok(val) => Ok(val.into_owned()),
+                    Err(err) => Err(serde::de::Error::custom(alloc::format!("{err}: `{v}`"))),
+                }
             }
         }
 
@@ -655,9 +644,8 @@ impl<'de> Deserialize<'de> for AssetPath<'static> {
     }
 }
 
-// This is only implemented for static lifetimes to ensure `Path::clone` does not allocate
-// by ensuring that this is stored as a `CowArc::Static`.
-// Please read https://github.com/bevyengine/bevy/issues/19844 before changing this!
+// This is only implemented for static lifetimes to ensure `Path::clone`
+// does not allocate by ensuring that this is stored as a `CowArc::Static`.
 impl From<&'static str> for AssetPath<'static> {
     #[inline]
     fn from(asset_path: &'static str) -> Self {
@@ -679,12 +667,25 @@ impl From<String> for AssetPath<'static> {
     }
 }
 
+// This is only implemented for static lifetimes to ensure `Path::clone`
+// does not allocate by ensuring that this is stored as a `CowArc::Static`.
 impl From<&'static Path> for AssetPath<'static> {
     #[inline]
     fn from(path: &'static Path) -> Self {
         Self {
             source: AssetSourceId::Default,
             path: CowArc::Static(path),
+            label: None,
+        }
+    }
+}
+
+impl<'a> From<&'a PathBuf> for AssetPath<'a> {
+    #[inline]
+    fn from(path: &'a PathBuf) -> Self {
+        Self {
+            source: AssetSourceId::Default,
+            path: CowArc::Borrowed(path.as_path()),
             label: None,
         }
     }
@@ -702,12 +703,14 @@ impl From<PathBuf> for AssetPath<'static> {
 }
 
 impl<'a, 'b> From<&'a AssetPath<'b>> for AssetPath<'b> {
+    #[inline]
     fn from(value: &'a AssetPath<'b>) -> Self {
         value.clone()
     }
 }
 
 impl<'a> From<AssetPath<'a>> for PathBuf {
+    #[inline]
     fn from(value: AssetPath<'a>) -> Self {
         value.path().to_path_buf()
     }

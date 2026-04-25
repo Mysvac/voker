@@ -126,6 +126,25 @@ mod string_expr;
 ///
 /// These attributes can only be applied at the type level.
 ///
+/// ## Reflection-Based Type Conversion
+///
+/// If a type implements `Into<T>` or `From<T>` for some other reflected type `T`, you can declare
+/// these conversions so they are accessible through the reflection system at runtime.
+///
+/// ```rust, ignore
+/// #[derive(Reflect)]
+/// #[reflect(Into<f64>, From<i32>)]
+/// struct MyNum(f32);
+///
+/// impl Into<f64> for MyNum { /* ... */ }
+/// impl From<i32> for MyNum { /* ... */ }
+/// ```
+///
+/// This inserts a [`ReflectConvert`] entry into the type's `TypeMeta`, which can later be retrieved
+/// from a [`TypeRegistry`] to perform dynamic conversions between reflected types:
+///
+/// These attributes can only be applied at the type level.
+///
 /// ## Custom GetTypeMeta
 ///
 /// By default, The following type traits may be included based on conditions:
@@ -573,19 +592,22 @@ pub fn auto_register(input: TokenStream) -> TokenStream {
 
 /// Impl `TypeData` for specific trait with a new struct.
 ///
-/// This macro will generate a `{trait_name}FromReflect` struct, which implements `TypeData` and `TypePath`.
-///
-/// For example, for `Display`, this will generate `DisplayFromReflect`.
+/// This macro will generate a `{trait_name}FromReflect`(default) struct,
+/// which implements `TypeData` and `TypePath`. For example, for `Display`,
+/// this will generate `DisplayFromReflect`.
 ///
 /// It only contains three methods internally:
 /// - `from_ref`: cast `&dyn Reflect` to `&dyn {trait_name}`
 /// - `from_mut`: cast `&mut dyn Reflect` to `&mut dyn {trait_name}`
 /// - `from_boxed`: cast `Box<dyn Reflect>` to `Box<dyn {trait_name}>`
 ///
+/// You can specify the generated type name through `name = Name`
+/// (e.g. `#[reflect_trait(name = MyDisplay)]`).
+///
 /// ## Example
 ///
 /// ```ignore
-/// #[reflect_trait(MyDebugAdapter)]
+/// #[reflect_trait(name = MyDebugAdapter)]
 /// pub trait MyDebug {
 ///     fn debug(&self);
 /// }

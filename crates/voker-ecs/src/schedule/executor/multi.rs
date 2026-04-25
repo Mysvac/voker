@@ -5,7 +5,7 @@ use core::any::Any;
 use core::panic::AssertUnwindSafe;
 use fixedbitset::FixedBitSet;
 
-use voker_os::utils::SyncUnsafeCell;
+use voker_os::cell::SyncUnsafeCell;
 use voker_os::utils::{SegQueue, SpinLock};
 use voker_task::{ComputeTaskPool, Scope, TaskPool};
 use voker_utils::vec::FastVec;
@@ -189,7 +189,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     ) {
         let meet = result.unwrap_or_else(|payload| {
             core::hint::cold_path();
-            log::error!("Encountered a panic in system `{}`!", ident);
+            tracing::error!("Encountered a panic in system `{}`!", ident);
             *self.executor.panic_payload.lock() = Some(payload);
             deferred = false;
             false

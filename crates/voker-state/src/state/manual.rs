@@ -1,14 +1,12 @@
 use voker_ecs::borrow::ResMut;
 use voker_ecs::command::Commands;
 use voker_ecs::message::MessageWriter;
-use voker_ecs::prelude::SystemSet;
-use voker_ecs::schedule::{IntoSystemConfig, Schedule};
+use voker_ecs::schedule::{IntoSystemConfig, IntoSystemSetConfig, Schedule, SystemSet};
 use voker_ecs::system::IntoSystem;
 
 use super::{ApplyStateTransition, StateTransitionSystems};
 use super::{EnterSchedules, ExitSchedules, TransitionSchedules};
 use super::{NextState, PreviousState, State};
-use super::{OnEnter, OnExit, OnTransition};
 use super::{StateTransitionSignal, States};
 use super::{detect_transition, internal_apply_state_transition};
 use super::{last_transition, run_enter, run_exit, run_transition};
@@ -30,31 +28,31 @@ pub trait ManualStates: States {
         let enter = EnterSchedules::<Self>::default().intern();
 
         schedule
-            .add_systems(apply_state_transition::<Self>.in_set(apply))
+            .add_systems(apply, apply_state_transition::<Self>)
             .add_systems(
+                exit,
                 last_transition::<Self>
                     .pipe(run_exit::<Self>)
-                    .run_if(detect_transition::<Self>.mark::<OnExit<Self>>())
-                    .in_set(exit),
+                    .run_if(detect_transition::<Self>),
             )
             .add_systems(
+                trans,
                 last_transition::<Self>
                     .pipe(run_transition::<Self>)
-                    .run_if(detect_transition::<Self>.mark::<OnTransition<Self>>())
-                    .in_set(trans),
+                    .run_if(detect_transition::<Self>),
             )
             .add_systems(
+                enter,
                 last_transition::<Self>
                     .pipe(run_enter::<Self>)
-                    .run_if(detect_transition::<Self>.mark::<OnEnter<Self>>())
-                    .in_set(enter),
+                    .run_if(detect_transition::<Self>),
             );
 
         schedule
-            .config((apply.begin(), apply.end()).in_set(StateTransitionSystems::Apply))
-            .config((exit.begin(), exit.end()).in_set(StateTransitionSystems::Exit))
-            .config((trans.begin(), trans.end()).in_set(StateTransitionSystems::Transition))
-            .config((enter.begin(), enter.end()).in_set(StateTransitionSystems::Enter));
+            .config_set(apply.child_of(StateTransitionSystems::Apply))
+            .config_set(exit.child_of(StateTransitionSystems::Exit))
+            .config_set(trans.child_of(StateTransitionSystems::Transition))
+            .config_set(enter.child_of(StateTransitionSystems::Enter));
     }
 }
 

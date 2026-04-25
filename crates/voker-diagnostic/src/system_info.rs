@@ -106,7 +106,7 @@ mod internal {
             Diagnostic::new(SystemInfoDiagnosticsPlugin::PROCESS_MEM_USAGE).with_suffix("GiB"),
         )
         .init_resource::<SysinfoState>()
-        .add_system(Update, update_system_information_diagnostics);
+        .add_systems(Update, (), update_system_information_diagnostics);
     }
 
     fn update_system_information_diagnostics(

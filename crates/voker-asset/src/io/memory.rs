@@ -6,18 +6,18 @@ use core::pin::Pin;
 use core::task::Poll;
 use std::path::{Path, PathBuf};
 
+use alloc::sync::Arc;
 use futures_io::{AsyncRead, AsyncSeek, AsyncWrite};
 use futures_lite::Stream;
-use voker_os::Arc;
 use voker_os::sync::{PoisonError, RwLock};
 use voker_utils::hash::HashMap;
 use voker_utils::vec::FastVec;
 
-use crate::PathStream;
-use crate::io::{AssetWriter, AssetWriterError, Writer};
-
 use super::{AssetReader, AssetReaderError};
 use super::{Reader, ReaderNotSeekableError, SeekableReader};
+use crate::PathStream;
+use crate::io::future::{ReadAllFuture, WriteAllFuture};
+use crate::io::{AssetWriter, AssetWriterError, Writer};
 
 // -----------------------------------------------------------------------------
 // Value
@@ -42,6 +42,12 @@ impl Debug for Value {
                 write!(f, "Value({ptr:p}, {size}B)")
             }
         }
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Borrow(Arc::from(value))
     }
 }
 
@@ -132,12 +138,6 @@ impl Dir {
         for c in path.components() {
             match c {
                 std::path::Component::CurDir => continue,
-                std::path::Component::RootDir => {
-                    data.clear();
-                    full_path.clear();
-                    dir = self.clone();
-                    continue;
-                }
                 std::path::Component::ParentDir => {
                     // We cannot add reverse edges, as this
                     // would cause circular references.
@@ -165,6 +165,13 @@ impl Dir {
                         .or_insert_with(|| Dir::new(full_path.clone()))
                         .clone();
                     dir = next_dir;
+                }
+                std::path::Component::RootDir => {
+                    core::hint::cold_path();
+                    data.clear();
+                    full_path.clear();
+                    dir = self.clone();
+                    continue;
                 }
                 std::path::Component::Prefix(prefix) => {
                     core::hint::cold_path();
@@ -461,6 +468,17 @@ impl Reader for DataReader {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         Ok(self)
     }
+
+    #[inline]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        let start = self.bytes_read;
+        let bytes = self.data.value();
+        if start >= bytes.len() {
+            ReadAllFuture::slice_read(&[], buf)
+        } else {
+            ReadAllFuture::slice_read(&bytes[start..], buf)
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -557,7 +575,12 @@ impl AsyncWrite for DataWriter {
     }
 }
 
-impl Writer for DataWriter {}
+impl Writer for DataWriter {
+    #[inline]
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a> {
+        WriteAllFuture::vec_write(&mut self.current_data, buf)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // MemoryAssetWriter
@@ -701,8 +724,8 @@ impl AssetWriter for MemoryAssetWriter {
 #[cfg(test)]
 pub mod test {
     use super::Dir;
+    use alloc::sync::Arc;
     use std::path::Path;
-    use voker_os::Arc;
 
     #[test]
     fn memory_dir() {

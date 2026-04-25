@@ -14,7 +14,6 @@ use hashbrown::{Equivalent, TryReserveError, hash_map as hb};
 use hb::{Drain, ExtractIf, Iter, IterMut};
 use hb::{EntryRef, OccupiedError};
 use hb::{IntoKeys, IntoValues, Keys, Values, ValuesMut};
-use hb::{RawEntryBuilder, RawEntryBuilderMut};
 
 use crate::hash::FixedHashState;
 
@@ -285,20 +284,6 @@ where
         D: serde_core::Deserializer<'de>,
     {
         Ok(Self(serde_core::Deserialize::deserialize(deserializer)?))
-    }
-}
-
-impl<K, V, S> HashMap<K, V, S> {
-    /// Creates a raw immutable entry builder for the HashMap.
-    #[inline(always)]
-    pub fn raw_entry(&self) -> RawEntryBuilder<'_, K, V, S> {
-        self.0.raw_entry()
-    }
-
-    /// Creates a raw entry builder for the HashMap.
-    #[inline(always)]
-    pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
-        self.0.raw_entry_mut()
     }
 }
 

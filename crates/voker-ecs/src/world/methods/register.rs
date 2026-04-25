@@ -55,10 +55,10 @@ impl World {
     /// let mut world = World::alloc();
     ///
     /// let id = world.register_resource::<Foo>();
-    /// assert!(world.storages.res_set.get(id).is_none());
+    /// assert!(world.storages.resources.get(id).is_none());
     ///
     /// world.prepare_resource(id);
-    /// assert!(world.storages.res_set.get(id).is_some());
+    /// assert!(world.storages.resources.get(id).is_some());
     /// ```
     #[inline]
     pub fn prepare_resource(&mut self, id: ResourceId) {

@@ -1,3 +1,14 @@
+//! System schedule executors.
+//!
+//! An executor drives one tick of a [`SystemSchedule`]: it traverses the
+//! dependency graph, dispatches independent systems, and applies deferred
+//! mutations at the right synchronization points.
+//!
+//! Two built-in backends are provided:
+//! - [`SingleThreadedExecutor`] — runs systems sequentially on the calling thread.
+//! - [`MultiThreadedExecutor`] — runs independent systems in parallel using the
+//!   task pool; falls back to single-threaded when the feature is unavailable.
+
 mod multi;
 mod single;
 
@@ -55,7 +66,7 @@ impl Default for ExecutorKind {
 // MultiThreadExecutor
 
 use crate::resource::Resource;
-use voker_os::Arc;
+use alloc::sync::Arc;
 use voker_task::ThreadExecutor;
 
 /// Handle to the main-thread task executor.

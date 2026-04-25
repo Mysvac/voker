@@ -1,12 +1,15 @@
 use alloc::boxed::Box;
+use core::fmt::Debug;
+use core::marker::PhantomData;
 use core::panic::{RefUnwindSafe, UnwindSafe};
-use core::{fmt::Debug, marker::PhantomData};
+
+use voker_utils::debug::DebugName;
 
 use crate::define_label;
 use crate::label::Interned;
-use crate::system::{AccessTable, IntoSystem, System, SystemError, SystemFlags, SystemId};
-use crate::world::{DeferredWorld, UnsafeWorld};
-use crate::{tick::Tick, utils::DebugName, world::World};
+use crate::system::{AccessTable, System, SystemError, SystemFlags, SystemId};
+use crate::tick::Tick;
+use crate::world::{DeferredWorld, UnsafeWorld, World};
 
 // -----------------------------------------------------------------------------
 // SystemSet
@@ -46,11 +49,13 @@ define_label!(
         ///
         /// The returned system should be a no-op with a stable [`SystemId`].
         fn begin(&self) -> Box<dyn System<Input = (), Output = ()>>;
+        // Box::new(SystemSetBegin::<Self>(PhantomData, self.intern()))
 
         /// Returns the end-boundary marker for this set.
         ///
         /// The returned system should be a no-op with a stable [`SystemId`].
         fn end(&self) -> Box<dyn System<Input = (), Output = ()>>;
+        // Box::new(SystemSetEnd::<Self>(PhantomData, self.intern()))
     },
     extra_methods_impl: {
         fn begin(&self) -> Box<dyn System<Input = (), Output = ()>> {
@@ -73,55 +78,50 @@ pub type InternedSystemSet = Interned<dyn SystemSet>;
 ///
 /// `ID` identifies the set type, while `TAG` disambiguates variants of the
 /// same set type (for example enum variants in derive-generated impls).
-pub struct SystemSetBegin<ID, const TAG: usize>(PhantomData<ID>, PhantomData<[(); TAG]>);
+pub struct SystemSetBegin<Set>(PhantomData<Set>, InternedSystemSet);
 
 /// End-boundary signal for a specific `SystemSet` marker identity.
 ///
 /// See [`SystemSetBegin`] for `ID`/`TAG` semantics.
-pub struct SystemSetEnd<ID, const TAG: usize>(PhantomData<ID>, PhantomData<[(); TAG]>);
+pub struct SystemSetEnd<Set>(PhantomData<Set>, InternedSystemSet);
 
 macro_rules! impl_signal {
     ($name:ident) => {
-        impl<ID, const TAG: usize> Default for $name<ID, TAG> {
-            fn default() -> Self {
-                Self(PhantomData, PhantomData)
+        unsafe impl<ID> Send for $name<ID> {}
+        unsafe impl<ID> Sync for $name<ID> {}
+        impl<ID> UnwindSafe for $name<ID> {}
+        impl<ID> RefUnwindSafe for $name<ID> {}
+
+        impl<ID> $name<ID> {
+            #[inline]
+            pub fn new(set: InternedSystemSet) -> Self {
+                Self(PhantomData, set)
             }
         }
 
-        impl<ID, const TAG: usize> $name<ID, TAG> {
-            pub const fn new() -> Self {
-                Self(PhantomData, PhantomData)
-            }
-        }
-
-        unsafe impl<ID, const TAG: usize> Send for $name<ID, TAG> {}
-        unsafe impl<ID, const TAG: usize> Sync for $name<ID, TAG> {}
-        impl<ID, const TAG: usize> UnwindSafe for $name<ID, TAG> {}
-        impl<ID, const TAG: usize> RefUnwindSafe for $name<ID, TAG> {}
-
-        impl<ID, const TAG: usize> Debug for $name<ID, TAG> {
+        impl<ID> Debug for $name<ID> {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.debug_tuple("SystemSetBegin")
                     .field(&DebugName::type_name::<ID>())
-                    .field(&TAG)
+                    .field(&self.1)
                     .finish()
             }
         }
 
-        impl<ID, const TAG: usize> Copy for $name<ID, TAG> {}
+        impl<ID> Copy for $name<ID> {}
 
-        impl<ID, const TAG: usize> Clone for $name<ID, TAG> {
+        impl<ID> Clone for $name<ID> {
             fn clone(&self) -> Self {
                 *self
             }
         }
 
-        impl<ID: 'static, const TAG: usize> System for $name<ID, TAG> {
+        impl<ID: 'static> System for $name<ID> {
             type Input = ();
             type Output = ();
 
             fn id(&self) -> SystemId {
-                SystemId::of::<Self>()
+                SystemId::of::<Self>().with_system_set(self.1)
             }
 
             fn flags(&self) -> SystemFlags {
@@ -140,6 +140,12 @@ macro_rules! impl_signal {
                 AccessTable::new()
             }
 
+            fn system_set(&self) -> InternedSystemSet {
+                self.1
+            }
+
+            fn set_system_set(&mut self, _: InternedSystemSet) {}
+
             unsafe fn run_raw(
                 &mut self,
                 _: (),
@@ -157,7 +163,7 @@ macro_rules! impl_signal {
             }
 
             fn is_no_op(&self) -> bool {
-                true
+                true // NOOP allows it to be quickly skipped.
             }
 
             fn is_deferred(&self) -> bool {
@@ -181,19 +187,16 @@ impl_signal!(SystemSetEnd);
 // -----------------------------------------------------------------------------
 // AnonymousSystemSet
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AnonymousSystemSet;
-
-impl SystemSet for AnonymousSystemSet {
+impl SystemSet for () {
     fn begin(&self) -> Box<dyn System<Input = (), Output = ()>> {
-        Box::new(IntoSystem::into_system(<SystemSetBegin<Self, 0>>::new()))
+        Box::new(SystemSetBegin::<Self>::new(self.intern()))
     }
 
     fn end(&self) -> Box<dyn System<Input = (), Output = ()>> {
-        Box::new(IntoSystem::into_system(<SystemSetEnd<Self, 0>>::new()))
+        Box::new(SystemSetEnd::<Self>::new(self.intern()))
     }
 
     fn dyn_clone(&self) -> Box<dyn SystemSet> {
-        Box::new(AnonymousSystemSet)
+        Box::new(())
     }
 }

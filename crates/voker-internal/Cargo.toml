@@ -12,10 +12,13 @@ default = [ "std", "debug", "backtrace" ]
 
 std = [
     "voker-os/std",
-    "voker-task/std",
     "voker-reflect/std",
-    "voker-ecs/std",
     "voker-math/std",
+    "voker-task/std",
+    "voker-ecs/std",
+    "voker-app/std",
+    "voker-time/std",
+    "voker-diagnostic/std",
 ]
 
 # Disable code that is unsupported when Voker is dynamically linked
@@ -25,7 +28,16 @@ dynlib = [
 
 # Output the type name and file location information in the log.
 debug = [
+    "voker-utils/debug",
     "voker-ecs/debug",
+]
+
+# Enable spanned `tracing` for better debugging and error information.
+trace = [
+    "voker-ecs/trace",
+    "voker-app/trace",
+    "voker-log/trace",
+    "voker-asset/trace",
 ]
 
 # Track stack information during reflection serialization and error handling.
@@ -49,9 +61,6 @@ async_io = [
     "std",
     "voker-task/async_io",
 ]
-
-# Enable `tracing` crate for better debugging and error information.
-trace = ["voker-log/trace",]
 
 # Enable `tracy_client` crate and use custom allocator for memory tracing.
 trace_tracy_memory = ["voker-log/trace_tracy_memory",]
@@ -78,6 +87,9 @@ https = ["voker-asset/https"]
 # Enable watcher for asset files and embedded asset.
 file_watcher = ["voker-asset/file_watcher"]
 
+# Enable asset processor, only work if `AssetServerMode` is `Processed`.
+asset_processor = ["voker-asset/asset_processor"]
+
 voker-asset = ["std", "dep:voker-asset"]
 
 voker-log = ["std", "dep:voker-log"]
@@ -88,22 +100,29 @@ voker-diagnostic = ["dep:voker-diagnostic"]
 
 voker-cfg = { path = "../voker-cfg", default-features = false }
 voker-ptr = { path = "../voker-ptr", default-features = false }
-voker-utils = { path = "../voker-utils", default-features = false }
 voker-inventory = { path = "../voker-inventory", default-features = false }
 
+voker-utils = { path = "../voker-utils", default-features = false }
 voker-os = { path = "../voker-os", default-features = false }
+
 voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
-voker-ecs = { path = "../voker-ecs", default-features = false }
-voker-state = { path = "../voker-state", default-features = false }
-voker-math = { path = "../voker-math", default-features = false }
+voker-math = { path = "../voker-math", default-features = false, features = ["nostd-libm"] }
 
-# std required
-voker-log = { path = "../voker-log", optional = true, default-features = false }
-voker-asset = { path = "../voker-asset", optional = true, default-features = false }
+voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-app = { path = "../voker-app", default-features = false }
+
+voker-time = { path = "../voker-time", default-features = false }
+voker-state = { path = "../voker-state", default-features = false }
 
 # optional
 voker-diagnostic = { path = "../voker-diagnostic", optional = true, default-features = false }
+
+# std required
+voker-log = { path = "../voker-log", optional = true, default-features = false }
+
+# std required
+voker-asset = { path = "../voker-asset", optional = true, default-features = false }
 
 [lints]
 workspace = true

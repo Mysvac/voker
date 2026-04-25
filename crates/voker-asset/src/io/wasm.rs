@@ -1,23 +1,20 @@
-
-
-use alloc::format;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::format;
 use core::pin::Pin;
 use core::task::Poll;
 
-use js_sys::{Uint8Array, JSON};
+use futures_lite::Stream;
+use js_sys::{JSON, Uint8Array};
 use std::path::{Path, PathBuf};
 use tracing::error;
-use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
-use futures_lite::Stream;
 
-use crate::utils::build_meta_path;
-use crate::{PathStream, EmptyPathStream};
 use super::{AssetReader, AssetReaderError, Reader, VecReader};
-
+use crate::utils::append_meta_extension;
+use crate::{EmptyPathStream, PathStream};
 
 /// Represents the global object in the JavaScript context
 #[wasm_bindgen]
@@ -100,9 +97,7 @@ impl HttpWasmAssetReader {
             let error = std::io::Error::other("Unsupported JavaScript global context");
             return Err(AssetReaderError::Io(error.into()));
         };
-        let resp_value = JsFuture::from(promise)
-            .await
-            .map_err(js_value_to_err("fetch path"))?;
+        let resp_value = JsFuture::from(promise).await.map_err(js_value_to_err("fetch path"))?;
         let resp = resp_value
             .dyn_into::<Response>()
             .map_err(js_value_to_err("convert fetch to Response"))?;
@@ -129,7 +124,7 @@ impl AssetReader for HttpWasmAssetReader {
     }
 
     async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
-        let meta_path = build_meta_path(&self.root_path.join(path));
+        let meta_path = append_meta_extension(&self.root_path.join(path));
         self.fetch_bytes(meta_path).await
     }
 

@@ -15,7 +15,6 @@ use super::set_visitor::SetVisitor;
 use super::struct_visitor::StructVisitor;
 use super::tuple_struct_visitor::TupleStructVisitor;
 use super::tuple_visitor::TupleVisitor;
-
 use crate::Reflect;
 use crate::info::{TypeInfo, Typed};
 use crate::registry::{GetTypeMeta, TypeMeta, TypeRegistry};

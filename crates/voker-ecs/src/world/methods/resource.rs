@@ -1,13 +1,14 @@
-use core::alloc::Layout;
 use core::any::TypeId;
+use core::ptr::NonNull;
 
 use voker_ptr::{OwningPtr, PtrMut};
+use voker_utils::debug::DebugName;
 
 use crate::borrow::{NonSendMut, NonSendRef, ResMut, ResRef, UntypedMut};
 use crate::resource::{Resource, ResourceId};
-use crate::tick::TicksMut;
-use crate::utils::{DebugCheckedUnwrap, DebugName};
-use crate::world::{FromWorld, World};
+use crate::tick::{Tick, TicksMut};
+use crate::utils::DebugCheckedUnwrap;
+use crate::world::{FromWorld, UnsafeWorld, World};
 
 #[inline(never)]
 fn insert_internal<'a, 'b>(
@@ -18,7 +19,7 @@ fn insert_internal<'a, 'b>(
     unsafe {
         this.prepare_resource(id);
         let tick = this.this_run_fast(); // we have `full_mut` world
-        let data = this.storages.res_set.get_unchecked_mut(id);
+        let data = this.storages.resources.get_unchecked_mut(id);
         data.insert_untyped(value, tick);
         data.get_data_mut().debug_checked_unwrap()
     }
@@ -60,7 +61,7 @@ impl World {
     /// ```
     pub fn contains_resource<T: Resource>(&self) -> bool {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             data.is_active()
         } else {
@@ -92,7 +93,7 @@ impl World {
     /// ```
     pub fn contains_non_send<T: Resource>(&self) -> bool {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             data.is_active()
         } else {
@@ -145,7 +146,7 @@ impl World {
     /// ```
     pub fn remove_resource<T: Resource + Send>(&mut self) -> Option<T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -172,7 +173,7 @@ impl World {
     /// ```
     pub fn drop_resource<T: Resource + Send>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe {
                 data.clear();
@@ -198,7 +199,7 @@ impl World {
     /// ```
     pub fn get_resource<T: Resource + Sync>(&self) -> Option<&T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -242,7 +243,7 @@ impl World {
     /// ```
     pub fn get_resource_ref<T: Resource + Sync>(&self) -> Option<ResRef<'_, T>> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -291,7 +292,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_resource::<T>() })
@@ -330,7 +331,7 @@ impl World {
     /// ```
     pub fn init_resource<T: Resource + Send + FromWorld>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && data.is_active()
         {
             return;
@@ -368,7 +369,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.res_set.get_unchecked_mut(id);
+                let data = this.storages.resources.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run)
                     .debug_checked_unwrap()
@@ -382,7 +383,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.res_set.get_mut(id)
+            && let Some(data) = world_mut.storages.resources.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_resource::<T>() }
@@ -450,7 +451,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -485,7 +486,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.clear() }
         }
@@ -515,7 +516,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -567,7 +568,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -623,7 +624,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_non_send::<T>() })
@@ -651,7 +652,7 @@ impl World {
     /// - Panics if called from a thread other than the world's main thread.
     pub fn init_non_send<T: Resource + FromWorld>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && data.is_active()
         {
             return;
@@ -692,7 +693,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.res_set.get_unchecked_mut(id);
+                let data = this.storages.resources.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run)
                     .debug_checked_unwrap()
@@ -711,7 +712,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.res_set.get_mut(id)
+            && let Some(data) = world_mut.storages.resources.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_non_send::<T>() }
@@ -736,9 +737,21 @@ impl World {
         let this_run = self.this_run_fast();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
+            let unsafed = self.unsafe_world();
+            let mutable = unsafe { unsafed.full_mut() };
+
+            let _guard = ReinsertGuard {
+                world: unsafed,
+                resource_id: id,
+                debug_name: DebugName::type_name::<T>(),
+                ptr,
+                added,
+                changed,
+            };
+
             unsafe {
                 let res_mut = UntypedMut {
                     value: PtrMut::new(ptr),
@@ -751,15 +764,7 @@ impl World {
                 }
                 .into_resource();
 
-                let ret = func(self, res_mut);
-
-                if let Some(data) = self.storages.res_set.get_mut(id) {
-                    data.from_raw(ptr, added, changed);
-                } else {
-                    core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);
-                    let layout = Layout::new::<T>();
-                    alloc::alloc::dealloc(ptr.as_ptr(), layout);
-                }
+                let ret = func(mutable, res_mut);
                 Some(ret)
             }
         } else {
@@ -804,11 +809,24 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
             let last_run = self.last_run();
             let this_run = self.this_run_fast();
+
+            let unsafed = self.unsafe_world();
+            let mutable = unsafe { unsafed.full_mut() };
+
+            let _guard = ReinsertGuard {
+                world: unsafed,
+                resource_id: id,
+                debug_name: DebugName::type_name::<T>(),
+                ptr,
+                added,
+                changed,
+            };
+
             unsafe {
                 let res_mut = UntypedMut {
                     value: PtrMut::new(ptr),
@@ -821,15 +839,7 @@ impl World {
                 }
                 .into_non_send();
 
-                let ret = func(self, res_mut);
-
-                if let Some(data) = self.storages.res_set.get_mut(id) {
-                    data.from_raw(ptr, added, changed);
-                } else {
-                    core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);
-                    let layout = Layout::new::<T>();
-                    alloc::alloc::dealloc(ptr.as_ptr(), layout);
-                }
+                let ret = func(mutable, res_mut);
                 Some(ret)
             }
         } else {
@@ -852,6 +862,56 @@ impl World {
     ) -> R {
         self.try_non_send_scope(func)
             .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+}
+
+struct ReinsertGuard<'a> {
+    world: UnsafeWorld<'a>,
+    resource_id: ResourceId,
+    debug_name: DebugName,
+    ptr: NonNull<u8>,
+    added: Tick,
+    changed: Tick,
+}
+
+impl Drop for ReinsertGuard<'_> {
+    fn drop(&mut self) {
+        let world = unsafe { self.world.data_mut() };
+        // The allocated slots should not be destroyed.
+        let data = world.storages.resources.get_mut(self.resource_id).unwrap();
+
+        if data.is_active() {
+            #[cfg(all(debug_assertions, feature = "std"))]
+            if std::thread::panicking() {
+                tracing::error!(
+                    "Resource `{}` was inserted during a call to World::resource_scope, \
+                    which may result in unexpected behavior.\n In release builds, the value \
+                    inserted will be overwritten at the end of the scope.",
+                    self.debug_name,
+                );
+                // return early to maintain consistent behavior with non-panicking calls in debug builds
+                return;
+            }
+
+            #[cold]
+            #[inline(never)]
+            fn warn_reinsert(resource_name: DebugName) {
+                tracing::warn!(
+                    "Resource `{resource_name}` was inserted during a call to World::resource_scope: \
+                    the inserted value will be overwritten.",
+                );
+            }
+
+            warn_reinsert(self.debug_name);
+
+            unsafe {
+                data.clear();
+            }
+        }
+
+        unsafe {
+            data.from_raw(self.ptr, self.added, self.changed);
+        }
     }
 }
 

@@ -77,7 +77,7 @@ pub trait Plugin: Any + Send + Sync {
     /// This can be useful if you have some resource that other
     /// plugins need during their build step, but after build you
     /// want to remove it and send it to another thread.
-    fn cleanup(&self, _app: &mut App) {
+    fn cleanup(&mut self, _app: &mut App) {
         // do nothing
     }
 
@@ -344,12 +344,12 @@ impl PluginGroupBuilder {
                 let group = self.group_name;
                 match plugins.duplicate_strategy() {
                     DuplicateStrategy::Skip => {
-                        log::trace!(
+                        tracing::trace!(
                             "Plugin `{name}` in group `{group}` already added, skipping duplicate."
                         );
                     }
                     DuplicateStrategy::Warn => {
-                        log::warn!(
+                        tracing::warn!(
                             "Plugin `{name}` in group `{group}` already added, skipping duplicate."
                         );
                     }
@@ -388,7 +388,7 @@ impl PluginGroupBuilder {
         if let Some(entry) = self.plugins.insert(key, plugin) {
             if entry.enabled {
                 let name = entry.plugin.name();
-                log::warn!("You are replacing plugin '{name}' that was not disabled.");
+                tracing::warn!("You are replacing plugin '{name}' that was not disabled.");
             }
 
             let to_remove = self
@@ -448,10 +448,10 @@ mod sealed {
                 let name = plugins.name();
                 match plugins.duplicate_strategy() {
                     DuplicateStrategy::Skip => {
-                        log::trace!("Plugin {name} already added, skipping duplicate.");
+                        tracing::trace!("Plugin {name} already added, skipping duplicate.");
                     }
                     DuplicateStrategy::Warn => {
-                        log::warn!("Plugin {name} already added, skipping duplicate.");
+                        tracing::warn!("Plugin {name} already added, skipping duplicate.");
                     }
                     DuplicateStrategy::Panic => {
                         panic!("Adding plugin {name} that was already added in application");

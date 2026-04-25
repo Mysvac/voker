@@ -242,43 +242,128 @@ impl TypeRegistry {
         self
     }
 
-    /// Registers a fallible conversion route from `T` into `U`.
+    /// Registers a infallible conversion route from `X` into `Y`.
     ///
-    /// The target type `U` must already be registered.
-    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    /// This function just register `X -> Y` in X's [`ReflectConvert`],
+    /// Does **not** register `Y <- X` in Y's [`ReflectConvert`],
+    ///
+    /// # Panic
+    /// Panics if the source type `X` is not registered.
+    pub fn register_type_into<X, Y>(&mut self) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath,
-        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+        X: Reflect + TypePath + Into<Y>,
+        Y: Reflect + TypePath,
     {
-        let type_meta = self.get_mut(TypeId::of::<U>()).unwrap_or_else(|| {
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
             panic!(
-                "attempted to call `TypeRegistry::register_type_conversion` for type `{}` without registering it first",
-                U::type_path(),
+                "attempted to call `register_type_into` for `{path}` without registering it first"
             )
-        });
+        }
 
-        match type_meta.get_data_mut::<ReflectConvert>() {
-            Some(data) => data.register_type_conversion::<T, U, _>(function),
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_into::<X, Y>(),
             None => {
-                let mut data = ReflectConvert::default();
-                data.register_type_conversion::<T, U, _>(function);
-                type_meta.insert_data(data);
+                let mut data = ReflectConvert::new::<X>();
+                data.register_into::<X, Y>();
+                meta.insert_data(data);
             }
         }
 
         self
     }
 
-    /// Registers an infallible `Into` conversion route from `T` into `U`.
+    /// Registers a infallible conversion that obtain `X` from `Y`.
     ///
-    /// The target type `U` must already be registered.
-    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    /// This function just register `X <- Y` in X's [`ReflectConvert`],
+    /// Does **not** register `Y -> X` in Y's [`ReflectConvert`],
+    ///
+    /// # Panic
+    /// Panics if the source type `X` is not registered.
+    pub fn register_type_from<X, Y>(&mut self) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath + From<T>,
+        X: Reflect + TypePath + From<Y>,
+        Y: Reflect + TypePath,
     {
-        self.register_type_conversion::<T, U, _>(|input| Ok(input.into()))
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
+            panic!(
+                "attempted to call `register_type_from` for `{path}` without registering it first"
+            )
+        }
+
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_from::<X, Y>(),
+            None => {
+                let mut data = ReflectConvert::new::<X>();
+                data.register_from::<X, Y>();
+                meta.insert_data(data);
+            }
+        }
+
+        self
+    }
+
+    /// Registers a fallible conversion that obtain `X` from `Y`.
+    ///
+    /// This function register `X -> Y` in X's [`ReflectConvert`],
+    /// and `Y <- X` in Y's [`ReflectConvert`].
+    ///
+    /// # Panic
+    /// Panics if the source type `X` or `Y` is not registered.
+    pub fn register_type_conversion<X, Y, F>(&mut self, f: F) -> &mut Self
+    where
+        X: Reflect + TypePath,
+        Y: Reflect + TypePath,
+        F: Fn(X) -> Result<Y, X> + Clone + Send + Sync + 'static,
+    {
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
+            panic!(
+                "attempted to call `register_type_conversion` for `{path}` without registering it first"
+            )
+        }
+
+        // X -> Y
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_custom_into::<X, Y, F>(f.clone()),
+            None => {
+                let mut data = ReflectConvert::new::<X>();
+                data.register_custom_into::<X, Y, F>(f.clone());
+                meta.insert_data(data);
+            }
+        }
+
+        // Y <- X
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<Y>()) else {
+            unregistered_type(Y::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_custom_from::<Y, X, F>(f),
+            None => {
+                let mut data = ReflectConvert::new::<Y>();
+                data.register_custom_from::<Y, X, F>(f);
+                meta.insert_data(data);
+            }
+        }
+
+        self
     }
 
     /// Whether the type with given [`TypeId`] has been registered in this registry.
@@ -450,7 +535,7 @@ impl Debug for TypeRegistry {
 // -----------------------------------------------------------------------------
 // TypeRegistryArc
 
-use voker_os::Arc;
+use alloc::sync::Arc;
 use voker_os::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Clone, Default)]

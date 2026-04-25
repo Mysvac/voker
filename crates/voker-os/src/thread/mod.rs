@@ -76,17 +76,14 @@ pub fn available_parallelism() -> NonZeroUsize {
     crate::cfg::switch! {
         crate::cfg::wasm => {
             // TODO: Web Worker
-            #[expect(unsafe_code, reason = "`1` is non-zero")]
-            unsafe { NonZeroUsize::new_unchecked(1) }
+            const { NonZeroUsize::new(1).unwrap() }
         }
         crate::cfg::std => {
-            #[expect(unsafe_code, reason = "`1` is non-zero")]
             std::thread::available_parallelism()
-                .unwrap_or(unsafe { NonZeroUsize::new_unchecked(1) })
+                .unwrap_or(const { NonZeroUsize::new(1).unwrap() })
         }
         _ => {
-            #[expect(unsafe_code, reason = "`1` is non-zero")]
-            unsafe { NonZeroUsize::new_unchecked(1) }
+            const { NonZeroUsize::new(1).unwrap() }
         }
     }
 }

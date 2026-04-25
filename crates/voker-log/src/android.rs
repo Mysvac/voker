@@ -2,6 +2,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Write};
+
 use tracing::field::Field;
 use tracing::span::{Attributes, Record};
 use tracing::{Event, Id, Level, Subscriber};

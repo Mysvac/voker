@@ -78,7 +78,6 @@ pub enum StateTransitionSystems {
 
 /// System set that runs exit schedule(s) for state `S`.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
-#[system_set(typed)]
 pub struct ExitSchedules<S: States>(PhantomData<S>);
 
 impl<S: States> Default for ExitSchedules<S> {
@@ -90,7 +89,6 @@ impl<S: States> Default for ExitSchedules<S> {
 
 /// System set that runs transition schedule(s) for state `S`.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
-#[system_set(typed)]
 pub struct TransitionSchedules<S: States>(PhantomData<S>);
 
 impl<S: States> Default for TransitionSchedules<S> {
@@ -102,7 +100,6 @@ impl<S: States> Default for TransitionSchedules<S> {
 
 /// System set that runs enter schedule(s) for state `S`.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
-#[system_set(typed)]
 pub struct EnterSchedules<S: States>(PhantomData<S>);
 
 impl<S: States> Default for EnterSchedules<S> {
@@ -114,7 +111,6 @@ impl<S: States> Default for EnterSchedules<S> {
 
 /// System set that applies transitions for state `S`.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
-#[system_set(typed)]
 pub(crate) struct ApplyStateTransition<S: States>(PhantomData<S>);
 
 impl<S: States> Default for ApplyStateTransition<S> {

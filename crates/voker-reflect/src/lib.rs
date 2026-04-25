@@ -49,6 +49,7 @@ pub mod serde;
 
 pub mod __macro_exports;
 
+pub use info::TypePath;
 pub use reflection::{FromReflect, Reflect, reflect_hasher};
 pub use voker_reflect_derive as derive;
 pub use voker_reflect_derive::Reflect;

@@ -1,15 +1,15 @@
 use crate::derive::impl_type_path;
 
-impl_type_path!(::voker_utils::vec::ArrayVec<T, const N: usize>);
-impl_type_path!(::voker_utils::vec::FastVec<T, const N: usize>);
-impl_type_path!(::voker_utils::vec::SmallVec<T, const N: usize>);
+impl_type_path!((in fastvec) ArrayVec<T, const N: usize>);
+impl_type_path!((in fastvec) FastVec<T, const N: usize>);
+impl_type_path!((in fastvec) SmallVec<T, const N: usize>);
 
 // -----------------------------------------------------------------------------
 // SmallVec
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use voker_utils::vec::SmallVec;
+use voker_utils::vec::{ArrayVec, FastVec, SmallVec};
 
 use crate::info::{ConstParamInfo, GenericInfo, Generics};
 use crate::info::{ListInfo, TypeInfo, TypeParamInfo, Typed};

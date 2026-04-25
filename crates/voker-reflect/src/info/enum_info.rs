@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 
-use voker_os::Arc;
+use alloc::sync::Arc;
 use voker_utils::hash::HashMap;
 
 use crate::info::{CustomAttributes, Generics, Type, TypePath, VariantInfo};

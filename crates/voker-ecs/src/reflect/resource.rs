@@ -3,15 +3,16 @@
 //! This module provides [`ReflectResource`] as ECS resource-oriented type data
 //! for runtime scene/asset integration.
 
-use crate::borrow::Mut;
-use crate::reflect::from_reflect_with_fallback;
-use crate::resource::{Resource, ResourceId};
-use crate::utils::DebugName;
-use crate::world::World;
 use voker_reflect::derive::TypePath;
 use voker_reflect::info::Typed;
 use voker_reflect::registry::{FromType, TypeRegistry};
 use voker_reflect::{FromReflect, Reflect};
+use voker_utils::debug::DebugName;
+
+use crate::borrow::Mut;
+use crate::reflect::from_reflect_with_fallback;
+use crate::resource::{Resource, ResourceId};
+use crate::world::World;
 
 /// Runtime reflection adapter for resource types.
 #[derive(Clone, TypePath)]

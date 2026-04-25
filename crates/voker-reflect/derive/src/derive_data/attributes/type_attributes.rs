@@ -1,5 +1,5 @@
 use proc_macro2::Span;
-use syn::{Attribute, Expr, ExprLit, Lit, MacroDelimiter};
+use syn::{Attribute, Expr, ExprLit, Lit, MacroDelimiter, Type};
 use syn::{Meta, MetaNameValue, Path, Token};
 use syn::{parse::ParseStream, spanned::Spanned};
 
@@ -27,6 +27,8 @@ mod kw {
     syn::custom_keyword!(PartialOrd);
     syn::custom_keyword!(Serialize);
     syn::custom_keyword!(Deserialize);
+    syn::custom_keyword!(Into);
+    syn::custom_keyword!(From);
     syn::custom_keyword!(doc);
 }
 
@@ -46,6 +48,10 @@ pub(crate) struct TypeAttributes {
     pub docs: ReflectDocs,
     /// `#[type_data(...)]`
     pub extra_type_data: Vec<Path>,
+    /// `#[reflect(Into<..>)]`
+    pub into_types: Vec<Type>,
+    /// `#[reflect(From<..>)]`
+    pub from_types: Vec<Type>,
 }
 
 impl TypeAttributes {
@@ -158,8 +164,6 @@ impl TypeAttributes {
         let lookahead = input.lookahead1();
         if lookahead.peek(Token![@]) {
             self.parse_custom_attribute_impl(input)
-        } else if lookahead.peek(kw::doc) {
-            self.parse_docs_impl(input)
         } else if lookahead.peek(kw::Clone) {
             self.parse_clone(input)
         } else if lookahead.peek(kw::NotCloneable) {
@@ -178,6 +182,10 @@ impl TypeAttributes {
             self.parse_serialize_impl(input)
         } else if lookahead.peek(kw::Deserialize) {
             self.parse_deserialize_impl(input)
+        } else if lookahead.peek(kw::Into) {
+            self.parse_into_impl(input)
+        } else if lookahead.peek(kw::From) {
+            self.parse_from_impl(input)
         } else if lookahead.peek(kw::Opaque) {
             self.parse_opaque_impl(input)
         } else if lookahead.peek(kw::TypePath) {
@@ -198,6 +206,8 @@ impl TypeAttributes {
             self.parse_trait_tuple(input)
         } else if lookahead.peek(kw::Enum) {
             self.parse_trait_enum(input)
+        } else if lookahead.peek(kw::doc) {
+            self.parse_docs_impl(input)
         } else {
             Err(lookahead.error())
         }
@@ -541,6 +551,32 @@ impl TypeAttributes {
             }
             stream.parse::<Token![,]>()?;
         }
+
+        Ok(())
+    }
+
+    // #[reflect(Into<Type>)]
+    fn parse_into_impl(&mut self, input: ParseStream) -> syn::Result<()> {
+        input.parse::<kw::Into>()?;
+
+        input.parse::<Token![<]>()?;
+        let ty: Type = input.parse()?;
+        input.parse::<Token![>]>()?;
+
+        self.into_types.push(ty);
+
+        Ok(())
+    }
+
+    // #[reflect(From<Type>)]
+    fn parse_from_impl(&mut self, input: ParseStream) -> syn::Result<()> {
+        input.parse::<kw::From>()?;
+
+        input.parse::<Token![<]>()?;
+        let ty: Type = input.parse()?;
+        input.parse::<Token![>]>()?;
+
+        self.from_types.push(ty);
 
         Ok(())
     }

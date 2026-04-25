@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use core::hash::{BuildHasher, Hash};
 
 use crate::hash::FixedHashState;
@@ -38,7 +39,7 @@ use crate::hash::FixedHashState;
 /// // "world" is definitely NOT in the set (no false negatives)
 /// assert!(!filter.contains(&"world"));
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct BloomFilter<const N: usize, const K: usize = 2> {
     bits: [u64; N],
@@ -160,8 +161,8 @@ impl<const N: usize, const K: usize> BloomFilter<N, K> {
     ///
     /// # Returns
     ///
-    /// * `true` if the item was **already present** in the filter (or a false positive)
-    /// * `false` if the item was **definitely not present** and has now been inserted
+    /// - `true` if the item was **already present** in the filter (or a false positive)
+    /// - `false` if the item was **definitely not present** and has now been inserted
     ///
     /// # Examples
     ///
@@ -178,7 +179,7 @@ impl<const N: usize, const K: usize> BloomFilter<N, K> {
     ///
     /// [`contains`]: Self::contains
     /// [`insert`]: Self::insert
-    pub fn check_insert(&mut self, item: &impl Hash) -> bool {
+    pub fn checked_insert(&mut self, item: &impl Hash) -> bool {
         let h1 = FixedHashState.hash_one(item);
         let h2 = (h1 >> 32) | 1;
 
@@ -204,5 +205,16 @@ impl<const N: usize, const K: usize> BloomFilter<N, K> {
 impl<const N: usize, const K: usize> Default for BloomFilter<N, K> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<const N: usize, const K: usize> Debug for BloomFilter<N, K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "BloomFilter<{N}, {K}>([")?;
+        for &bits in self.bits.iter() {
+            // Use iter to avoid copying data
+            write!(f, "{:016x}", bits)?;
+        }
+        f.write_str("])")
     }
 }

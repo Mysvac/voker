@@ -1,28 +1,27 @@
-mod embedded;
-mod memory;
+//! Provides underlying IO interfaces.
+
+pub mod embedded;
+pub mod future;
+mod gated;
+pub mod memory;
 mod reader;
 mod source;
-mod watcher;
+pub mod watcher;
 mod writer;
 
-pub use embedded::*;
-pub use memory::*;
+pub use embedded::EMBEDDED;
 pub use reader::*;
 pub use source::*;
-pub use watcher::*;
 pub use writer::*;
 
-voker_os::cfg::android! {
-    mod android;
-    pub use android::*;
-}
+#[cfg(target_os = "android")]
+pub mod android;
 
-voker_os::cfg::wasm! {
-    mod wasm;
-    pub use wasm::*;
-}
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 
-voker_os::cfg::not_wasm! {
-    mod file;
-    pub use file::*;
-}
+#[cfg(not(target_arch = "wasm32"))]
+pub mod file;
+
+#[cfg(any(feature = "http", feature = "https"))]
+pub mod web;

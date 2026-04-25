@@ -37,10 +37,7 @@ impl ArcheId {
     /// Panics if `id >= u32::MAX`.
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
-        if id >= u32::MAX as usize {
-            core::hint::cold_path();
-            panic!("ArcheId must be < u32::MAX");
-        }
+        assert!(id < u32::MAX as usize, "ArcheId must be < u32::MAX");
         unsafe { Self(NonMaxU32::new_unchecked(id as u32)) }
     }
 

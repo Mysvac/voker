@@ -8,6 +8,8 @@ use crate::hash::hashbrown::hash_map::Entry;
 // -----------------------------------------------------------------------------
 // TypeIdMap
 
+pub type TypeIdMapEntry<'a, V> = Entry<'a, TypeId, V, NoopHashState>;
+
 /// A specialized map container with [`TypeId`] as the fixed key type.
 ///
 /// The current implementation uses [`HashMap`], assuming its performance
@@ -175,10 +177,25 @@ impl<V> TypeIdMap<V> {
     }
 
     /// An iterator visiting all keys in arbitrary order.
-    /// The iterator element type is &'a K.
+    ///
+    /// The iterator element type is `&'a TypeId`.
+    #[inline]
+    pub fn keys(&self) -> impl ExactSizeIterator<Item = &TypeId> {
+        self.0.keys()
+    }
+
+    /// An iterator visiting all keys in arbitrary order.
+    ///
+    /// The iterator element type is `TypeId`, similar to `keys().copied()`.
     #[inline]
     pub fn types(&self) -> impl ExactSizeIterator<Item = TypeId> {
         self.0.keys().copied()
+    }
+
+    /// Gets the given key's corresponding entry in the map for in-place manipulation.
+    #[inline]
+    pub fn entry(&mut self, type_id: TypeId) -> TypeIdMapEntry<'_, V> {
+        self.0.entry(type_id)
     }
 }
 

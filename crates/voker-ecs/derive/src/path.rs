@@ -81,6 +81,13 @@ pub(crate) fn bundle_(voker_ecs_path: &syn::Path) -> TokenStream {
 }
 
 #[inline(always)]
+pub(crate) fn data_bundle_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::bundle::DataBundle
+    }
+}
+
+#[inline(always)]
 pub(crate) fn schedule_label_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::schedule::ScheduleLabel
@@ -98,13 +105,6 @@ pub(crate) fn system_set_(voker_ecs_path: &syn::Path) -> TokenStream {
 pub(crate) fn system_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::system::System
-    }
-}
-
-#[inline(always)]
-pub(crate) fn into_system_(voker_ecs_path: &syn::Path) -> TokenStream {
-    quote! {
-        #voker_ecs_path::system::IntoSystem
     }
 }
 
@@ -336,5 +336,19 @@ pub(crate) fn system_meta_(voker_ecs_path: &syn::Path) -> TokenStream {
 pub(crate) fn deferred_world_(voker_ecs_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_ecs_path::world::DeferredWorld
+    }
+}
+
+#[inline(always)]
+pub(crate) fn entity_owned_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::world::EntityOwned
+    }
+}
+
+#[inline(always)]
+pub(crate) fn owning_ptr_(voker_ecs_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_ecs_path::utils::OwningPtr
     }
 }

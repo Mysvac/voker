@@ -3,10 +3,10 @@ use core::fmt::{Debug, Display};
 use core::hash::Hash;
 use core::marker::PhantomData;
 
+use voker_utils::debug::DebugName;
 use voker_utils::num::NonMaxU32;
 
 use super::Message;
-use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // MessageId

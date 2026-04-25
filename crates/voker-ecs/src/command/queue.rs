@@ -52,7 +52,7 @@ impl RawCommandQueue {
     #[inline(always)]
     pub unsafe fn is_empty(&self) -> bool {
         // SAFETY: Pointers are guaranteed to be valid by requirements on `.clone_unsafe`
-        // It should be `>=`, because the `append` function does not modify the cursor.
+        // It should be `>=`, because the `append` function does not modify the cursor (maybe).
         (unsafe { *self.cursor.as_ref() }) >= (unsafe { self.bytes.as_ref().len() })
     }
 
@@ -234,7 +234,7 @@ impl Drop for CommandQueue {
     fn drop(&mut self) {
         if !self.bytes.is_empty() {
             let caller = self.caller;
-            log::warn!("CommandQueue has un-applied commands being dropped. {caller}");
+            tracing::warn!("CommandQueue has un-applied commands being dropped. {caller}");
             unsafe { self.raw().apply_or_drop(None) };
         }
     }

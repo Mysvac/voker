@@ -1,9 +1,15 @@
 //! Archetype topology and component-set grouping.
 //!
-//! Archetypes represent unique component-set layouts.
+//! An [`Archetype`] represents a unique combination of component types.
+//! Every entity belongs to exactly one archetype at any time. When components
+//! are added or removed, the entity migrates to a new archetype.
 //!
-//! Query prefiltering and entity storage routing rely on archetype
-//! metadata, including archetype-to-table relationships.
+//! Key responsibilities:
+//! - routing entities to the correct storage table or sparse maps,
+//! - caching component lifecycle hooks (add, insert, remove, discard, despawn),
+//! - recording observer presence flags so dispatchers can skip empty sets,
+//! - caching archetype-transition results (`BundleId → ArcheId`) to avoid
+//!   repeated lookups on common insert/remove patterns.
 
 // -----------------------------------------------------------------------------
 // Modules

@@ -3,13 +3,13 @@ use alloc::string::ToString;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use voker_ecs::error::GameError;
+
+use super::future::WriteAllFuture;
 
 // -----------------------------------------------------------------------------
 // AssetWriterError
 
-#[derive(GameError, Error, Debug)]
-#[game_error(severity = "error")]
+#[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum AssetWriterError {
     #[error("Path not found: {}", _0.display())]
@@ -69,6 +69,8 @@ pub use futures_io::AsyncWrite;
 pub use futures_lite::AsyncWriteExt;
 
 pub trait Writer: AsyncWrite + Unpin + Send + Sync {
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a>;
+
     #[inline]
     fn into_boxed<'a>(self) -> Box<dyn Writer + 'a>
     where
@@ -79,6 +81,11 @@ pub trait Writer: AsyncWrite + Unpin + Send + Sync {
 }
 
 impl Writer for Box<dyn Writer + '_> {
+    #[inline(always)]
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a> {
+        (**self).write_all_bytes(buf)
+    }
+
     #[inline(always)]
     fn into_boxed<'a>(self) -> Box<dyn Writer + 'a>
     where
@@ -171,7 +178,7 @@ pub trait AssetWriter: Send + Sync + 'static {
     ) -> impl Future<Output = Result<(), AssetWriterError>> + Send {
         async {
             let mut writer = self.write(path).await?;
-            writer.write_all(bytes).await?; // AsyncReadExt
+            writer.write_all_bytes(bytes).await?;
             writer.flush().await?;
             Ok(())
         }
@@ -184,7 +191,7 @@ pub trait AssetWriter: Send + Sync + 'static {
     ) -> impl Future<Output = Result<(), AssetWriterError>> + Send {
         async {
             let mut meta_writer = self.write_meta(path).await?;
-            meta_writer.write_all(bytes).await?; // AsyncReadExt
+            meta_writer.write_all_bytes(bytes).await?;
             meta_writer.flush().await?;
             Ok(())
         }

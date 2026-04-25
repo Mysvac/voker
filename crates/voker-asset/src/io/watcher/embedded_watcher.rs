@@ -8,13 +8,15 @@ use std::path::{Path, PathBuf};
 use async_channel::Sender;
 use notify_debouncer_full::notify::RecommendedWatcher;
 use notify_debouncer_full::{Debouncer, RecommendedCache, notify};
-use voker_os::Arc;
+use alloc::sync::Arc;
 use voker_os::sync::{PoisonError, RwLock};
 use voker_utils::hash::HashMap;
 
 use super::notifier::build_debouncer;
 use super::notifier::{EventNotifier, EventPath};
-use crate::io::{AssetSourceEvent, AssetWatcher, Dir};
+use super::AssetWatcher;
+use crate::io::AssetSourceEvent;
+use crate::io::memory::Dir;
 
 // -----------------------------------------------------------------------------
 // EmbeddedNotifier
@@ -100,7 +102,7 @@ pub struct EmbeddedWatcher {
 }
 
 impl EmbeddedWatcher {
-    pub fn new(
+    pub fn build(
         dir: Dir,
         root_paths: Arc<RwLock<HashMap<Box<Path>, PathBuf>>>,
         sender: Sender<AssetSourceEvent>,

@@ -7,16 +7,15 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use voker_ecs::error::GameError;
 
-use crate::PathStream;
+use super::future::ReadAllFuture;
+use crate::{BoxedFuture, PathStream};
 
 // -----------------------------------------------------------------------------
 // AssetReaderError
 
 /// Errors that occur while loading assets.
-#[derive(GameError, Error, Debug)]
-#[game_error(severity = "error")]
+#[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum AssetReaderError {
     #[error("Path not found: {}", _0.display())]
@@ -74,6 +73,8 @@ pub use futures_lite::AsyncReadExt;
 pub trait Reader: AsyncRead + Unpin + Send + Sync {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError>;
 
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a>;
+
     #[inline]
     fn into_boxed<'a>(self) -> Box<dyn Reader + 'a>
     where
@@ -84,6 +85,11 @@ pub trait Reader: AsyncRead + Unpin + Send + Sync {
 }
 
 impl Reader for Box<dyn Reader + '_> {
+    #[inline(always)]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        (**self).read_all_bytes(buf)
+    }
+
     #[inline(always)]
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         (**self).seekable()
@@ -107,8 +113,7 @@ pub trait SeekableReader: Reader + AsyncSeek {}
 
 impl<T: Reader + AsyncSeek> SeekableReader for T {}
 
-#[derive(GameError, Error, Debug, Copy, Clone)]
-#[game_error(severity = "warning")]
+#[derive(Error, Debug, Copy, Clone)]
 #[error("The `Reader` returned by `AssetReader` does not support `AsyncSeek` behavior.")]
 pub struct ReaderNotSeekableError;
 
@@ -147,7 +152,7 @@ pub trait AssetReader: Sized + Sync + Send + 'static {
         async {
             let mut data_reader = self.read(path).await?;
             let mut data_bytes = Vec::new();
-            data_reader.read_to_end(&mut data_bytes).await?; // AsyncReadExt
+            data_reader.read_all_bytes(&mut data_bytes).await?; // AsyncReadExt
             Ok(data_bytes)
         }
     }
@@ -159,7 +164,7 @@ pub trait AssetReader: Sized + Sync + Send + 'static {
         async {
             let mut meta_reader = self.read_meta(path).await?;
             let mut meta_bytes = Vec::new();
-            meta_reader.read_to_end(&mut meta_bytes).await?; // AsyncReadExt
+            meta_reader.read_all_bytes(&mut meta_bytes).await?; // AsyncReadExt
             Ok(meta_bytes)
         }
     }
@@ -168,7 +173,7 @@ pub trait AssetReader: Sized + Sync + Send + 'static {
 // -----------------------------------------------------------------------------
 // ErasedAssetReader
 
-pub type BoxedAssetReaderFuture<'a, T> = crate::BoxedFuture<'a, Result<T, AssetReaderError>>;
+type BoxedAssetReaderFuture<'a, T> = BoxedFuture<'a, Result<T, AssetReaderError>>;
 
 pub trait ErasedAssetReader: Send + Sync + 'static {
     /// Returns a future to load the full file data at the provided path.
@@ -219,8 +224,7 @@ impl<T: AssetReader> ErasedAssetReader for T {
 
 /// An [`AsyncRead`] implementation capable of reading a [`Vec<u8>`].
 pub struct VecReader {
-    /// The bytes being read. This is the full original list of bytes.
-    pub bytes: Vec<u8>,
+    bytes: Vec<u8>,
     bytes_read: usize,
 }
 
@@ -266,6 +270,17 @@ impl Reader for VecReader {
     #[inline(always)]
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         Ok(self)
+    }
+
+    #[inline]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        let start = self.bytes_read;
+        let bytes = self.bytes.as_slice();
+        if start >= bytes.len() {
+            ReadAllFuture::slice_read(&[], buf)
+        } else {
+            ReadAllFuture::slice_read(&bytes[start..], buf)
+        }
     }
 }
 
@@ -319,5 +334,16 @@ impl Reader for SliceReader<'_> {
     #[inline(always)]
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         Ok(self)
+    }
+
+    #[inline]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        let start = self.bytes_read;
+        let bytes = self.bytes;
+        if start >= bytes.len() {
+            ReadAllFuture::slice_read(&[], buf)
+        } else {
+            ReadAllFuture::slice_read(&bytes[start..], buf)
+        }
     }
 }

@@ -73,6 +73,7 @@ impl UnwindSafe for ThreadExecutor<'_> {}
 impl RefUnwindSafe for ThreadExecutor<'_> {}
 
 impl<'task> ThreadExecutor<'task> {
+    /// Create a new `ThreadExecutor`.
     pub(super) fn new() -> Self {
         Self {
             queue: SegQueue::new(),
@@ -82,6 +83,8 @@ impl<'task> ThreadExecutor<'task> {
         }
     }
 
+    /// # Safety
+    /// See [`async_task::spawn_unchecked`].
     pub(super) unsafe fn spawn_unchecked<T: 'task>(
         &self,
         future: impl Future<Output = T> + 'task,
@@ -111,9 +114,7 @@ impl<'task> ThreadExecutor<'task> {
         task
     }
 
-    pub(super) unsafe fn ticker_unchecked<'ticker>(
-        &'ticker self,
-    ) -> ThreadExecutorTicker<'task, 'ticker> {
+    pub(super) fn ticker_unchecked<'ticker>(&'ticker self) -> ThreadExecutorTicker<'task, 'ticker> {
         ThreadExecutorTicker {
             executor: self,
             _marker: PhantomData,
@@ -139,7 +140,7 @@ impl<'task> ThreadExecutor<'task> {
             return None;
         }
 
-        Some(unsafe { self.ticker_unchecked() })
+        Some(self.ticker_unchecked())
     }
 
     /// Returns true if `self` and `other`'s executor is same

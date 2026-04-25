@@ -7,8 +7,9 @@ impl_reflect_opaque!(::core::num::NonZeroI128(
     PartialEq,
     PartialOrd,
     Serialize,
-    Deserialize
+    Deserialize,
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroU128(
     Debug,
     Clone,
@@ -16,8 +17,9 @@ impl_reflect_opaque!(::core::num::NonZeroU128(
     PartialEq,
     PartialOrd,
     Serialize,
-    Deserialize
+    Deserialize,
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroIsize(
     Debug,
     Clone,
@@ -27,6 +29,7 @@ impl_reflect_opaque!(::core::num::NonZeroIsize(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroUsize(
     Debug,
     Clone,
@@ -45,6 +48,7 @@ impl_reflect_opaque!(::core::num::NonZeroI64(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroU64(
     Debug,
     Clone,
@@ -54,6 +58,7 @@ impl_reflect_opaque!(::core::num::NonZeroU64(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroU32(
     Debug,
     Clone,
@@ -63,6 +68,7 @@ impl_reflect_opaque!(::core::num::NonZeroU32(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroI32(
     Debug,
     Clone,
@@ -72,6 +78,7 @@ impl_reflect_opaque!(::core::num::NonZeroI32(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroI16(
     Debug,
     Clone,
@@ -81,6 +88,7 @@ impl_reflect_opaque!(::core::num::NonZeroI16(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroU16(
     Debug,
     Clone,
@@ -90,6 +98,7 @@ impl_reflect_opaque!(::core::num::NonZeroU16(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroU8(
     Debug,
     Clone,
@@ -99,6 +108,7 @@ impl_reflect_opaque!(::core::num::NonZeroU8(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::NonZeroI8(
     Debug,
     Clone,
@@ -108,5 +118,6 @@ impl_reflect_opaque!(::core::num::NonZeroI8(
     Serialize,
     Deserialize
 ));
+
 impl_reflect_opaque!(::core::num::Wrapping<T: Clone + Send + Sync>(Clone));
 impl_reflect_opaque!(::core::num::Saturating<T: Clone + Send + Sync>(Clone));

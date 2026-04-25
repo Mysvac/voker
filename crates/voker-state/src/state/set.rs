@@ -5,13 +5,12 @@ use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::command::Commands;
 use voker_ecs::message::{MessageReader, MessageWriter};
 use voker_ecs::schedule::{InternedSystemSet, SystemSet};
-use voker_ecs::schedule::{IntoSystemConfig, Schedule};
+use voker_ecs::schedule::{IntoSystemConfig, IntoSystemSetConfig, Schedule};
 use voker_ecs::system::IntoSystem;
 
 use super::ApplyStateTransition;
 use super::{EnterSchedules, ExitSchedules, TransitionSchedules};
-use super::{ManualStates, PreviousState, State, States};
-use super::{NextState, OnEnter, OnExit, OnTransition};
+use super::{ManualStates, NextState, PreviousState, State, States};
 use super::{StateTransitionSignal, StateTransitionSystems};
 use super::{detect_transition, internal_apply_state_transition};
 use super::{last_transition, run_enter, run_exit, run_transition};
@@ -180,35 +179,35 @@ impl<S: StateSetItem> StateSet for S {
         let exit = ExitSchedules::<T>::default().intern();
 
         schedule
-            .add_systems(apply_state_transition::<S, T>.in_set(apply))
+            .add_systems(apply, apply_state_transition::<S, T>)
             .add_systems(
+                enter,
                 last_transition::<T>
                     .pipe(run_enter::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnEnter<T>>())
-                    .in_set(enter),
+                    .run_if(detect_transition::<T>),
             )
             .add_systems(
+                trans,
                 last_transition::<T>
                     .pipe(run_transition::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnTransition<T>>())
-                    .in_set(trans),
+                    .run_if(detect_transition::<T>),
             )
             .add_systems(
+                exit,
                 last_transition::<T>
                     .pipe(run_exit::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnExit<T>>())
-                    .in_set(exit),
+                    .run_if(detect_transition::<T>),
             );
 
         schedule
-            .config((apply.begin(), apply.end()).in_set(StateTransitionSystems::Apply))
-            .config((exit.begin(), exit.end()).in_set(StateTransitionSystems::Exit))
-            .config((trans.begin(), trans.end()).in_set(StateTransitionSystems::Transition))
-            .config((enter.begin(), enter.end()).in_set(StateTransitionSystems::Enter))
-            .config(apply.begin().after_set(apply_of::<S::RawState>()))
-            .config(exit.begin().after_set(exit_of::<S::RawState>()))
-            .config(trans.begin().after_set(trans_of::<S::RawState>()))
-            .config(enter.begin().after_set(enter_of::<S::RawState>()));
+            .config_set(apply.child_of(StateTransitionSystems::Apply))
+            .config_set(exit.child_of(StateTransitionSystems::Exit))
+            .config_set(trans.child_of(StateTransitionSystems::Transition))
+            .config_set(enter.child_of(StateTransitionSystems::Enter))
+            .config_set(apply.run_after(apply_of::<S::RawState>()))
+            .config_set(exit.run_after(exit_of::<S::RawState>()))
+            .config_set(trans.run_after(trans_of::<S::RawState>()))
+            .config_set(enter.run_after(enter_of::<S::RawState>()));
     }
 
     fn register_sub_state_for<T: SubStates<SourceStates = Self>>(schedule: &mut Schedule) {
@@ -277,35 +276,35 @@ impl<S: StateSetItem> StateSet for S {
         let exit = ExitSchedules::<T>::default().intern();
 
         schedule
-            .add_systems(apply_state_transition::<S, T>.in_set(apply))
+            .add_systems(apply, apply_state_transition::<S, T>)
             .add_systems(
+                enter,
                 last_transition::<T>
                     .pipe(run_exit::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnExit<T>>())
-                    .in_set(enter),
+                    .run_if(detect_transition::<T>),
             )
             .add_systems(
+                trans,
                 last_transition::<T>
                     .pipe(run_transition::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnTransition<T>>())
-                    .in_set(trans),
+                    .run_if(detect_transition::<T>),
             )
             .add_systems(
+                exit,
                 last_transition::<T>
                     .pipe(run_enter::<T>)
-                    .run_if(detect_transition::<T>.mark::<OnEnter<T>>())
-                    .in_set(exit),
+                    .run_if(detect_transition::<T>),
             );
 
         schedule
-            .config((apply.begin(), apply.end()).in_set(StateTransitionSystems::Apply))
-            .config((exit.begin(), exit.end()).in_set(StateTransitionSystems::Exit))
-            .config((trans.begin(), trans.end()).in_set(StateTransitionSystems::Transition))
-            .config((enter.begin(), enter.end()).in_set(StateTransitionSystems::Enter))
-            .config(apply.begin().after_set(apply_of::<S::RawState>()))
-            .config(exit.begin().after_set(exit_of::<S::RawState>()))
-            .config(trans.begin().after_set(trans_of::<S::RawState>()))
-            .config(enter.begin().after_set(enter_of::<S::RawState>()));
+            .config_set(apply.child_of(StateTransitionSystems::Apply))
+            .config_set(exit.child_of(StateTransitionSystems::Exit))
+            .config_set(trans.child_of(StateTransitionSystems::Transition))
+            .config_set(enter.child_of(StateTransitionSystems::Enter))
+            .config_set(apply.run_after(apply_of::<S::RawState>()))
+            .config_set(exit.run_after(exit_of::<S::RawState>()))
+            .config_set(trans.run_after(trans_of::<S::RawState>()))
+            .config_set(enter.run_after(enter_of::<S::RawState>()));
     }
 }
 
@@ -353,38 +352,35 @@ macro_rules! impl_state_set_sealed_tuples {
                 }
 
                 let apply = ApplyStateTransition::<T>::default().intern();
-                let enter = EnterSchedules::<T>::default().intern();
-                let trans = TransitionSchedules::<T>::default().intern();
                 let exit = ExitSchedules::<T>::default().intern();
+                let trans = TransitionSchedules::<T>::default().intern();
+                let enter = EnterSchedules::<T>::default().intern();
 
                 schedule
-                    .add_systems(apply_state_transition::<$($p,)* T>.in_set(apply))
+                    .add_systems(apply, apply_state_transition::<$($p,)* T>)
                     .add_systems(
-                        last_transition::<T>.pipe(run_enter::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnEnter<T>>())
-                            .in_set(exit),
+                        exit,
+                        last_transition::<T>.pipe(run_enter::<T>).run_if(detect_transition::<T>),
                     )
                     .add_systems(
-                        last_transition::<T>.pipe(run_transition::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnTransition<T>>())
-                            .in_set(trans),
+                        trans,
+                        last_transition::<T>.pipe(run_transition::<T>).run_if(detect_transition::<T>),
                     )
                     .add_systems(
-                        last_transition::<T>.pipe(run_exit::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnExit<T>>())
-                            .in_set(enter),
+                        enter,
+                        last_transition::<T>.pipe(run_exit::<T>).run_if(detect_transition::<T>),
                     );
 
                 schedule
-                    .config((apply.begin(), apply.end()).in_set(StateTransitionSystems::Apply))
-                    .config((exit.begin(), exit.end()).in_set(StateTransitionSystems::Exit))
-                    .config((trans.begin(), trans.end()).in_set(StateTransitionSystems::Transition))
-                    .config((enter.begin(), enter.end()).in_set(StateTransitionSystems::Enter))
+                    .config_set(apply.child_of(StateTransitionSystems::Apply))
+                    .config_set(exit.child_of(StateTransitionSystems::Exit))
+                    .config_set(trans.child_of(StateTransitionSystems::Transition))
+                    .config_set(enter.child_of(StateTransitionSystems::Enter))
                     $(
-                        .config(apply.begin().after_set(apply_of::<$p::RawState>()))
-                        .config(exit.begin().after_set(exit_of::<$p::RawState>()))
-                        .config(trans.begin().after_set(trans_of::<$p::RawState>()))
-                        .config(enter.begin().after_set(enter_of::<$p::RawState>()))
+                        .config_set(apply.run_after(apply_of::<$p::RawState>()))
+                        .config_set(exit.run_after(exit_of::<$p::RawState>()))
+                        .config_set(trans.run_after(trans_of::<$p::RawState>()))
+                        .config_set(enter.run_after(enter_of::<$p::RawState>()))
                     )* ;
             }
 
@@ -421,7 +417,6 @@ macro_rules! impl_state_set_sealed_tuples {
                         None
                     };
 
-
                     let allow_same_state_transitions = next_state
                         .as_ref()
                         .map(|(_, allow_same)| *allow_same)
@@ -442,40 +437,36 @@ macro_rules! impl_state_set_sealed_tuples {
                     );
                 }
 
-
                 let apply = ApplyStateTransition::<T>::default().intern();
-                let enter = EnterSchedules::<T>::default().intern();
-                let trans = TransitionSchedules::<T>::default().intern();
                 let exit = ExitSchedules::<T>::default().intern();
+                let trans = TransitionSchedules::<T>::default().intern();
+                let enter = EnterSchedules::<T>::default().intern();
 
                 schedule
-                    .add_systems(apply_state_transition::<$($p,)* T>.in_set(apply))
+                    .add_systems(apply, apply_state_transition::<$($p,)* T>)
                     .add_systems(
-                        last_transition::<T>.pipe(run_exit::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnExit<T>>())
-                            .in_set(enter),
+                        enter,
+                        last_transition::<T>.pipe(run_exit::<T>).run_if(detect_transition::<T>),
                     )
                     .add_systems(
-                        last_transition::<T>.pipe(run_transition::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnTransition<T>>())
-                            .in_set(trans),
+                        trans,
+                        last_transition::<T>.pipe(run_transition::<T>).run_if(detect_transition::<T>),
                     )
                     .add_systems(
-                        last_transition::<T>.pipe(run_enter::<T>)
-                            .run_if(detect_transition::<T>.mark::<OnEnter<T>>())
-                            .in_set(exit),
+                        exit,
+                        last_transition::<T>.pipe(run_enter::<T>).run_if(detect_transition::<T>),
                     );
 
                 schedule
-                    .config((apply.begin(), apply.end()).in_set(StateTransitionSystems::Apply))
-                    .config((exit.begin(), exit.end()).in_set(StateTransitionSystems::Exit))
-                    .config((trans.begin(), trans.end()).in_set(StateTransitionSystems::Transition))
-                    .config((enter.begin(), enter.end()).in_set(StateTransitionSystems::Enter))
+                    .config_set(apply.child_of(StateTransitionSystems::Apply))
+                    .config_set(exit.child_of(StateTransitionSystems::Exit))
+                    .config_set(trans.child_of(StateTransitionSystems::Transition))
+                    .config_set(enter.child_of(StateTransitionSystems::Enter))
                     $(
-                        .config(apply.begin().after_set(apply_of::<$p::RawState>()))
-                        .config(exit.begin().after_set(exit_of::<$p::RawState>()))
-                        .config(trans.begin().after_set(trans_of::<$p::RawState>()))
-                        .config(enter.begin().after_set(enter_of::<$p::RawState>()))
+                        .config_set(apply.run_after(apply_of::<$p::RawState>()))
+                        .config_set(exit.run_after(exit_of::<$p::RawState>()))
+                        .config_set(trans.run_after(trans_of::<$p::RawState>()))
+                        .config_set(enter.run_after(enter_of::<$p::RawState>()))
                     )* ;
             }
         }

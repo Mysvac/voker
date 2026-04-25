@@ -32,7 +32,7 @@ pub struct FrameCountPlugin;
 impl Plugin for FrameCountPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FrameCount>();
-        app.add_system(Last, count_frame);
+        app.add_systems(Last, (), count_frame);
     }
 
     fn duplicate_strategy(&self) -> DuplicateStrategy {
@@ -123,6 +123,6 @@ impl Plugin for FrameCountDiagnosticsPlugin {
                 .with_smoothing_factor(0.0)
                 .with_max_history_length(0),
         )
-        .add_systems(Update, Self::diagnostic_system);
+        .add_systems(Update, (), Self::diagnostic_system);
     }
 }

@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem;
 
 use async_task::Task;
-use voker_os::Arc;
+use alloc::sync::Arc;
 
 use super::{ThreadExecutor, ThreadExecutorTicker, block_on};
 
@@ -117,8 +117,7 @@ impl TaskPool {
             let ex: &ThreadExecutor = ex; // From Arc to Inner
             #[expect(unsafe_code, reason = "need to transmute lifetime.")]
             let ex: &'static ThreadExecutor = unsafe { mem::transmute(ex) };
-            #[expect(unsafe_code, reason = "thread local executor")]
-            unsafe { ex.ticker_unchecked() }
+            ex.ticker_unchecked()
         })
     }
 
@@ -228,7 +227,8 @@ impl TaskPool {
         f(scope_ref);
 
         // Wait until the scope is complete
-        let ticker = unsafe { executor.ticker_unchecked() };
+        let ticker = executor.ticker_unchecked();
+
         block_on(ticker.run(async {
             while pending_tasks.get() != 0 {
                 futures_lite::future::yield_now().await;

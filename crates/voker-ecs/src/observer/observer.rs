@@ -6,6 +6,7 @@ use core::any::Any;
 use core::fmt::Debug;
 
 use voker_ptr::PtrMut;
+use voker_utils::debug::DebugName;
 use voker_utils::hash::SparseHashSet;
 
 use crate::archetype::ObserverFlags;
@@ -15,7 +16,6 @@ use crate::error::{ErrorContext, ErrorHandler, GameError};
 use crate::event::{EventContext, EventId};
 use crate::observer::ObserverId;
 use crate::system::System;
-use crate::utils::DebugName;
 use crate::world::DeferredWorld;
 
 // -----------------------------------------------------------------------------

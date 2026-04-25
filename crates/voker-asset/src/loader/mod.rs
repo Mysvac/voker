@@ -1,17 +1,23 @@
 mod builder;
 mod context;
+mod error;
 mod loaded;
+mod loaders;
 
 pub use builder::*;
 pub use context::*;
+pub use error::*;
 pub use loaded::*;
+
+pub(crate) use loaded::AssetContainer;
+pub(crate) use loaded::LabeledAsset;
+pub(crate) use loaders::*;
 
 // -----------------------------------------------------------------------------
 // Inline
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
-use core::any::TypeId;
+use core::any::{Any, TypeId};
 
 use serde::{Deserialize, Serialize};
 use voker_ecs::error::GameError;
@@ -19,16 +25,8 @@ use voker_reflect::info::TypePath;
 
 use crate::BoxedFuture;
 use crate::asset::Asset;
-use crate::handle::ErasedHandle;
 use crate::io::Reader;
-use crate::meta::{DeserializeMetaError, DynamicAssetMeta, Settings};
-
-// --------------------------------------------------------------
-// LoadedFolder
-
-pub struct LoadedFolder {
-    pub handles: Vec<ErasedHandle>,
-}
+use crate::meta::{AssetConfig, AssetMeta, DeserializeMetaError, DynamicAssetMeta, Settings};
 
 // --------------------------------------------------------------
 // AssetLoader
@@ -46,7 +44,7 @@ pub trait AssetLoader: TypePath + Send + Sync + 'static {
     ) -> impl Future<Output = Result<Self::Asset, Self::Error>> + Send;
 
     #[inline(always)]
-    fn extensions(&self) -> &[&str] {
+    fn extensions(&self) -> &[&'static str] {
         &[]
     }
 }
@@ -72,7 +70,7 @@ pub trait ErasedAssetLoader: Send + Sync + 'static {
 
     fn type_id(&self) -> TypeId;
 
-    fn asset_type_name(&self) -> &'static str;
+    fn asset_type_path(&self) -> &'static str;
 
     fn asset_type_id(&self) -> TypeId;
 }
@@ -85,10 +83,19 @@ impl<L: AssetLoader> ErasedAssetLoader for L {
         settings: &'a dyn Settings,
         mut load_context: LoadContext<'a>,
     ) -> BoxedFuture<'a, Result<ErasedLoadedAsset, GameError>> {
-        todo!()
+        Box::pin(async move {
+            let settings = <dyn Any>::downcast_ref::<L::Settings>(settings)
+                .expect("AssetLoader settings should match the loader type");
+
+            let asset = <L as AssetLoader>::load(self, reader, settings, &mut load_context)
+                .await
+                .map_err(Into::into)?;
+
+            Ok(load_context.finish(asset).into())
+        })
     }
 
-    fn extensions(&self) -> &[&str] {
+    fn extensions(&self) -> &[&'static str] {
         <L as AssetLoader>::extensions(self)
     }
 
@@ -96,26 +103,56 @@ impl<L: AssetLoader> ErasedAssetLoader for L {
         &self,
         meta: &[u8],
     ) -> Result<Box<dyn DynamicAssetMeta>, DeserializeMetaError> {
-        todo!()
+        Ok(Box::new(AssetMeta::<L, ()>::deserialize(meta)?))
     }
 
     fn default_meta(&self) -> Box<dyn DynamicAssetMeta> {
-        todo!()
+        let config = AssetConfig::Load {
+            loader: self.type_path().into(),
+            settings: L::Settings::default(),
+        };
+
+        Box::new(AssetMeta::<L, ()>::new(config))
     }
 
     fn type_path(&self) -> &'static str {
-        L::type_path()
+        <L as TypePath>::type_path()
     }
 
     fn type_id(&self) -> TypeId {
         TypeId::of::<L>()
     }
 
-    fn asset_type_name(&self) -> &'static str {
-        core::any::type_name::<L::Asset>()
+    fn asset_type_path(&self) -> &'static str {
+        <L::Asset as TypePath>::type_path()
     }
 
     fn asset_type_id(&self) -> TypeId {
         TypeId::of::<L::Asset>()
+    }
+}
+
+// --------------------------------------------------------------
+// Placeholder
+
+/// A placeholder, this loader should never be called.
+///
+/// This implementation exists to make the meta format nicer to work with.
+impl AssetLoader for () {
+    type Asset = ();
+    type Settings = ();
+    type Error = GameError;
+
+    async fn load(
+        &self,
+        _reader: &mut dyn Reader,
+        _settings: &Self::Settings,
+        _load_context: &mut LoadContext<'_>,
+    ) -> Result<Self::Asset, Self::Error> {
+        unreachable!()
+    }
+
+    fn extensions(&self) -> &[&'static str] {
+        unreachable!()
     }
 }

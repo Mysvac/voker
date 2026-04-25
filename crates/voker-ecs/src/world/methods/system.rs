@@ -58,7 +58,7 @@ impl World {
         let old = res.mapper.insert(id, Some(system));
 
         if matches!(old, Some(Some(_))) {
-            log::warn!("The same new System `{id}` was inserted during the execution.");
+            tracing::warn!("The same new System `{id}` was inserted during the execution.");
         }
 
         ret

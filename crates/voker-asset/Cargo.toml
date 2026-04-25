@@ -8,6 +8,8 @@ repository.workspace = true
 
 [features]
 
+asset_processor = []
+
 file_watcher = [
     "dep:notify-debouncer-full"
 ]
@@ -24,7 +26,11 @@ https = [
     "ureq/platform-verifier",
 ]
 
+trace = ["tracing/std"]
+
 [dependencies]
+
+voker-asset-derive = { path = "derive" }
 
 voker-utils = { path = "../voker-utils", default-features = false }
 voker-ptr = { path = "../voker-ptr", default-features = false }
@@ -41,13 +47,15 @@ ron = { version = "0.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["v4","serde"] }
-tracing = { version = "0.1", default-features = false, features = []}
+tracing = { version = "0.1", default-features = false }
 atomicow = { version = "1.2", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", default-features = false, features = ["async-await-macro", "alloc"] }
 futures-io = { version = "0.3", default-features = false, features = ["std"] }
 futures-lite = { version = "2.6", default-features = false, features = ["std"] }
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
 async-channel = { version = "2.5", default-features = false }
+async-broadcast = { version = "0.7.2", default-features = false }
+async-lock = { version = "3.0", default-features = false }
 
 [target.'cfg(not(any(target_os = "windows", target_arch = "wasm32")))'.dependencies]
 async-io = "2.6"

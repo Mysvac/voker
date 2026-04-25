@@ -155,7 +155,7 @@ impl<'w> EntityOwned<'w> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
-        self.insert_related::<ChildOf>(children)
+        self.add_relateds::<ChildOf>(children)
     }
 
     /// Removes one child relationship from this entity.
@@ -218,7 +218,7 @@ impl<'a> EntityCommands<'a> {
     /// Adds many children to this entity via [`ChildOf`].
     #[inline]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
-        self.insert_related::<ChildOf>(children)
+        self.add_relateds::<ChildOf>(children)
     }
 
     /// Removes specific child relationships from this entity.
@@ -351,7 +351,7 @@ mod tests {
 
         world
             .commands()
-            .with_entity(root)
+            .entity(root)
             .add_child(a)
             .add_children(&[b])
             .with_child(())
@@ -365,7 +365,7 @@ mod tests {
         assert!(children.contains(&b));
         assert!(children.len() >= 4);
 
-        world.commands().with_entity(root).remove_children(&[a]);
+        world.commands().entity(root).remove_children(&[a]);
         world.flush();
         assert!(!world.get::<Children>(root).unwrap().contains(&a));
     }

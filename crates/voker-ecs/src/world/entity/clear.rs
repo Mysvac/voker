@@ -19,7 +19,7 @@ impl EntityOwned<'_> {
     /// struct Foo;
     ///
     /// #[derive(Component, Clone)]
-    /// #[component(required = Foo)]
+    /// #[require(Foo)]
     /// struct Bar;
     ///
     /// let mut world = World::alloc();

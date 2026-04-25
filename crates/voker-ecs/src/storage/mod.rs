@@ -30,7 +30,7 @@ use utils::{AbortOnPanic, VecRemoveExt};
 pub use column::Column;
 pub use dense::{Table, Tables};
 pub use dense::{TableCol, TableId, TableRow};
-pub use global::{ResData, ResSet};
+pub use global::{ResourceData, ResourceStorage};
 pub use impls::Storages;
 pub use sparse::{Map, Maps};
 pub use sparse::{MapId, MapRow};

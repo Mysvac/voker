@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::any::TypeId;
 use core::fmt::Debug;
+use voker_utils::debug::DebugName;
 
 use voker_utils::extra::TypeIdMap;
 
@@ -65,6 +66,12 @@ impl Components {
         self.mapper.get(type_id).copied()
     }
 
+    /// Returns the component debug name for the given ID.
+    #[inline]
+    pub fn get_name(&self, id: ComponentId) -> Option<DebugName> {
+        self.infos.get(id.index()).map(ComponentInfo::name)
+    }
+
     /// Returns the component info for the given ID.
     #[inline]
     pub fn get(&self, id: ComponentId) -> Option<&ComponentInfo> {
@@ -120,7 +127,7 @@ impl Components {
             if let Some(registrar) = T::RELATIONSHIP_REGISTRAR {
                 let accessor = registrar.register(this);
                 let info = unsafe { this.get_unchecked_mut(component_id) };
-                info.set_link_accessor(accessor);
+                info.set_relationship_accessor(accessor);
             }
 
             component_id

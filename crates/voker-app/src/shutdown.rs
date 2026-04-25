@@ -99,11 +99,11 @@ impl ShutdownPlugin {
     /// On unsupported platforms, users must call this function manually to stop the program.
     pub fn gracefully_exit() {
         if SHOULD_EXIT.fetch_add(1, Ordering::SeqCst) > 0 {
-            log::error!("Received more than one ctrl+c. Skipping graceful shutdown.");
+            tracing::error!("Received more than one ctrl+c. Skipping graceful shutdown.");
             if let Some(func) = *FORCE_EXIT.lock() {
                 (func)(ShutdownPlugin::EXIT_CODE.into())
             } else {
-                log::error!(
+                tracing::error!(
                     "The platform does not support `std::process::exit`, wait for the current loop to end."
                 );
             }
@@ -116,16 +116,16 @@ impl Plugin for ShutdownPlugin {
         #[cfg(all(any(all(unix, not(target_os = "horizon")), windows), feature = "std"))]
         match ctrlc::try_set_handler(ShutdownPlugin::gracefully_exit) {
             Ok(()) => {
-                log::debug!("ShutdownPlugin: Default on_signal handler install succeed");
+                tracing::debug!("ShutdownPlugin: Default on_signal handler install succeed");
             }
             Err(ctrlc::Error::MultipleHandlers) => {
-                log::info!(
+                tracing::info!(
                     "Skipping installing default terminal signal handler as one was already \
                     installed. Please call `ShutdownPlugin::gracefully_exit` in your own \
                     handler if you still want graceful exit."
                 );
             }
-            Err(err) => log::warn!("Failed to set `Ctrl+C` handler: {err}"),
+            Err(err) => tracing::warn!("Failed to set `Ctrl+C` handler: {err}"),
         }
 
         #[cfg(feature = "std")]
@@ -133,9 +133,9 @@ impl Plugin for ShutdownPlugin {
             && func.is_none()
         {
             *func = Some(std::process::exit);
-            log::debug!("ShutdownPlugin: Default on_force handler install succeed");
+            tracing::debug!("ShutdownPlugin: Default on_force handler install succeed");
         } else {
-            log::info!(
+            tracing::info!(
                 "Skipping installing default force termination handler as one was already installed."
             );
         }
@@ -146,6 +146,6 @@ impl Plugin for ShutdownPlugin {
             }
         }
 
-        app.add_system(Update, exit_on_flag);
+        app.add_systems(Update, (), exit_on_flag);
     }
 }

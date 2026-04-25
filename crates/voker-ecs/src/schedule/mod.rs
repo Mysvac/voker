@@ -17,9 +17,12 @@
 //!
 //! A [`SystemSet`] is represented by two no-op marker systems:
 //! [`SystemSetBegin`] and [`SystemSetEnd`].
-//! Systems configured with [`IntoSystemConfig::in_set`] are linked by
-//! run-condition edges to these markers, forming a stable boundary inside the
-//! schedule graph.
+//! Systems added via [`Schedule::add_systems`] are placed inside a set and
+//! linked by run-condition edges to these markers, forming a stable boundary
+//! inside the schedule graph.
+//!
+//! Sets are configured (ordering, parent/child, conditions) with
+//! [`Schedule::config_set`] and [`IntoSystemSetConfig`].
 //!
 //! This gives set-level ordering anchors without introducing a second executor
 //! or separate runtime pipeline.
@@ -32,10 +35,10 @@ mod apply;
 mod executor;
 mod graph;
 mod label;
+mod node;
 mod schedule;
 mod schedules;
-mod set;
-mod system;
+mod set_config;
 
 pub mod config;
 
@@ -48,6 +51,7 @@ use alloc::boxed::Box;
 // -----------------------------------------------------------------------------
 // Exports
 
+pub use crate::system::{InternedSystemSet, SystemSet, SystemSetBegin, SystemSetEnd};
 pub use voker_ecs_derive::{ScheduleLabel, SystemSet};
 
 pub use executor::{ExecutorKind, MainThreadExecutor, SystemExecutor};
@@ -55,14 +59,13 @@ pub use executor::{MultiThreadedExecutor, SingleThreadedExecutor};
 pub use graph::{Dag, DiGraph, ToposortError, UnGraph};
 pub use graph::{Direction, Graph, GraphNode, SccIterator, SccNodes};
 pub use label::{AnonymousSchedule, InternedScheduleLabel, ScheduleLabel};
+pub use node::{SystemKey, SystemObject};
 pub use schedule::{Schedule, SystemSchedule};
 pub use schedules::Schedules;
-pub use set::{AnonymousSystemSet, InternedSystemSet};
-pub use set::{SystemSet, SystemSetBegin, SystemSetEnd};
-pub use system::{SystemKey, SystemObject};
 
 pub use apply::{ApplyDeferred, apply_deferred, apply_deferred_of_val};
 pub use config::{IntoSystemConfig, SystemConfig};
+pub use set_config::{IntoSystemSetConfig, SystemSetConfig};
 
 /// Boxed condition system used by schedule graphs.
 pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;

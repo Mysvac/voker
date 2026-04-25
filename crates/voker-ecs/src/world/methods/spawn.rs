@@ -4,18 +4,21 @@ use core::ptr::NonNull;
 use voker_ptr::OwningPtr;
 
 use crate::archetype::{ArcheId, Archetype};
-use crate::bundle::{Bundle, BundleId};
+use crate::bundle::{Bundle, BundleId, DataBundle};
 use crate::component::ComponentWriter;
 use crate::entity::{AllocEntitiesIter, Entity, EntityLocation, SpawnError};
 use crate::storage::{Table, TableId};
 use crate::utils::{DebugCheckedUnwrap, DebugLocation, ForgetEntityOnPanic};
 use crate::world::{DeferredWorld, EntityOwned, UnsafeWorld, World};
 
+// -----------------------------------------------------------------------------
+// BundleSpawner
+
 struct BundleSpawner<'a> {
     world: UnsafeWorld<'a>,
     arche: NonNull<Archetype>,
     table: NonNull<Table>,
-    write_explicit: unsafe fn(&mut ComponentWriter, usize),
+    write_explicit: unsafe fn(OwningPtr<'_>, &mut ComponentWriter),
     write_required: unsafe fn(&mut ComponentWriter),
     caller: DebugLocation,
 }
@@ -24,7 +27,7 @@ impl<'a> BundleSpawner<'a> {
     fn new(
         world: &'a mut World,
         bundle_id: BundleId,
-        write_explicit: unsafe fn(&mut ComponentWriter, usize),
+        write_explicit: unsafe fn(OwningPtr<'_>, &mut ComponentWriter),
         write_required: unsafe fn(&mut ComponentWriter),
         caller: DebugLocation,
     ) -> BundleSpawner<'a> {
@@ -73,9 +76,9 @@ impl<'a> BundleSpawner<'a> {
         });
 
         unsafe {
-            let mut writer = ComponentWriter::new(world.into(), data, entity, table_id, table_row);
+            let mut writer = ComponentWriter::new(world.into(), entity, table_id, table_row);
 
-            (self.write_explicit)(&mut writer, 0);
+            (self.write_explicit)(data, &mut writer);
             (self.write_required)(&mut writer);
         }
 
@@ -111,6 +114,9 @@ impl<'a> BundleSpawner<'a> {
         unsafe { self.world.full_mut().allocator.alloc_many(count) }
     }
 }
+
+// -----------------------------------------------------------------------------
+// World spawn
 
 impl World {
     /// Spawns a new entity from a bundle and returns an owned handle to it.
@@ -176,6 +182,9 @@ impl World {
         let entity = spawner.alloc();
         voker_ptr::into_owning!(bundle as data);
 
+        let mut ptr = data;
+        let data = unsafe { ptr.borrow_mut().promote() };
+
         let mut location = Some(spawner.spawn_at(data, entity));
 
         if !self.command_queue.is_empty() {
@@ -183,11 +192,17 @@ impl World {
             location = self.entities.locate(entity).ok();
         }
 
-        EntityOwned {
-            world: self.into(),
-            location,
+        let mut owned = EntityOwned {
             entity,
+            location,
+            world: self.into(),
+        };
+
+        if B::NEED_APPLY_EFFECT {
+            unsafe { B::apply_effect(ptr, &mut owned) };
         }
+
+        owned
     }
 
     /// Spawns a new entity from a bundle and returns an owned handle to it.
@@ -264,6 +279,9 @@ impl World {
 
         voker_ptr::into_owning!(bundle as data);
 
+        let mut ptr = data;
+        let data = unsafe { ptr.borrow_mut().promote() };
+
         let mut location = Some(spawner.spawn_at(data, entity));
 
         if !self.command_queue.is_empty() {
@@ -271,11 +289,17 @@ impl World {
             location = self.entities.locate(entity).ok();
         }
 
-        Ok(EntityOwned {
+        let mut owned = EntityOwned {
+            entity,
             location,
             world: self.into(),
-            entity,
-        })
+        };
+
+        if B::NEED_APPLY_EFFECT {
+            unsafe { B::apply_effect(ptr, &mut owned) };
+        }
+
+        Ok(owned)
     }
 
     /// Spawns a new empty entity and returns an owned handle to it.
@@ -288,7 +312,7 @@ impl World {
         self.spawn_empty_with_caller(caller)
     }
 
-    pub fn spawn_empty_with_caller(&mut self, caller: DebugLocation) -> EntityOwned<'_> {
+    pub(crate) fn spawn_empty_with_caller(&mut self, caller: DebugLocation) -> EntityOwned<'_> {
         let entity = self.allocator.alloc_mut();
 
         let guard = ForgetEntityOnPanic {
@@ -299,21 +323,19 @@ impl World {
 
         let world = unsafe { guard.world.full_mut() };
 
-        let arche_row =
-            unsafe { world.archetypes.get_unchecked_mut(ArcheId::EMPTY).alloc_row(entity) };
-        let table_row = unsafe {
-            world
-                .storages
-                .tables
-                .get_unchecked_mut(TableId::EMPTY)
-                .alloc_row(entity)
+        let (arche_row, table_row) = unsafe {
+            let arche = world.archetypes.get_unchecked_mut(ArcheId::EMPTY);
+            let table = world.storages.tables.get_unchecked_mut(TableId::EMPTY);
+            (arche.alloc_row(entity), table.alloc_row(entity))
         };
+
         let location = EntityLocation {
             arche_id: ArcheId::EMPTY,
             table_id: TableId::EMPTY,
             arche_row,
             table_row,
         };
+
         unsafe {
             world.entities.set_spawned(entity, location).unwrap();
         }
@@ -327,7 +349,7 @@ impl World {
         }
     }
 
-    pub fn spawn_empty_at_with_caller(
+    pub(crate) fn spawn_empty_at_with_caller(
         &mut self,
         entity: Entity,
         caller: DebugLocation,
@@ -376,7 +398,7 @@ impl World {
 pub struct SpawnBatchIter<'w, I>
 where
     I: Iterator,
-    I::Item: Bundle,
+    I::Item: DataBundle,
 {
     inner: I,
     spawner: BundleSpawner<'w>,
@@ -386,7 +408,7 @@ where
 impl<I> Drop for SpawnBatchIter<'_, I>
 where
     I: Iterator,
-    I::Item: Bundle,
+    I::Item: DataBundle,
 {
     fn drop(&mut self) {
         self.by_ref().for_each(|_| {});
@@ -404,7 +426,7 @@ where
 impl<I> Iterator for SpawnBatchIter<'_, I>
 where
     I: Iterator,
-    I::Item: Bundle,
+    I::Item: DataBundle,
 {
     type Item = Entity;
 
@@ -424,8 +446,8 @@ where
     }
 }
 
-impl<I: ExactSizeIterator<Item: Bundle>> ExactSizeIterator for SpawnBatchIter<'_, I> {}
-impl<I: FusedIterator<Item: Bundle>> FusedIterator for SpawnBatchIter<'_, I> {}
+impl<I: ExactSizeIterator<Item: DataBundle>> ExactSizeIterator for SpawnBatchIter<'_, I> {}
+impl<I: FusedIterator<Item: DataBundle>> FusedIterator for SpawnBatchIter<'_, I> {}
 
 impl World {
     /// Returns an iterator for batch spawning entities.
@@ -451,7 +473,7 @@ impl World {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn spawn_batch<I, B>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
-        B: Bundle,
+        B: DataBundle,
         I: IntoIterator<Item = B>,
     {
         self.spawn_batch_with_caller(iter, DebugLocation::caller())
@@ -464,7 +486,7 @@ impl World {
         caller: DebugLocation,
     ) -> SpawnBatchIter<'_, I::IntoIter>
     where
-        B: Bundle,
+        B: DataBundle,
         I: IntoIterator<Item = B>,
     {
         let bundle_id = self.register_required_bundle::<B>();

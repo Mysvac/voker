@@ -1,7 +1,6 @@
-
-use alloc::ffi::CString;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::ffi::CString;
 use alloc::vec::Vec;
 use std::path::Path;
 
@@ -9,12 +8,12 @@ use futures_lite::stream;
 
 use super::{AssetReader, AssetReaderError, Reader, VecReader};
 use crate::PathStream;
-use crate::utils::build_meta_path;
+use crate::utils::append_meta_extension;
 
 // -----------------------------------------------------------------------------
 // AndroidAssetReader
 
-/// [`AssetReader`] implementation for Android devices, built on top of Android's [`AssetManager`].
+/// [`AssetReader`] implementation for Android devices, built on top of Android's `AssetManager`.
 pub struct AndroidAssetReader;
 
 impl AssetReader for AndroidAssetReader {
@@ -34,7 +33,7 @@ impl AssetReader for AndroidAssetReader {
     }
 
     async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
 
         let asset_manager = voker_app::exports::ANDROID_APP
             .get()

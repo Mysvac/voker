@@ -83,8 +83,6 @@ impl FilterParamBuilder {
             params.hash(&mut hasher);
             let hash = hasher.finish();
 
-            debug_assert!(params[..with_len].is_sorted() && params[with_len..].is_sorted());
-
             Some(FilterParam {
                 hash,
                 with_len,

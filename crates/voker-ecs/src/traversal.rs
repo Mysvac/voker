@@ -1,4 +1,14 @@
-//! A trait for components that let you traverse the ECS.
+//! Entity graph traversal for event propagation.
+//!
+//! The [`Traversal`] trait allows components to define navigation between
+//! entities. It is used primarily to control the propagation direction of
+//! [`EntityEvent`] observers — the traversal implementation determines
+//! which entity is visited next (e.g., walking up a `ChildOf` hierarchy).
+//!
+//! The `()` implementation is the null traversal: propagation always stops.
+//! Relationship-based traversals follow the relationship edge to its target.
+//!
+//! [`EntityEvent`]: crate::event::EntityEvent
 
 use crate::entity::Entity;
 use crate::relationship::Relationship;
@@ -29,6 +39,7 @@ pub trait Traversal<E: ?Sized> {
 }
 
 impl<E: ?Sized> Traversal<E> for () {
+    #[inline(always)]
     fn traverse(_source: EntityRef, _data: &E) -> Option<Entity> {
         None
     }

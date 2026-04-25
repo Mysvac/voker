@@ -27,10 +27,11 @@ use core::fmt::Debug;
 use voker_ptr::Ptr;
 
 use crate::archetype::Archetype;
-use crate::borrow::{UntypedMut, UntypedRef};
+use crate::borrow::{ResMut, UntypedMut, UntypedRef};
 use crate::entity::{Entity, EntityLocation};
 use crate::observer::IntoEntityObserver;
 use crate::prelude::ComponentId;
+use crate::resource::Resource;
 use crate::tick::Tick;
 use crate::utils::{DebugCheckedUnwrap, DebugLocation};
 use crate::world::{UnsafeWorld, World};
@@ -364,6 +365,9 @@ impl Drop for RelocateGuard<'_, '_> {
 }
 
 impl<'a> EntityOwned<'a> {
+    // -------------------------------------------------------------------------
+    // Internal helpers
+
     #[cold]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     #[inline(never)]
@@ -399,6 +403,9 @@ impl<'a> EntityOwned<'a> {
     fn last_run(&self) -> Tick {
         unsafe { self.world.read_only().last_run() }
     }
+
+    // -------------------------------------------------------------------------
+    // View conversions
 
     /// Returns the underlying entity id.
     #[inline(always)]
@@ -459,6 +466,9 @@ impl<'a> EntityOwned<'a> {
             entity: self.entity,
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Component access
 
     /// Returns whether the entity's archetype contains `T`.
     ///
@@ -635,6 +645,9 @@ impl<'a> EntityOwned<'a> {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // State inspection
+
     /// Return `true` if the entity is spawned.
     ///
     /// Note that this function check cached [`EntityLocation`] directly,
@@ -643,6 +656,16 @@ impl<'a> EntityOwned<'a> {
     #[inline]
     pub fn is_spawned(&self) -> bool {
         self.location.is_some()
+    }
+
+    /// Return `true` if the entity is despawned.
+    ///
+    /// Note that this function check cached [`EntityLocation`] directly,
+    /// if you want to update it, call [`EntityOwned::relocate`] before
+    /// this function.
+    #[inline]
+    pub fn is_despawned(&self) -> bool {
+        self.location.is_none()
     }
 
     /// Return the cached [`EntityLocation`].
@@ -695,6 +718,9 @@ impl<'a> EntityOwned<'a> {
             Some(a) => unsafe { self.world().archetypes.get_unchecked(a.arche_id) },
         }
     }
+
+    // -------------------------------------------------------------------------
+    // World access
 
     /// Updates the internal entity location to match the current location
     /// in the internal [`World`].
@@ -774,5 +800,41 @@ impl<'a> EntityOwned<'a> {
         self.relocate();
 
         self
+    }
+
+    /// Gets a reference to the resource of the given type
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    /// Use `get_resource` instead if you want to handle this case.
+    #[inline]
+    #[track_caller]
+    pub fn resource<R: Resource + Sync>(&self) -> &R {
+        unsafe { self.world.read_only().resource::<R>() }
+    }
+
+    /// Gets a reference to the resource of the given type
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    /// Use `get_resource` instead if you want to handle this case.
+    #[inline]
+    #[track_caller]
+    pub fn resource_mut<R: Resource + Send>(&mut self) -> ResMut<'_, R> {
+        unsafe { self.world.data_mut().resource_mut::<R>() }
+    }
+
+    /// Gets a reference to the resource of the given type if it exists
+    #[inline]
+    pub fn get_resource<R: Resource + Sync>(&self) -> Option<&R> {
+        unsafe { self.world.read_only().get_resource() }
+    }
+
+    /// Gets a mutable reference to the resource of the given type if it exists
+    #[inline]
+    pub fn get_resource_mut<R: Resource + Send>(&mut self) -> Option<ResMut<'_, R>> {
+        unsafe { self.world.data_mut().get_resource_mut() }
     }
 }

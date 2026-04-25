@@ -24,6 +24,7 @@ macro_rules! define_fp {
             pub struct $name;
 
             impl ToTokens for $name {
+                #[inline]
                 fn to_tokens(&self, tokens: &mut TokenStream) {
                     tokens.extend(quote!($fp));
                 }

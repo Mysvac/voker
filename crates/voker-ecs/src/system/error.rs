@@ -2,10 +2,10 @@ use alloc::borrow::Cow;
 use core::fmt::Debug;
 
 use thiserror::Error;
+use voker_utils::debug::DebugName;
 
 use crate::error::{GameError, Severity};
 use crate::system::SystemId;
-use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // SystemParamError

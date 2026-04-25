@@ -1,13 +1,12 @@
 //! System configuration builder for schedule insertion.
 //!
 //! `SystemConfig` is a temporary structure produced by [`IntoSystemConfig`]
-//! implementations and consumed by [`crate::schedule::Schedule::config`].
+//! implementations and consumed by [`Schedule::add_systems`].
 //!
 //! It captures:
 //! - action/condition systems (primary members of the configured group),
 //! - explicit ordering edges and run-condition edges,
-//! - optional `ApplyDeferred` helpers for deferred systems,
-//! - references to system-set boundaries used as ordering anchors.
+//! - optional `ApplyDeferred` helpers for deferred systems.
 //!
 //! # Primary vs. Anchor systems
 //!
@@ -16,9 +15,12 @@
 //! `systems` but are **not** added to `primary_ids`, so they never participate
 //! in chain ordering.
 //!
-//! Set boundaries referenced by `before_set()`/`after_set()` are stored as
-//! `set_anchors` and are **not** inserted into `systems` at all; the schedule
-//! resolves them when applying the config.
+//! Cross-set ordering is not expressible here; use [`Schedule::config_set`]
+//! and [`IntoSystemSetConfig`] for that.
+//!
+//! [`Schedule::add_systems`]: crate::schedule::Schedule::add_systems
+//! [`Schedule::config_set`]: crate::schedule::Schedule::config_set
+//! [`IntoSystemSetConfig`]: crate::schedule::IntoSystemSetConfig
 //!
 //! # Deferred handling
 //!
@@ -30,10 +32,11 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use voker_utils::hash::{HashSet, NoopHashMap};
+use voker_utils::hash::{HashMap, HashSet, NoopHashMap};
 
+use crate::schedule::apply_deferred;
 use crate::schedule::{ActionSystem, ConditionSystem};
-use crate::schedule::{InternedSystemSet, SystemSet, apply_deferred};
+use crate::system::InternedSystemSet;
 use crate::system::{IntoSystem, System, SystemId};
 use crate::utils::DebugLocation;
 
@@ -60,10 +63,6 @@ pub struct SystemConfig {
     pub(super) dependencies: HashSet<(SystemId, SystemId)>,
     /// Condition edges: `(condition, gated)`.
     pub(super) conditions: HashSet<(SystemId, SystemId)>,
-    /// Set boundaries referenced for ordering but not registered here.
-    pub(super) set_anchors: HashSet<InternedSystemSet>,
-    /// Set membership for all primary systems.
-    pub(super) set: Option<InternedSystemSet>,
 }
 
 impl SystemConfig {
@@ -75,8 +74,6 @@ impl SystemConfig {
             deferred: NoopHashMap::new(),
             dependencies: HashSet::new(),
             conditions: HashSet::new(),
-            set_anchors: HashSet::new(),
-            set: None,
         }
     }
 
@@ -95,7 +92,7 @@ impl SystemConfig {
         cfg.systems.insert(id, SystemEntry::Action(system));
         cfg.primary_ids.push(id);
         cfg.deferred.insert(id, def);
-        cfg.dependencies.insert((id, def_id));
+        cfg.conditions.insert((id, def_id)); // run if ran optimization
         cfg
     }
 
@@ -107,15 +104,25 @@ impl SystemConfig {
         cfg
     }
 
+    fn with_condition_deferred(system: ConditionSystem, def: ActionSystem) -> Self {
+        let id = system.id();
+        let mut cfg = Self::new();
+        cfg.systems.insert(id, SystemEntry::Condition(system));
+        cfg.primary_ids.push(id);
+        cfg.deferred.insert(id, def);
+        // No deps are required here, `add_systems` will handle it.
+        cfg
+    }
+
     // ------------------------------------------------------------------
     // Helpers
 
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn check_no_duplicate(&self, id: SystemId) {
         if self.systems.contains_key(&id) {
             let caller = DebugLocation::caller();
-            log::error!("Duplicated system `{id}` in config, may cause a cycle. {caller}.");
+            tracing::error!("Duplicated system `{id}` in config, may cause a cycle. {caller}.");
         }
     }
 
@@ -173,33 +180,9 @@ impl SystemConfig {
         if let Some(def) = anchor_def {
             let def_id = def.id();
             self.systems.entry(def_id).or_insert(SystemEntry::Action(def));
-            self.dependencies.insert((id, def_id));
         }
 
         // Intentionally NOT added to primary_ids.
-        self
-    }
-
-    // ------------------------------------------------------------------
-    // before_set / after_set implementations
-
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn before_set_impl(mut self, set: InternedSystemSet) -> Self {
-        let begin_id = set.begin().id();
-        for &pid in &self.primary_ids {
-            self.dependencies.insert((pid, begin_id));
-        }
-        self.set_anchors.insert(set);
-        self
-    }
-
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn after_set_impl(mut self, set: InternedSystemSet) -> Self {
-        let end_id = set.end().id();
-        for &pid in &self.primary_ids {
-            self.dependencies.insert((end_id, pid));
-        }
-        self.set_anchors.insert(set);
         self
     }
 
@@ -214,7 +197,9 @@ impl SystemConfig {
             for &id in &self.primary_ids {
                 if !seen.insert(id) {
                     let caller = DebugLocation::caller();
-                    log::error!("Duplicated system `{id}` in chain, may cause a cycle. {caller}.");
+                    tracing::error!(
+                        "Duplicated system `{id}` in chain, may cause a cycle. {caller}."
+                    );
                 }
             }
         }
@@ -250,11 +235,27 @@ impl SystemConfig {
 
         self.check_no_duplicate(id);
 
+        let def: Option<ActionSystem> = if condition.is_deferred() {
+            Some(Box::new(apply_deferred::<S::System>()))
+        } else {
+            None
+        };
+
         self.systems.entry(id).or_insert(SystemEntry::Condition(condition));
 
         for &pid in &self.primary_ids {
             self.conditions.insert((id, pid));
         }
+
+        if let Some(def) = def {
+            let def_id = def.id();
+            self.deferred.insert(id, def);
+
+            for &pid in &self.primary_ids {
+                self.dependencies.insert((def_id, pid));
+            }
+        }
+
         // Condition is not a primary.
         self
     }
@@ -269,29 +270,89 @@ impl SystemConfig {
 
         self.check_no_duplicate(id);
 
+        let def: Option<ActionSystem> = if action.is_deferred() {
+            Some(Box::new(apply_deferred::<S::System>()))
+        } else {
+            None
+        };
+
         self.systems.entry(id).or_insert(SystemEntry::Action(action));
 
         // Treat action execution as a condition gate for all primaries.
         for &pid in &self.primary_ids {
             self.conditions.insert((id, pid));
         }
+
+        if let Some(def) = def {
+            let def_id = def.id();
+            self.deferred.insert(id, def);
+
+            for &pid in &self.primary_ids {
+                self.dependencies.insert((def_id, pid));
+            }
+        }
+
         self
     }
 
     // ------------------------------------------------------------------
-    // in_set
+    // apply_to_set
 
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn in_set_impl(mut self, set: InternedSystemSet) -> Self {
-        if let Some(old) = self.set {
-            let caller = DebugLocation::caller();
-            log::error!(
-                "Duplicated in_set call: old `{old:?}`, new `{set:?}`, old is overwritten. \
-                {caller}"
-            );
+    /// Updates all systems in the config so their [`SystemId`] contains `set`,
+    /// then rekeys all internal maps and edge sets to match the new IDs.
+    ///
+    /// This is called by [`Schedule::add_systems`] before inserting systems so
+    /// each system registered under a given set has a unique identity that
+    /// encodes set membership.
+    pub(super) fn apply_to_set(&mut self, set: InternedSystemSet) {
+        let mut id_map: HashMap<SystemId, SystemId> = HashMap::new();
+
+        // Remap all systems (primaries + ordering anchors from before/after).
+        let old_systems: NoopHashMap<SystemId, SystemEntry> = core::mem::take(&mut self.systems);
+        for (old_id, mut entry) in old_systems {
+            match &mut entry {
+                SystemEntry::Action(sys) => sys.set_system_set(set),
+                SystemEntry::Condition(sys) => sys.set_system_set(set),
+            }
+            let new_id = match &entry {
+                SystemEntry::Action(sys) => sys.id(),
+                SystemEntry::Condition(sys) => sys.id(),
+            };
+            id_map.insert(old_id, new_id);
+            self.systems.insert(new_id, entry);
         }
-        self.set = Some(set);
-        self
+
+        // Remap deferred helpers: keyed by primary system's old ID.
+        let old_deferred: NoopHashMap<SystemId, ActionSystem> = core::mem::take(&mut self.deferred);
+        for (old_primary_id, mut def_sys) in old_deferred {
+            let old_def_id = def_sys.id();
+            def_sys.set_system_set(set);
+            let new_def_id = def_sys.id();
+            id_map.insert(old_def_id, new_def_id);
+            let new_primary_id = id_map.get(&old_primary_id).copied().unwrap_or(old_primary_id);
+            self.deferred.insert(new_primary_id, def_sys);
+        }
+
+        // Remap primary_ids.
+        for id in &mut self.primary_ids {
+            *id = id_map.get(id).copied().unwrap_or(*id);
+        }
+
+        // Remap dependency edges.
+        let old_deps: HashSet<(SystemId, SystemId)> = core::mem::take(&mut self.dependencies);
+        for (a, b) in old_deps {
+            let new_a = id_map.get(&a).copied().unwrap_or(a);
+            let new_b = id_map.get(&b).copied().unwrap_or(b);
+            self.dependencies.insert((new_a, new_b));
+        }
+
+        // Remap condition edges.
+        let old_conds: HashSet<(SystemId, SystemId)> = core::mem::take(&mut self.conditions);
+        for (cond, runnable) in old_conds {
+            let new_cond = id_map.get(&cond).copied().unwrap_or(cond);
+            let new_runnable = id_map.get(&runnable).copied().unwrap_or(runnable);
+            self.conditions.insert((new_cond, new_runnable));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -303,18 +364,6 @@ impl SystemConfig {
         self.deferred.extend(other.deferred);
         self.dependencies.extend(other.dependencies);
         self.conditions.extend(other.conditions);
-        self.set_anchors.extend(other.set_anchors);
-        // set: prefer first non-None, warn if both are Some
-        match (self.set, other.set) {
-            (None, Some(s)) => self.set = Some(s),
-            (Some(_), Some(s)) => {
-                log::error!(
-                    "Conflicting in_set when merging SystemConfig tuples (second `{s:?}` \
-                    ignored). Use in_set on the tuple, not on individual members."
-                );
-            }
-            _ => {}
-        }
         self
     }
 }
@@ -346,18 +395,6 @@ pub trait IntoSystemConfig<Marker>: Sized {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn after<M>(self, s: impl IntoSystem<(), (), M>) -> SystemConfig {
         self.into_config().after_impl(s, false)
-    }
-
-    /// Run self before the specified system set begins.
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn before_set(self, s: impl SystemSet) -> SystemConfig {
-        self.into_config().before_set_impl(s.intern())
-    }
-
-    /// Run self after the specified system set ends.
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn after_set(self, s: impl SystemSet) -> SystemConfig {
-        self.into_config().after_set_impl(s.intern())
     }
 
     /// Add sequential ordering between adjacent primary systems.
@@ -398,15 +435,6 @@ pub trait IntoSystemConfig<Marker>: Sized {
     fn chain_ignore_deferred(self) -> SystemConfig {
         self.into_config().chain_impl(true)
     }
-
-    /// Register all primary systems as members of `set`.
-    ///
-    /// Each system should belong to exactly one set. Calling this more than once
-    /// on the same config emits an error and overwrites the previous value.
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    fn in_set(self, set: impl SystemSet) -> SystemConfig {
-        self.into_config().in_set_impl(set.intern())
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -441,7 +469,7 @@ where
     fn into_config(self) -> SystemConfig {
         let action: ActionSystem = Box::new(IntoSystem::into_system(self));
         if action.is_deferred() {
-            let def: ActionSystem = Box::new(apply_deferred::<F>());
+            let def: ActionSystem = Box::new(apply_deferred::<F::System>());
             SystemConfig::with_action_deferred(action, def)
         } else {
             SystemConfig::with_action(action)
@@ -456,7 +484,12 @@ where
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     fn into_config(self) -> SystemConfig {
         let condition: ConditionSystem = Box::new(IntoSystem::into_system(self));
-        SystemConfig::with_condition(condition)
+        if condition.is_deferred() {
+            let def: ActionSystem = Box::new(apply_deferred::<F::System>());
+            SystemConfig::with_condition_deferred(condition, def)
+        } else {
+            SystemConfig::with_condition(condition)
+        }
     }
 }
 
@@ -564,43 +597,5 @@ mod tests {
 
         let config = sys_a.run_if(cond_true).into_config();
         assert!(config.conditions.contains(&(cond_id, a_id)));
-    }
-
-    #[test]
-    fn before_set_does_not_pollute_systems() {
-        use crate::schedule::{AnonymousSystemSet, SystemSet};
-        let set = AnonymousSystemSet;
-        let begin_id = set.begin().id();
-        let a_id: SystemId = sys_a.system_id();
-
-        let config = sys_a.before_set(AnonymousSystemSet).into_config();
-        assert!(config.dependencies.contains(&(a_id, begin_id)));
-        // begin is NOT registered in systems — the schedule handles it
-        assert!(!config.systems.contains_key(&begin_id));
-        assert!(!config.primary_ids.contains(&begin_id));
-        // The set is stored as an anchor
-        assert!(config.set_anchors.contains(&set.intern()));
-    }
-
-    #[test]
-    fn multiple_set_anchors_do_not_cross_pollute() {
-        use crate::schedule::{AnonymousSystemSet, SystemSet};
-        // This previously created an unintended end_SetC → begin_SetB edge.
-        // Verify that composing before_set + after_set produces only intended edges.
-        let a_id: SystemId = sys_a.system_id();
-        let set = AnonymousSystemSet;
-        let begin_id = set.begin().id();
-        let end_id = set.end().id();
-
-        // before_set and after_set on the same set as a simple smoke test
-        let config = sys_a
-            .before_set(AnonymousSystemSet)
-            .after_set(AnonymousSystemSet)
-            .into_config();
-
-        assert!(config.dependencies.contains(&(a_id, begin_id)));
-        assert!(config.dependencies.contains(&(end_id, a_id)));
-        // No end → begin edge should exist
-        assert!(!config.dependencies.contains(&(end_id, begin_id)));
     }
 }

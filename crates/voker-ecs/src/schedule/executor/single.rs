@@ -84,7 +84,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                     #[cfg(feature = "std")]
                     if let Err(payload) = ::std::panic::catch_unwind(func) {
                         core::hint::cold_path();
-                        log::error!("Encountered a panic in system `{}`!", system.id());
+                        tracing::error!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     }
 
@@ -114,7 +114,7 @@ impl SystemExecutor for SingleThreadedExecutor {
                     #[cfg(feature = "std")]
                     let condition = ::std::panic::catch_unwind(func).unwrap_or_else(|payload| {
                         core::hint::cold_path();
-                        log::error!("Encountered a panic in system `{}`!", system.id());
+                        tracing::error!("Encountered a panic in system `{}`!", system.id());
                         ::std::panic::resume_unwind(payload);
                     });
 

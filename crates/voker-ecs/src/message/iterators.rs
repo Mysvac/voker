@@ -110,6 +110,7 @@ impl<M: Message> Clone for MessageCursor<M> {
 }
 
 impl<M: Message> MessageCursor<M> {
+    // Create a `MessageCursor` that pointee oldest message.
     pub fn new(messages: &MessageQueue<M>) -> Self {
         let last_index = messages.oldest_message_index();
         Self {

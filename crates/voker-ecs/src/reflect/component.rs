@@ -5,16 +5,17 @@
 //! operations. The wrapper is intended for scene/asset style pipelines where
 //! component types are resolved through `TypeRegistry` at runtime.
 
-use crate::borrow::Mut;
-use crate::component::{Component, ComponentId};
-use crate::entity::{Entity, EntityMapper};
-use crate::reflect::from_reflect_with_fallback;
-use crate::utils::DebugName;
-use crate::world::{EntityMut, EntityOwned, EntityRef, World};
 use voker_reflect::derive::TypePath;
 use voker_reflect::info::Typed;
 use voker_reflect::registry::{FromType, TypeRegistry};
 use voker_reflect::{FromReflect, Reflect};
+use voker_utils::debug::DebugName;
+
+use crate::borrow::Mut;
+use crate::component::{Component, ComponentId};
+use crate::entity::{Entity, EntityMapper};
+use crate::reflect::from_reflect_with_fallback;
+use crate::world::{EntityMut, EntityOwned, EntityRef, World};
 
 /// Runtime reflection adapter for component types.
 #[derive(Clone, TypePath)]

@@ -40,22 +40,6 @@ impl VisitAssetDependencies for ErasedAssetId {
     }
 }
 
-impl<V: VisitAssetDependencies> VisitAssetDependencies for Vec<V> {
-    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
-        for dependency in self {
-            dependency.visit_dependencies(visit);
-        }
-    }
-}
-
-impl<V: VisitAssetDependencies> VisitAssetDependencies for HashSet<V> {
-    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
-        for dependency in self {
-            dependency.visit_dependencies(visit);
-        }
-    }
-}
-
 impl VisitAssetDependencies for ErasedHandle {
     #[inline]
     fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
@@ -68,6 +52,22 @@ impl VisitAssetDependencies for Option<ErasedHandle> {
     fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
         if let Some(handle) = self.as_ref() {
             visit(handle.id())
+        }
+    }
+}
+
+impl<A: Asset> VisitAssetDependencies for Handle<A> {
+    #[inline]
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        visit(self.id().erased());
+    }
+}
+
+impl<A: Asset> VisitAssetDependencies for Option<Handle<A>> {
+    #[inline]
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        if let Some(handle) = self {
+            visit(handle.id().erased());
         }
     }
 }
@@ -88,7 +88,7 @@ impl<const N: usize> VisitAssetDependencies for [ErasedHandle; N] {
     }
 }
 
-impl<A: Asset, K> VisitAssetDependencies for HashMap<K, Handle<A>> {
+impl<K, A: Asset> VisitAssetDependencies for HashMap<K, Handle<A>> {
     fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
         for dependency in self.values() {
             visit(dependency.id().erased());
@@ -104,20 +104,40 @@ impl<K> VisitAssetDependencies for HashMap<K, ErasedHandle> {
     }
 }
 
+impl<V: VisitAssetDependencies> VisitAssetDependencies for Vec<V> {
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        for dependency in self {
+            dependency.visit_dependencies(visit);
+        }
+    }
+}
+
+impl<V: VisitAssetDependencies> VisitAssetDependencies for HashSet<V> {
+    fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId)) {
+        for dependency in self {
+            dependency.visit_dependencies(visit);
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // VisitAssetDependencies
 
 /// A trait for components that can be used as asset identifiers, e.g. handle wrappers.
-pub trait AsAssetId: Component {
+pub trait AssetComponent: Component {
     /// The underlying asset type.
     type Asset: Asset;
 
     /// Retrieves the asset id from this component.
-    fn as_asset_id(&self) -> AssetId<Self::Asset>;
+    fn asset_id(&self) -> AssetId<Self::Asset>;
 }
 
 // -----------------------------------------------------------------------------
 // App Extension
+
+/// System set for the server event handler that must run before [`AssetTrackingSystems`].
+#[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct AssetServerEventSystems;
 
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AssetTrackingSystems;

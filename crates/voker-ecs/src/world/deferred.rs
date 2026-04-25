@@ -1,3 +1,10 @@
+//! Restricted world access for hooks and observers.
+//!
+//! [`DeferredWorld`] is a view of the world that permits deferred structural
+//! mutations (via commands and observer triggering) without allowing immediate
+//! archetype transitions. It is the view presented to component hooks and
+//! observer systems to prevent re-entrancy during structural changes.
+
 use core::ops::Deref;
 
 use crate::borrow::{NonSendMut, ResMut};

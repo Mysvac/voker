@@ -1,3 +1,10 @@
+//! World identity — a unique ID assigned to each [`World`] instance.
+//!
+//! [`WorldId`] is used to detect cross-world entity references and to
+//! distinguish sub-app worlds from the main world at runtime.
+//!
+//! [`World`]: crate::world::World
+
 use core::fmt::{Debug, Display};
 use core::hash::Hash;
 use core::num::NonZeroUsize;

@@ -1,6 +1,7 @@
 
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::pin::Pin;
 use core::task::Poll;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,8 @@ use futures_lite::StreamExt;
 use crate::io::{AssetReader, AssetReaderError, Reader};
 use crate::io::{AssetWriter, AssetWriterError, Writer};
 use crate::io::{ReaderNotSeekableError, SeekableReader};
-use crate::utils::build_meta_path;
+use crate::io::future::{ReadAllFuture, WriteAllFuture};
+use crate::utils::append_meta_extension;
 use super::{FileAssetReader, FileAssetWriter};
 
 // -----------------------------------------------------------------------------
@@ -22,7 +24,7 @@ use super::{FileAssetReader, FileAssetWriter};
 use core::marker::PhantomData;
 
 #[cfg(not(windows))]
-use voker_os::asyn::{Semaphore, SemaphoreGuard};
+use async_lock::{Semaphore, SemaphoreGuard};
 
 // Set to OS default limit / 2
 // macos & ios: 256
@@ -59,6 +61,11 @@ impl Reader for File {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
         Ok(self)
     }
+
+    #[inline(always)]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        ReadAllFuture::async_read::<File>(self, buf)
+    }
 }
 
 struct FileReader<'a> {
@@ -69,7 +76,7 @@ struct FileReader<'a> {
     _guard: Option<SemaphoreGuard<'a>>,
 }
 
-impl<'a> AsyncRead for FileReader<'a> {
+impl AsyncRead for FileReader<'_> {
     #[inline(always)]
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -80,10 +87,15 @@ impl<'a> AsyncRead for FileReader<'a> {
     }
 }
 
-impl<'a> Reader for FileReader<'a> {
+impl Reader for FileReader<'_> {
     #[inline(always)]
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError> {
-        self.file.seekable()
+        Ok(&mut self.file)
+    }
+
+    #[inline(always)]
+    fn read_all_bytes<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadAllFuture<'a> {
+        ReadAllFuture::async_read::<File>(&mut self.file, buf)
     }
 }
 
@@ -125,7 +137,7 @@ impl AssetReader for FileAssetReader {
         #[cfg(not(windows))]
         let _guard = maybe_get_semaphore().await;
 
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
         match File::open(&full_path).await {
             Ok(file) => Ok(FileReader{ file, _guard }),
@@ -185,6 +197,15 @@ impl AssetReader for FileAssetReader {
 // -----------------------------------------------------------------------------
 // FileWriter
 
+
+impl Writer for File {
+    #[inline(always)]
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a> {
+        WriteAllFuture::async_write::<File>(self, buf)
+    }
+}
+
+
 struct FileWriter<'a> {
     file: File,
     #[cfg(windows)]
@@ -193,7 +214,7 @@ struct FileWriter<'a> {
     _guard: Option<SemaphoreGuard<'a>>,
 }
 
-impl<'a> AsyncWrite for FileWriter<'a> {
+impl AsyncWrite for FileWriter<'_> {
     #[inline(always)]
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -214,7 +235,12 @@ impl<'a> AsyncWrite for FileWriter<'a> {
     }
 }
 
-impl<'a> Writer for FileWriter<'a> {}
+impl Writer for FileWriter<'_> {
+    #[inline(always)]
+    fn write_all_bytes<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFuture<'a> {
+        WriteAllFuture::async_write::<File>(&mut self.file, buf)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // AssetWriter
@@ -260,7 +286,7 @@ impl AssetWriter for FileAssetWriter {
         #[cfg(not(windows))]
         let _guard = maybe_get_semaphore().await;
 
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
 
         if let Some(parent) = full_path.parent() {
@@ -285,7 +311,7 @@ impl AssetWriter for FileAssetWriter {
         &'a self,
         path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let meta_path = build_meta_path(path);
+        let meta_path = append_meta_extension(path);
         let full_path = self.root_path.join(meta_path);
         async_fs::remove_file(&full_path).await.map_err(|e|map_write_error(e, full_path))
     }
@@ -308,8 +334,8 @@ impl AssetWriter for FileAssetWriter {
         old_path: &'a Path,
         new_path: &'a Path,
     ) -> Result<(), AssetWriterError> {
-        let old_meta_path = build_meta_path(old_path);
-        let new_meta_path = build_meta_path(new_path);
+        let old_meta_path = append_meta_extension(old_path);
+        let new_meta_path = append_meta_extension(new_path);
         let full_old_path = self.root_path.join(old_meta_path);
         let full_new_path = self.root_path.join(new_meta_path);
         if let Some(parent) = full_new_path.parent() {
@@ -352,8 +378,5 @@ impl AssetWriter for FileAssetWriter {
         Ok(())
     }
 }
-
-impl Writer for File {}
-
 
 

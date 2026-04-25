@@ -1,13 +1,24 @@
 use alloc::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{FromReflect, Reflect};
 use crate::derive::{impl_reflect_opaque, impl_type_path};
 use crate::info::{OpaqueInfo, TypeInfo, Typed};
-use crate::registry::{ReflectDefault, FromType, GetTypeMeta, ReflectDeserialize};
+use crate::registry::{FromType, GetTypeMeta, ReflectConvert, ReflectDefault, ReflectDeserialize};
 use crate::registry::{ReflectFromReflect, ReflectSerialize, TypeMeta};
 
-impl_reflect_opaque!(::std::path::PathBuf(Default, Debug, Clone, Hash, PartialEq, PartialOrd, Serialize, Deserialize));
+impl_reflect_opaque!{
+    ::std::path::PathBuf(
+        Default,
+        Debug,
+        Clone,
+        Hash,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+        Deserialize,
+    )
+}
 
 impl_type_path!(::std::path::Path);
 
@@ -31,9 +42,13 @@ impl FromReflect for &'static Path {
 
 impl GetTypeMeta for &'static Path {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<Self>(2);
+        let mut type_meta = TypeMeta::with_capacity::<Self>(3);
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
+        let mut converter = ReflectConvert::new::<Self>();
+        converter.register_into::<Self, PathBuf>();
+        converter.register_into::<Self, Cow<'static, Path>>();
+        type_meta.insert_data(converter);
         type_meta
     }
 }
@@ -58,11 +73,16 @@ impl FromReflect for Cow<'static, Path> {
 
 impl GetTypeMeta for Cow<'static, Path> {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta: TypeMeta = TypeMeta::with_capacity::<Self>(4);
+        let mut type_meta: TypeMeta = TypeMeta::with_capacity::<Self>(5);
         type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
         type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
+        let mut converter = ReflectConvert::new::<Self>();
+        converter.register_into::<Self, PathBuf>();
+        converter.register_from::<Self, PathBuf>();
+        converter.register_from::<Self, &'static Path>();
+        type_meta.insert_data(converter);
         type_meta
     }
 }

@@ -1,8 +1,9 @@
 use core::any::TypeId;
 
+use voker_utils::debug::DebugName;
+
 use crate::message::{Message, MessageId, MessageKey};
 use crate::message::{MessageKeyIter, MessageQueue, Messages};
-use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
@@ -67,7 +68,7 @@ impl World {
 #[cold]
 #[inline(never)]
 fn unregistered_message(name: DebugName) {
-    log::error!(
+    tracing::error!(
         "Unable to write message `{name}`, call `World::register_message` before write it."
     );
 }

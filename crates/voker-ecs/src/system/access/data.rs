@@ -1,8 +1,9 @@
-use core::fmt::Debug;
+use alloc::string::String;
+use core::fmt::{Debug, Display};
 
 use voker_utils::hash::SparseHashSet;
 
-use crate::component::ComponentId;
+use crate::{component::ComponentId, world::World};
 
 /// Component-level access summary for one logical query path.
 ///
@@ -22,10 +23,10 @@ use crate::component::ComponentId;
 /// These rules are enforced by `can_*` + `set_*` pairs.
 #[derive(Default, Clone)]
 pub struct AccessParam {
-    entity_mut: bool, // holding `EntityMut`
-    entity_ref: bool, // holding `EntityRef`
-    reading: SparseHashSet<ComponentId>,
-    writing: SparseHashSet<ComponentId>,
+    pub(crate) entity_mut: bool, // holding `EntityMut`
+    pub(crate) entity_ref: bool, // holding `EntityRef`
+    pub(crate) reading: SparseHashSet<ComponentId>,
+    pub(crate) writing: SparseHashSet<ComponentId>,
 }
 
 impl Debug for AccessParam {
@@ -59,24 +60,24 @@ impl AccessParam {
     ///
     /// Shared entity access is allowed only when no exclusive-entity access and
     /// no component writes have been declared.
-    pub fn can_entity_ref(&self) -> bool {
+    fn can_entity_ref(&self) -> bool {
         !self.entity_mut && self.writing.is_empty()
     }
 
     /// Returns whether exclusive-entity access can be added.
     ///
     /// This requires a fully empty access state.
-    pub fn can_entity_mut(&self) -> bool {
+    fn can_entity_mut(&self) -> bool {
         !self.entity_mut && !self.entity_ref && self.reading.is_empty() && self.writing.is_empty()
     }
 
     /// Returns whether component read access can be added for `id`.
-    pub fn can_reading(&self, id: ComponentId) -> bool {
-        self.entity_ref || (!self.entity_mut && !self.writing.contains(&id))
+    fn can_reading(&self, id: ComponentId) -> bool {
+        !self.entity_mut && !self.writing.contains(&id)
     }
 
     /// Returns whether component write access can be added for `id`.
-    pub fn can_writing(&self, id: ComponentId) -> bool {
+    fn can_writing(&self, id: ComponentId) -> bool {
         !self.entity_mut && !self.entity_ref && !self.reading.contains(&id)
     }
 
@@ -89,7 +90,8 @@ impl AccessParam {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.entity_ref = true;
+            false // ↑ for error display
         }
     }
 
@@ -103,7 +105,8 @@ impl AccessParam {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.entity_mut = true;
+            false // ↑ for error display
         }
     }
 
@@ -117,7 +120,8 @@ impl AccessParam {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.reading.insert(id);
+            false // ↑ for error display
         }
     }
 
@@ -133,17 +137,21 @@ impl AccessParam {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.reading.insert(id);
+            self.writing.insert(id);
+            false // ↑ for error display
         }
     }
 
     /// Returns whether this access summary is read-only.
     #[must_use]
     pub fn is_read_only(&self) -> bool {
-        self.entity_ref || (!self.entity_mut && self.writing.is_empty())
+        !self.entity_mut && self.writing.is_empty()
     }
 
     /// Returns whether this access can run in parallel with `other`.
+    ///
+    /// Can only be used for access param that is valid.
     #[must_use]
     pub fn parallelizable(&self, other: &Self) -> bool {
         if self.entity_mut || other.entity_mut {
@@ -189,5 +197,35 @@ impl AccessParam {
             self.reading.extend(&other.reading);
             self.writing.extend(&other.writing);
         }
+    }
+
+    /// Create a display object for all component name.
+    #[rustfmt::skip]
+    pub fn display(&self, world: &World) -> impl Display {
+        fn format_component<'a>(world: &'a World, iter: impl Iterator<Item = &'a ComponentId>) -> String {
+            let mut msg = String::new();
+            let mut is_first = true;
+            for &id in iter {
+                let name = world.components.get_name(id).unwrap();
+                if is_first {
+                    msg.push_str(&alloc::format!("{}({})", name, id));
+                    is_first = false;
+                } else {
+                    msg.push_str(&alloc::format!(", {}({})", name, id));
+                }
+            }
+            msg
+        }
+
+        let mut msg = String::new();
+
+        msg.push_str("AccessParam: {{");
+        msg.push_str(&alloc::format!("\n\tentity_mut: {},", self.entity_mut));
+        msg.push_str(&alloc::format!("\n\tentity_ref: {},", self.entity_ref));
+        msg.push_str(&alloc::format!("\n\treading_components: {},", &format_component(world, self.reading.iter())));
+        msg.push_str(&alloc::format!("\n\twriting_components: {},", &format_component(world, self.writing.iter())));
+        msg.push_str("}},\n");
+
+        msg
     }
 }

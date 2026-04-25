@@ -115,22 +115,22 @@ pub fn from_reflect_with_fallback<T: Reflect + TypePath>(
             return value;
         }
 
-        if let Some(ctor) = registry.get_type_data::<ReflectDefault>(ty_id) {
-            let mut value = ctor.default();
+        if let Some(ctor) = registry.get_type_data::<ReflectFromWorld>(ty_id) {
+            let mut value = ctor.from_world(world);
             debug_assert_eq! {
                 value.as_ref().type_id(), ty_id,
-                "ReflectDefault produced unexpected type for `{}`",
+                "ReflectFromWorld produced unexpected type for `{}`",
                 type_path(),
             }
             value.apply(reflected).unwrap();
             return value;
         }
 
-        if let Some(ctor) = registry.get_type_data::<ReflectFromWorld>(ty_id) {
-            let mut value = ctor.from_world(world);
+        if let Some(ctor) = registry.get_type_data::<ReflectDefault>(ty_id) {
+            let mut value = ctor.default();
             debug_assert_eq! {
                 value.as_ref().type_id(), ty_id,
-                "ReflectFromWorld produced unexpected type for `{}`",
+                "ReflectDefault produced unexpected type for `{}`",
                 type_path(),
             }
             value.apply(reflected).unwrap();

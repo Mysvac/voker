@@ -4,7 +4,7 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use super::queue::RawCommandQueue;
 use super::{Command, CommandQueue, EntityCommand};
-use crate::bundle::Bundle;
+use crate::bundle::{Bundle, DataBundle};
 use crate::entity::{Entity, FetchError};
 use crate::error::ErrorHandler;
 use crate::event::Event;
@@ -71,7 +71,7 @@ impl RefUnwindSafe for Commands<'_, '_> {}
 ///
 /// fn buff_player(mut commands: Commands, players: Query<Entity, Without<Hp>>) {
 ///     for entity in players {
-///         commands.with_entity(entity).insert((Hp(150),));
+///         commands.entity(entity).insert((Hp(150),));
 ///     }
 /// }
 /// ```
@@ -190,7 +190,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// Existence is validated when queued commands execute, not when queued.
     /// The entity may be despawned before application time.
     #[inline]
-    pub fn with_entity(&mut self, entity: Entity) -> EntityCommands<'_> {
+    pub fn entity(&mut self, entity: Entity) -> EntityCommands<'_> {
         EntityCommands {
             entity,
             commands: self.reborrow(),
@@ -206,9 +206,9 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// Returns [`FetchError`] if the requested entity does not currently exist.
     #[inline]
-    pub fn try_with_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
+    pub fn checked_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
         let _ = self.world.entities.locate(entity)?;
-        Ok(self.with_entity(entity))
+        Ok(self.entity(entity))
     }
 
     /// Pushes a generic [`Command`] to the queue.
@@ -255,7 +255,7 @@ impl<'w, 's> Commands<'w, 's> {
 
         self.queue(super::spawn_empty_at(entity));
 
-        self.with_entity(entity)
+        self.entity(entity)
     }
 
     /// Enqueues a spawn operation and returns the corresponding [`EntityCommands`].
@@ -269,14 +269,13 @@ impl<'w, 's> Commands<'w, 's> {
 
         self.queue(super::spawn_at(bundle, entity));
 
-        self.with_entity(entity)
+        self.entity(entity)
     }
 
-    /// Enqueues spawning multiple entities from a batch of [`Bundle`] values.
+    /// Enqueues spawning multiple entities from a batch of [`DataBundle`] values.
     ///
     /// A batch can be any type that implements [`IntoIterator`] and
-    /// contains bundles, such as a [`Vec<Bundle>`](alloc::vec::Vec)
-    /// or an array `[Bundle; N]`.
+    /// contains bundles, such as a `Vec<Bundle>` or an array `[Bundle; N]`.
     ///
     /// This is equivalent to repeatedly calling [`spawn`](Self::spawn), but can
     /// be faster due to batched allocation and contiguous processing.
@@ -285,7 +284,7 @@ impl<'w, 's> Commands<'w, 's> {
     pub fn spawn_batch<I>(&mut self, batch: I)
     where
         I: IntoIterator + Send + Sync + 'static,
-        I::Item: Bundle,
+        I::Item: DataBundle,
     {
         self.queue(super::spawn_batch(batch));
     }
@@ -323,10 +322,6 @@ impl<'w, 's> Commands<'w, 's> {
     /// Initializes a [`Resource`] in the [`World`] using [`FromWorld`].
     ///
     /// If the resource already exists, this is a no-op.
-    ///
-    /// The inferred value is determined by the [`FromWorld`] trait of the resource.
-    /// Note that any resource with the [`Default`] trait automatically implements
-    /// [`FromWorld`], and those default values will be used.
     #[inline]
     pub fn init_resource<R: Resource + Send + FromWorld>(&mut self) {
         self.queue(super::init_resource::<R>());

@@ -5,7 +5,6 @@ use serde_core::{Serialize, Serializer};
 
 use super::error_utils::make_custom_error;
 use super::{SerializeDriver, SerializeProcessor};
-
 use crate::info::{TypeInfo, VariantInfo};
 use crate::ops::Enum;
 use crate::registry::TypeRegistry;

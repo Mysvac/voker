@@ -1,3 +1,10 @@
+//! Raw, pointer-level world access used by executors and low-level internals.
+//!
+//! [`UnsafeWorld`] is a thin raw-pointer wrapper around [`World`] that can be
+//! copied freely. It is used in contexts where the borrow checker cannot track
+//! aliasing (e.g., the multi-threaded executor holding a world reference while
+//! dispatching systems). All safety invariants are the caller's responsibility.
+
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::ptr::NonNull;

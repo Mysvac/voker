@@ -3,6 +3,8 @@ use std::path::PathBuf;
 // -----------------------------------------------------------------------------
 // AssetSourceEvent
 
+/// An "asset source change event" that occurs whenever
+/// asset (or asset metadata) is created/added/removed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AssetSourceEvent {
     /// An asset at this path was added.

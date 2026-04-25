@@ -1,10 +1,11 @@
-use core::fmt::Debug;
+use alloc::string::String;
+use core::fmt::{Debug, Display};
 
 use fixedbitset::FixedBitSet;
 use voker_utils::hash::NoopHashMap;
 
 use super::{AccessParam, FilterParam};
-use crate::resource::ResourceId;
+use crate::{component::ComponentId, resource::ResourceId, world::World};
 
 /// Full per-system access declaration used by scheduler conflict checks.
 ///
@@ -104,11 +105,9 @@ impl AccessTable {
     ///
     /// Can only be used for table building, invalid for merged table.
     fn can_world_ref(&self) -> bool {
-        self.world_ref || {
-            !self.world_mut
-                && self.res_writing.is_clear()
-                && self.filter.values().all(AccessParam::is_read_only)
-        }
+        !self.world_mut
+            && self.res_writing.is_clear()
+            && self.filter.values().all(AccessParam::is_read_only)
     }
 
     /// Declares exclusive world access.
@@ -121,7 +120,8 @@ impl AccessTable {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.world_mut = true;
+            false // ↑ for error display
         }
     }
 
@@ -137,7 +137,8 @@ impl AccessTable {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.world_ref = true;
+            false // ↑ for error display
         }
     }
 
@@ -166,7 +167,8 @@ impl AccessTable {
             true
         } else {
             core::hint::cold_path();
-            false
+            self.res_reading.grow_and_insert(id.index());
+            false // ↑ for error display
         }
     }
 
@@ -174,14 +176,16 @@ impl AccessTable {
     ///
     /// Can only be used for table building, invalid for merged table.
     pub fn set_writing_res(&mut self, id: ResourceId) -> bool {
+        let index = id.index();
         if self.can_writing_res(id) {
-            let index = id.index();
             self.res_reading.grow_and_insert(index);
             self.res_writing.grow_and_insert(index);
             true
         } else {
             core::hint::cold_path();
-            false
+            self.res_reading.grow_and_insert(index);
+            self.res_writing.grow_and_insert(index);
+            false // ↑ for error display
         }
     }
 
@@ -189,7 +193,7 @@ impl AccessTable {
     ///
     /// Query conflicts are checked per filter bucket. If two filters are
     /// disjoint, the corresponding access sets do not need to be compared.
-    pub fn can_query(&self, data: &AccessParam, params: &[FilterParam]) -> bool {
+    fn can_query(&self, data: &AccessParam, params: &[FilterParam]) -> bool {
         if self.world_mut {
             return false;
         }
@@ -224,7 +228,15 @@ impl AccessTable {
             }
             true
         } else {
-            false
+            core::hint::cold_path();
+            params.iter().for_each(|param| {
+                if let Some(item) = self.filter.get_mut(param) {
+                    item.merge_with(data);
+                } else {
+                    self.filter.insert(param.clone(), data.clone());
+                }
+            });
+            false // ↑ for error display
         }
     }
 
@@ -275,5 +287,74 @@ impl AccessTable {
             });
         }
         self
+    }
+
+    /// Create a display object for all resource name and component name.
+    #[rustfmt::skip]
+    pub fn display(&self, world: &World) -> impl Display {
+        fn format_resource(world: &World, iter: impl Iterator<Item = usize>) -> String {
+            let mut msg = String::new();
+            let mut is_first = true;
+            for index in iter {
+                let id = ResourceId::without_provenance(index);
+                let name = world.resources.get_name(id).unwrap();
+                if is_first {
+                    msg.push_str(&alloc::format!("{}({})", name, id));
+                    is_first = false;
+                } else {
+                    msg.push_str(&alloc::format!(", {}({})", name, id));
+                }
+            }
+            msg
+        }
+
+        fn format_component<'a>(world: &'a World, iter: impl Iterator<Item = &'a ComponentId>) -> String {
+            let mut msg = String::new();
+            let mut is_first = true;
+            for &id in iter {
+                let name = world.components.get_name(id).unwrap();
+                if is_first {
+                    msg.push_str(&alloc::format!("{}({})", name, id));
+                    is_first = false;
+                } else {
+                    msg.push_str(&alloc::format!(", {}({})", name, id));
+                }
+            }
+            msg
+        }
+
+        let mut msg = String::new();
+
+        msg.push_str("AccessTable {\n");
+
+        msg.push_str(&alloc::format!("\tworld_mut: {},\n", self.world_mut));
+        msg.push_str(&alloc::format!("\tworld_ref: {},\n", self.world_ref));
+
+        msg.push_str(&alloc::format!("\treading_resource: [{}],\n", &format_resource(world, self.res_reading.ones())));
+        msg.push_str(&alloc::format!("\twriting_resource: [{}],\n", &format_resource(world, self.res_writing.ones())));
+
+        msg.push_str("\tquery: {",);
+
+        for (f, d) in self.filter.iter() {
+            msg.push_str("\n\t\tFilter {{,");
+            msg.push_str(&alloc::format!("\n\t\t\tWith: [{}],", &format_component(world, f.with().iter())));
+            msg.push_str(&alloc::format!("\n\t\t\tWithout: [{}],", &format_component(world, f.without().iter())));
+            msg.push_str("\n\t\t}}: AccessData: {{");
+            msg.push_str(&alloc::format!("\n\t\t\tentity_mut: {},", d.entity_mut));
+            msg.push_str(&alloc::format!("\n\t\t\tentity_ref: {},", d.entity_ref));
+            msg.push_str(&alloc::format!("\n\t\t\treading_components: {},", &format_component(world, d.reading.iter())));
+            msg.push_str(&alloc::format!("\n\t\t\twriting_components: {},", &format_component(world, d.writing.iter())));
+            msg.push_str("\n\t\t}},\n");
+        }
+
+        if self.filter.is_empty() {
+            msg.push_str("},\n",);
+        } else {
+            msg.push_str("\n\t},\n",);
+        }
+
+        msg.push('}');
+
+        msg
     }
 }

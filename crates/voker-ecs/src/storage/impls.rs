@@ -2,7 +2,7 @@ use crate::component::{ComponentInfo, StorageMode};
 use crate::resource::ResourceInfo;
 use crate::storage::{Maps, Tables};
 
-use super::ResSet;
+use super::ResourceStorage;
 
 // -----------------------------------------------------------------------------
 // Storages
@@ -10,7 +10,7 @@ use super::ResSet;
 /// Central coordinator for all ECS storage backends.
 ///
 /// `Storages` aggregates and manages the three primary storage systems in the ECS:
-/// - **Resources** (`ResSet`) - Singleton data attached to the world itself
+/// - **Resources** (`ResourceStorage`) - Singleton data attached to the world itself
 /// - **Tables** (`Tables`) - Dense, contiguous storage for components (archetype-based)
 /// - **Maps** (`Maps`) - Sparse storage for components that don't benefit from dense storage
 ///
@@ -28,7 +28,7 @@ use super::ResSet;
 ///   rarely-present components or large component sets
 #[derive(Debug)]
 pub struct Storages {
-    pub res_set: ResSet,
+    pub resources: ResourceStorage,
     pub tables: Tables,
     pub maps: Maps,
 }
@@ -37,7 +37,7 @@ impl Storages {
     /// Creates a new, empty storage coordinator.
     pub(crate) fn new() -> Storages {
         Storages {
-            res_set: ResSet::new(),
+            resources: ResourceStorage::new(),
             tables: Tables::new(),
             maps: Maps::new(),
         }
@@ -52,16 +52,16 @@ impl Storages {
     /// |    State         | Description                            | Storage Status                       |
     /// |------------------|----------------------------------------|--------------------------------------|
     /// | **Unregistered** | No `ResourceId` allocated yet          | Not tracked                          |
-    /// | **Registered**   | `Id` allocated, but no memory reserved | `ResData` not initialized            |
+    /// | **Registered**   | `Id` allocated, but no memory reserved | `ResourceData` not initialized       |
     /// | **Prepared**     | Memory allocated, ready for insertion  | Storage reserved, data uninitialized |
     /// | **Inserted**     | Memory allocated and initialized       | Active resource                      |
-    /// | **Removed**      | Memory allocated, the data is removed  | Equivlant to **Prepared**            |
+    /// | **Removed**      | Memory allocated, the data is removed  | Equivalent to **Prepared**           |
     ///
     /// This method transitions a resource from **unprepared** to **prepared** state.
     /// First call may allocate, subsequent calls are no-op
     #[inline]
     pub fn prepare_resource(&mut self, info: &ResourceInfo) {
-        self.res_set.prepare(info);
+        self.resources.prepare(info);
     }
 
     /// Prepares storage for a component type based on its storage strategy.

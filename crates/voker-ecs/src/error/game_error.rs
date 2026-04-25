@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use core::error::Error;
 use core::fmt::{Debug, Display};
-use thiserror::Error;
 
 // -----------------------------------------------------------------------------
 // Severity
@@ -210,19 +209,11 @@ impl GameError {
     /// Attempts to downcast the underlying error to a boxed value of the specified type.
     ///
     /// Returns `Ok(Box<E>)` if the downcast succeeds, otherwise returns `Err(self)` unchanged.
-    pub fn downcast<E: Error + 'static>(mut self) -> Result<Box<E>, Self> {
-        #[derive(Debug, Error)]
-        #[error("PLACEHOLDER")]
-        struct Placeholder;
-
-        let error = core::mem::replace(&mut self.inner.error, Box::new(Placeholder));
-
-        match error.downcast::<E>() {
-            Ok(e) => Ok(e),
-            Err(e) => {
-                self.inner.error = e;
-                Err(self)
-            }
+    pub fn downcast<E: Error + 'static>(self) -> Result<Box<E>, Self> {
+        if self.inner.error.as_ref().is::<E>() {
+            Ok(self.inner.error.downcast::<E>().unwrap())
+        } else {
+            Err(self)
         }
     }
 
@@ -479,9 +470,6 @@ impl GameError {
                         continue;
                     }
                     if line.contains("__rust_begin_short_backtrace") {
-                        break;
-                    }
-                    if line.contains("voker_ecs::observer::Observers::invoke::{{closure}}") {
                         break;
                     }
                 }

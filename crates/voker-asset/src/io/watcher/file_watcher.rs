@@ -8,7 +8,8 @@ use notify_debouncer_full::{Debouncer, RecommendedCache};
 
 use super::notifier::{EventNotifier, EventPath};
 use super::notifier::{build_debouncer, make_absolute_path};
-use crate::io::{AssetSourceEvent, AssetWatcher};
+use super::AssetWatcher;
+use crate::io::AssetSourceEvent;
 
 // -----------------------------------------------------------------------------
 // FileEventNotifier
@@ -72,7 +73,7 @@ pub struct FileWatcher {
 }
 
 impl FileWatcher {
-    pub fn new(
+    pub fn build(
         path: PathBuf,
         sender: Sender<AssetSourceEvent>,
         debounce_wait_time: Duration,

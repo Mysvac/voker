@@ -27,17 +27,32 @@ impl<'w> EntityOwned<'w> {
         self
     }
 
+    /// Spawns source entities linked to `self` through relationship `R`.
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn with_related_entities<R: Relationship>(
+        &mut self,
+        func: impl FnOnce(&mut RelatedSpawner<R>),
+    ) -> &mut Self {
+        let this = self.entity();
+
+        self.world_scope(|world| {
+            func(&mut RelatedSpawner::new(world, this));
+        });
+
+        self
+    }
+
     /// Adds one existing source entity to this target through `R`.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
-        self.insert_related::<R>(&[entity])
+        self.add_relateds::<R>(&[entity])
     }
 
     /// Adds multiple existing source entities to this target through `R`.
     ///
     /// Existing `R` components are retargeted in place when possible.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
+    pub fn add_relateds<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let this = self.entity();
         let caller = DebugLocation::caller();
 
@@ -204,18 +219,18 @@ impl<'a> EntityCommands<'a> {
     /// See [`add_related`](Self::add_related) if you want to relate more than one entity.
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
         self.queue(move |mut entity_owned: EntityOwned| {
-            entity_owned.insert_related::<R>(&[entity]);
+            entity_owned.add_relateds::<R>(&[entity]);
         })
     }
 
     /// Relates the given entities to this entity with the relation `R`.
     ///
     /// See [`add_related`](Self::add_related) if you want to relate only one entity.
-    pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
+    pub fn add_relateds<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let entities: Box<[Entity]> = entities.into();
 
         self.queue(move |mut entity: EntityOwned| {
-            entity.insert_related::<R>(&entities);
+            entity.add_relateds::<R>(&entities);
         })
     }
 
@@ -316,6 +331,12 @@ impl<'w, R: Relationship> RelatedSpawner<'w, R> {
         self.world.spawn((R::from_target(self.target), bundle))
     }
 
+    /// Spawns an entity with an `R` relationship targeting the `target`
+    /// entity this spawner was initialized with.
+    pub fn spawn_empty(&mut self) -> EntityOwned<'_> {
+        self.world.spawn(R::from_target(self.target))
+    }
+
     /// Returns the relationship target entity.
     pub fn target_entity(&self) -> Entity {
         self.target
@@ -361,6 +382,12 @@ impl<'w, R: Relationship> RelatedSpawnerCommands<'w, R> {
     /// entity this spawner was initialized with.
     pub fn spawn(&mut self, bundle: impl Bundle) -> EntityCommands<'_> {
         self.commands.spawn((R::from_target(self.target), bundle))
+    }
+
+    /// Spawns an entity with an `R` relationship targeting the `target`
+    /// entity this spawner was initialized with.
+    pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
+        self.commands.spawn(R::from_target(self.target))
     }
 
     /// Returns the "target entity" used when spawning entities with an `R` [`Relationship`].

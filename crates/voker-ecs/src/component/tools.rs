@@ -202,7 +202,6 @@ enum WritedState {
 /// - Offsets must be valid within the data buffer
 /// - Entity must be properly prepared to receive components
 pub struct ComponentWriter<'a> {
-    data: OwningPtr<'a>,
     entity: Entity,
     tick: Tick,
     table_row: TableRow,
@@ -218,7 +217,6 @@ impl ComponentWriter<'_> {
     #[inline]
     pub unsafe fn new<'a>(
         world: UnsafeWorld<'a>,
-        data: OwningPtr<'a>,
         entity: Entity,
         table_id: TableId,
         table_row: TableRow,
@@ -230,8 +228,8 @@ impl ComponentWriter<'_> {
         let table = unsafe { world_mut.storages.tables.get_unchecked_mut(table_id) };
         let maps = &mut world_mut.storages.maps;
         let components = &world_mut.components;
+
         ComponentWriter {
-            data,
             entity,
             tick,
             table_row,
@@ -295,15 +293,32 @@ impl ComponentWriter<'_> {
     /// - `T` must be registered and storage for it must be prepared.
     /// - `offset` must be valid in `self.data`.
     #[inline(never)]
-    pub unsafe fn write_explicit<T: Component>(&mut self, offset: usize) {
+    pub unsafe fn write_explicit<T: Component>(&mut self, data: OwningPtr<'_>) {
         let type_id = TypeId::of::<T>();
         let component = unsafe { self.components.get_id(type_id).debug_checked_unwrap() };
+
         match T::STORAGE {
             StorageMode::Dense => unsafe {
-                self.write_dense(component, offset);
+                self.write_dense(component, data);
             },
             StorageMode::Sparse => unsafe {
-                self.write_sparse(component, offset);
+                self.write_sparse(component, data);
+            },
+        }
+    }
+
+    /// Writes an explicit component from a data buffer offset.
+    #[inline(never)]
+    pub unsafe fn write_custom<T: Component>(&mut self, data: T) {
+        let type_id = TypeId::of::<T>();
+        let component = unsafe { self.components.get_id(type_id).debug_checked_unwrap() };
+        voker_ptr::into_owning!(data);
+        match T::STORAGE {
+            StorageMode::Dense => unsafe {
+                self.write_dense(component, data);
+            },
+            StorageMode::Sparse => unsafe {
+                self.write_sparse(component, data);
             },
         }
     }
@@ -341,10 +356,9 @@ impl ComponentWriter<'_> {
     /// # Safety
     /// Guaranteed by the caller.
     #[inline(never)]
-    unsafe fn write_dense(&mut self, component: ComponentId, offset: usize) {
+    unsafe fn write_dense(&mut self, component: ComponentId, data: OwningPtr<'_>) {
         use voker_utils::hash::map::Entry;
         unsafe {
-            let data = self.data.borrow_mut().byte_add(offset).promote();
             let col = self.table.get_table_col(component).debug_checked_unwrap();
             let row = self.table_row;
             match self.writed.entry(component) {
@@ -365,10 +379,9 @@ impl ComponentWriter<'_> {
     /// # Safety
     /// Guaranteed by the caller.
     #[inline(never)]
-    unsafe fn write_sparse(&mut self, component: ComponentId, offset: usize) {
+    unsafe fn write_sparse(&mut self, component: ComponentId, data: OwningPtr<'_>) {
         use voker_utils::hash::map::Entry;
         unsafe {
-            let data = self.data.borrow_mut().byte_add(offset).promote();
             let map_id = self.maps.get_id(component).debug_checked_unwrap();
             let map = self.maps.get_unchecked_mut(map_id);
             let row = map.get_map_row(self.entity).debug_checked_unwrap();

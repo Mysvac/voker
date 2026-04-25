@@ -12,14 +12,13 @@ use super::set_serializer::SetSerializer;
 use super::struct_serializer::StructSerializer;
 use super::tuple_serializer::TupleSerializer;
 use super::tuple_struct_serializer::TupleStructSerializer;
+use crate::Reflect;
+use crate::ops::ReflectRef;
+use crate::registry::{ReflectSerialize, TypeRegistry};
 
 crate::cfg::backtrace! {
     use super::error_utils::TYPE_INFO_STACK;
 }
-
-use crate::Reflect;
-use crate::ops::ReflectRef;
-use crate::registry::{ReflectSerialize, TypeRegistry};
 
 // -----------------------------------------------------------------------------
 // SerializeDriver
@@ -234,7 +233,8 @@ impl<'a, P: SerializeProcessor> Serialize for SerializeDriver<'a, P> {
             }
             .serialize(serializer),
             ReflectRef::Opaque(_) => Err(ser::Error::custom(format!(
-                "No default serialization method is available for this opaque type: `{}`. Register ReflectSerialize (for example via #[reflect(Serialize)]).",
+                "No default serialization method is available for this opaque type: `{}`. \
+                Register ReflectSerialize (for example via #[reflect(Serialize)]).",
                 self.value.reflect_type_path(),
             ))),
         };

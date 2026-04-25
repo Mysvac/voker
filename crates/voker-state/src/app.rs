@@ -1,6 +1,6 @@
 use voker_app::{App, MainScheduleOrder, Plugin, PreStartup, PreUpdate, SubApp};
 use voker_ecs::message::MessageQueue;
-use voker_ecs::schedule::{IntoSystemConfig, SystemSet};
+use voker_ecs::schedule::IntoSystemSetConfig;
 use voker_ecs::world::FromWorld;
 
 use crate::scoped::despawn_entities_on_enter_state;
@@ -29,27 +29,12 @@ impl Plugin for StatesPlugin {
 
         let schedule = world.schedule_entry(StateTransition);
 
-        schedule.add_system_set(StateTransitionSystems::Apply);
-        schedule.add_system_set(StateTransitionSystems::Exit);
-        schedule.add_system_set(StateTransitionSystems::Transition);
-        schedule.add_system_set(StateTransitionSystems::Enter);
-
-        // Set ordering follows voker's begin/end boundary style.
         schedule
-            .config(
-                StateTransitionSystems::Exit
-                    .begin()
-                    .after_set(StateTransitionSystems::Apply),
-            )
-            .config(
-                StateTransitionSystems::Transition
-                    .begin()
-                    .after_set(StateTransitionSystems::Exit),
-            )
-            .config(
-                StateTransitionSystems::Enter
-                    .begin()
-                    .after_set(StateTransitionSystems::Transition),
+            .config_set(StateTransitionSystems::Apply)
+            .config_set(StateTransitionSystems::Exit.run_after(StateTransitionSystems::Apply))
+            .config_set(StateTransitionSystems::Transition.run_after(StateTransitionSystems::Exit))
+            .config_set(
+                StateTransitionSystems::Enter.run_after(StateTransitionSystems::Transition),
             );
     }
 }
@@ -116,7 +101,7 @@ impl AppStatesExt for SubApp {
             enable_state_scoped_entities::<S>(self);
         } else {
             let name = core::any::type_name::<S>();
-            log::warn!("State {name} is already initialized.");
+            tracing::warn!("State {name} is already initialized.");
         }
 
         self
@@ -190,7 +175,7 @@ impl AppStatesExt for SubApp {
             enable_state_scoped_entities::<S>(self);
         } else {
             let name = core::any::type_name::<S>();
-            log::warn!("Derived state {name} is already initialized.");
+            tracing::warn!("Derived state {name} is already initialized.");
         }
 
         self
@@ -224,7 +209,7 @@ impl AppStatesExt for SubApp {
             enable_state_scoped_entities::<S>(self);
         } else {
             let name = core::any::type_name::<S>();
-            log::warn!("Sub state {name} is already initialized.");
+            tracing::warn!("Sub state {name} is already initialized.");
         }
 
         self
@@ -242,7 +227,7 @@ fn missing_plugins() -> ! {
 
 fn warn_if_no_states_plugin_installed(app: &SubApp) {
     if !app.is_plugin_added::<StatesPlugin>() {
-        voker_os::once_expr!(log::warn!(
+        voker_os::once_expr!(tracing::warn!(
             "States were added to the app, but `StatesPlugin` is not installed."
         ));
     }
@@ -253,24 +238,28 @@ fn warn_if_no_states_plugin_installed(app: &SubApp) {
 /// This wires despawn systems into transition phases so entity cleanup can be
 /// driven by transition signals and marker components in [`crate::scoped`].
 fn enable_state_scoped_entities<S: States>(app: &mut SubApp) {
-    if !app
-        .world()
-        .contains_resource::<MessageQueue<StateTransitionSignal<S>>>()
-    {
+    let world = app.world_mut();
+    if !world.contains_resource::<MessageQueue<StateTransitionSignal<S>>>() {
         let name = core::any::type_name::<S>();
-        log::warn!(
+        tracing::warn!(
             "State scoped entities are enabled for state `{name}`, but the state wasn't initialized in the app!"
         );
     }
 
-    app.edit_schedule(StateTransition, |schedule| {
-        schedule
-            .add_systems(despawn_entities_on_exit_state::<S>.in_set(StateTransitionSystems::Exit))
-            .add_systems(despawn_entities_on_enter_state::<S>.in_set(StateTransitionSystems::Enter))
-            .add_systems(
-                despawn_entities_when_state::<S>.in_set(StateTransitionSystems::Transition),
-            );
-    });
+    world
+        .schedule_entry(StateTransition)
+        .add_system(
+            StateTransitionSystems::Exit,
+            despawn_entities_on_exit_state::<S>,
+        )
+        .add_system(
+            StateTransitionSystems::Enter,
+            despawn_entities_on_enter_state::<S>,
+        )
+        .add_system(
+            StateTransitionSystems::Transition,
+            despawn_entities_when_state::<S>,
+        );
 }
 
 // -----------------------------------------------------------------------------

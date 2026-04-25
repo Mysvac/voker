@@ -1,5 +1,7 @@
 cfg_select! {
-    all(feature = "file_watcher", not(target_arch = "wasm32"), not(target_os = "android")) => {
+    target_arch = "wasm32" => { /* not support */ }
+    target_os = "android" => { /* not support */ }
+    feature = "file_watcher" => {
         mod notifier;
 
         mod file_watcher;
@@ -8,6 +10,7 @@ cfg_select! {
         pub use file_watcher::FileWatcher;
         pub use embedded_watcher::EmbeddedWatcher;
     }
+    _ => {}
 }
 
 pub trait AssetWatcher: Send + Sync + 'static {}

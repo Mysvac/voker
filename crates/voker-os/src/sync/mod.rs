@@ -50,7 +50,7 @@ crate::cfg::switch! {
         };
 
         #[cfg(doc)]
-        mod __fallback;
+        pub mod __fallback;
     }
     _ => {
         mod __fallback;

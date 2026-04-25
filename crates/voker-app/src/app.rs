@@ -9,7 +9,7 @@ use voker_ecs::observer::IntoObserver;
 use voker_ecs::reflect::AppTypeRegistry;
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{IntoSystemConfig, Schedule, ScheduleLabel};
-use voker_ecs::system::IntoSystem;
+use voker_ecs::system::{IntoSystem, SystemSet};
 use voker_ecs::world::{FromWorld, World};
 use voker_reflect::registry::{FromType, GetTypeMeta, TypeData};
 use voker_reflect::{Reflect, info::TypePath};
@@ -43,7 +43,7 @@ type RunnerFn = Box<dyn FnOnce(App) -> AppExit>;
 /// #
 /// fn main() {
 ///    App::new()
-///        .add_systems(Update, hello_world_system)
+///        .add_systems(Update, (), hello_world_system)
 ///        .run();
 /// }
 ///
@@ -194,6 +194,9 @@ impl App {
     pub fn run(&mut self) -> AppExit {
         use core::mem::replace;
 
+        #[cfg(feature = "trace")]
+        let _app_run_span = tracing::info_span!("voker_app").entered();
+
         if self.is_building_plugins() {
             core::hint::cold_path();
             panic!("App::run() was called while a plugin was building.");
@@ -208,12 +211,21 @@ impl App {
     ///
     /// Before execution, the plugin must have been built.
     pub fn update(&mut self) {
+        #[cfg(feature = "trace")]
+        let _app_update_span = tracing::info_span!("update").entered();
+
         debug_assert!(!self.is_building_plugins());
 
-        self.main.run_main_schedule();
+        {
+            #[cfg(feature = "trace")]
+            let _main_app_span = tracing::info_span!("main app").entered();
+            self.main.run_main_schedule();
+        }
 
         let world = self.main.world_mut();
-        for sub_app in self.sub_apps.values_mut() {
+        for (_label, sub_app) in self.sub_apps.iter_mut() {
+            #[cfg(feature = "trace")]
+            let _sub_app_span = tracing::info_span!("sub app", name = ?_label).entered();
             sub_app.extract(world);
             sub_app.update();
         }
@@ -255,9 +267,14 @@ impl App {
 
     /// Calls [`Plugin::finish`] on all loaded plugins.
     pub fn finish(&mut self) {
+        #[cfg(feature = "trace")]
+        let _finish_span = tracing::info_span!("plugin finish").entered();
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.main.plugins.len() {
             core::mem::swap(&mut self.main_mut().plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_finish_span =
+                tracing::info_span!("plugin finish", plugin = placeholder.name()).entered();
             placeholder.finish(self);
             core::mem::swap(&mut self.main_mut().plugins[i], &mut placeholder);
         }
@@ -268,9 +285,14 @@ impl App {
 
     /// Calls [`Plugin::cleanup`] on all loaded plugins.
     pub fn cleanup(&mut self) {
+        #[cfg(feature = "trace")]
+        let _cleanup_span = tracing::info_span!("plugin cleanup").entered();
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.main.plugins.len() {
             core::mem::swap(&mut self.main_mut().plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_cleanup_span =
+                tracing::info_span!("plugin cleanup", plugin = placeholder.name()).entered();
             placeholder.cleanup(self);
             core::mem::swap(&mut self.main_mut().plugins[i], &mut placeholder);
         }
@@ -293,24 +315,37 @@ impl App {
         self
     }
 
-    /// Registers a fallible conversion route from `T` to `U` in the app type registry.
-    pub fn register_type_conversion<T, U, F>(&mut self, function: F) -> &mut Self
+    /// Registers a fallible conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    ///
+    /// This function will register `X -> Y` in X's `ReflectConvert`
+    /// and `Y <- X` in Y's `ReflectConvert`.
+    pub fn register_type_conversion<X, Y, F>(&mut self, function: F) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath,
-        F: Fn(T) -> Result<U, T> + Clone + Send + Sync + 'static,
+        X: Reflect + TypePath,
+        Y: Reflect + TypePath,
+        F: Fn(X) -> Result<Y, X> + Clone + Send + Sync + 'static,
     {
-        self.main_mut().register_type_conversion::<T, U, F>(function);
+        self.main_mut().register_type_conversion::<X, Y, F>(function);
         self
     }
 
-    /// Registers an infallible `Into` conversion route from `T` to `U` in the app type registry.
-    pub fn register_into_type_conversion<T, U>(&mut self) -> &mut Self
+    /// Registers an infallible `Into` conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    pub fn register_type_into<X, Y>(&mut self) -> &mut Self
     where
-        T: Reflect + TypePath,
-        U: Reflect + TypePath + From<T>,
+        X: Reflect + TypePath + Into<Y>,
+        Y: Reflect + TypePath,
     {
-        self.main_mut().register_into_type_conversion::<T, U>();
+        self.main_mut().register_type_into::<X, Y>();
+        self
+    }
+
+    /// Registers an infallible `From` conversion route obtain `X` from `Y` in [`AppTypeRegistry`].
+    pub fn register_type_from<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + From<Y>,
+        Y: Reflect + TypePath,
+    {
+        self.main_mut().register_type_from::<X, Y>();
         self
     }
 
@@ -382,25 +417,25 @@ impl App {
         self
     }
 
-    /// Adds one system to a schedule in the main sub-app.
-    ///
-    /// This function is faster then `add_systems`.
+    /// Adds one system into `set` on the given schedule label.
     pub fn add_system<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         system: impl IntoSystem<(), (), M>,
     ) -> &mut Self {
-        self.main_mut().add_system(label, system);
+        self.world_mut().add_system(label.intern(), set, system);
         self
     }
 
-    /// Adds systems/configuration to a schedule in the main sub-app.
+    /// Adds one or many systems into `set` on a schedule in the main sub-app.
     pub fn add_systems<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.main_mut().add_systems(label, systems);
+        self.main_mut().add_systems(label, set, systems);
         self
     }
 
@@ -434,10 +469,10 @@ impl App {
         plugin: Box<dyn Plugin>,
     ) -> Result<(), Box<dyn Plugin>> {
         let plugin_name = plugin.name();
-        log::debug!("added plugin: {}", plugin_name);
+        tracing::debug!("added plugin: {}", plugin_name);
 
         if self.main.plugin_names.contains(plugin_name) {
-            log::debug!("duplicated plugin: {}", plugin_name);
+            tracing::debug!("duplicated plugin: {}", plugin_name);
             return Err(plugin);
         }
 
@@ -445,6 +480,10 @@ impl App {
         self.main_mut().plugins.push(Box::new(PlaceholderPlugin));
         self.main_mut().plugin_names.insert(plugin_name);
         self.main_mut().plugin_build_depth += 1;
+
+        #[cfg(feature = "trace")]
+        let _plugin_build_span =
+            tracing::info_span!("plugin cleanup", plugin = plugin_name).entered();
 
         let f = AssertUnwindSafe(|| plugin.build(self));
 

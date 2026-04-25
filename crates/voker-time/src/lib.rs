@@ -36,10 +36,10 @@ pub mod delayed;
 
 pub mod prelude {
     #[doc(hidden)]
-    pub use crate::{
-        DelayedCommandsExt, Fixed, Real, Time, TimePlugin, TimeUpdateStrategy, Timer, TimerMode,
-        Virtual,
-    };
+    pub use crate::{Fixed, Real, Time, Timer, TimerMode, Virtual};
+
+    #[doc(hidden)]
+    pub use crate::{DelayedCommandsExt, TimePlugin, TimeUpdateStrategy};
 }
 
 // -----------------------------------------------------------------------------
@@ -51,12 +51,11 @@ use voker_app::{EnableFixedMain, RunFixedMainLoop, prelude::*};
 use voker_ecs::borrow::{Res, ResMut};
 use voker_ecs::reflect::ReflectResource;
 use voker_ecs::resource::Resource;
-use voker_ecs::schedule::{IntoSystemConfig, SystemSet};
+use voker_ecs::schedule::SystemSet;
 use voker_os::time::Instant;
 use voker_reflect::Reflect;
 
 pub use crate::delayed::DelayedCommandsExt;
-use crate::delayed::{DelayedCommandQueues, check_delayed_command_queues};
 
 #[derive(Default)]
 pub struct TimePlugin;
@@ -79,33 +78,33 @@ pub enum TimeUpdateStrategy {
 
 impl Plugin for TimePlugin {
     fn build(&self, app: &mut App) {
+        use crate::delayed::{DelayedCommandQueues, queue_delayed_commands};
         use RunFixedMainLoopSystems::FixedMainLoop;
-
-        app.init_resource::<Time>()
-            .init_resource::<Time<Real>>()
-            .init_resource::<Time<Virtual>>()
-            .init_resource::<Time<Fixed>>()
-            .init_resource::<TimeUpdateStrategy>()
-            .init_resource::<EnableFixedMain>()
-            .init_resource::<DelayedCommandQueues>();
 
         app.register_type::<TimeUpdateStrategy>();
 
-        app.add_systems(First, time_system.in_set(TimeSystems));
-        app.add_systems(PreUpdate, check_delayed_command_queues);
-        app.add_systems(
-            RunFixedMainLoop,
-            run_fixed_main_schedule.in_set(FixedMainLoop),
-        );
+        let world = app.world_mut();
+
+        world.init_resource::<Time>();
+        world.init_resource::<Time<Real>>();
+        world.init_resource::<Time<Fixed>>();
+        world.init_resource::<Time<Virtual>>();
+        world.init_resource::<TimeUpdateStrategy>();
+        world.init_resource::<EnableFixedMain>();
+        world.init_resource::<DelayedCommandQueues>();
+
+        world.add_system(First, TimeSystems, time_system);
+        world.add_system(PreUpdate, TimeSystems, queue_delayed_commands);
+        world.add_system(RunFixedMainLoop, FixedMainLoop, run_fixed_main_schedule);
     }
 }
 
 /// Reads the current [`TimeUpdateStrategy`] and advances the real, virtual, and fixed clocks.
 pub fn time_system(
+    mut time: ResMut<Time>,
     mut real_time: ResMut<Time<Real>>,
     mut virtual_time: ResMut<Time<Virtual>>,
     fixed_time: Res<Time<Fixed>>,
-    mut time: ResMut<Time>,
     update_strategy: Res<TimeUpdateStrategy>,
 ) {
     match update_strategy.as_ref() {

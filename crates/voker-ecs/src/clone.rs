@@ -42,13 +42,14 @@ use core::any::TypeId;
 use core::ptr::NonNull;
 
 use voker_ptr::{OwningPtr, Ptr, PtrMut};
+use voker_utils::debug::DebugName;
 use voker_utils::vec::SmallVec;
 
 use crate::component::ComponentId;
 use crate::entity::{Entity, EntityHashMap, EntityMapper};
 use crate::prelude::Component;
 use crate::relationship::{Relationship, RelationshipSourceSet, RelationshipTarget};
-use crate::utils::{DebugLocation, DebugName, ForgetEntityOnPanic};
+use crate::utils::{DebugLocation, ForgetEntityOnPanic};
 use crate::world::{UnsafeWorld, World};
 
 // -----------------------------------------------------------------------------
@@ -612,7 +613,9 @@ impl<'w> EntityCloner<'w> {
                 Ok(location) => location.arche_id,
                 Err(e) => {
                     core::hint::cold_path();
-                    log::warn!("Try Clone Entity `{source}` but it is not spawned. {e}. {caller}");
+                    tracing::warn!(
+                        "Try Clone Entity `{source}` but it is not spawned. {e}. {caller}"
+                    );
                     continue;
                 }
             };
