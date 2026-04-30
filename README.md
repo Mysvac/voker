@@ -1,18 +1,19 @@
-# voker
+# Voker
 
-A modular Rust engine foundation built as a workspace of focused crates.
-
-This repository provides reusable building blocks for engine/runtime development:
-
-| Crate | Purpose |
-|---|---|
-| voker | Umbrella crate that re-exports core modules (`app`, `ecs`, `reflect`, `task`, etc.). |
-| voker-app | App/sub-app orchestration, plugin system, app scheduling entry points. |
-| voker-ecs | Entity Component System runtime (world, schedule, query, resources, messages, commands). |
-| voker-reflect | Runtime reflection, type registry, derive macros, reflection-based serde support. |
-| voker-task | Lightweight task pool and async execution utilities (engine-oriented). |
-| voker-os | OS abstraction layer for sync/time/thread utilities across platforms. |
-| voker-utils | Common utility data structures and helpers used across the workspace. |
-| voker-ptr | Low-level pointer wrappers and thin slice helpers for internal runtime code. |
-| voker-cfg | Compile-time configuration macros and cfg alias helpers. |
-| voker-path | Proc-macro path helpers and crate path resolution utilities. |
+| Crate                | Purpose                                                |
+|----------------------|--------------------------------------------------------|
+| **voker-cfg**        | compile-time helper macros                             |
+| **voker-ptr**        | extended pointer utilities                             |
+| **voker-inventory**  | static registration support                            |
+| **voker-utils**      | Platform-independent containers                        |
+| **voker-os**         | Platform-specific abstractions                         |
+| **voker-task**       | thread pool and async runtime executor                 |
+| **voker-math**       | math and geometric primitives                          |
+| **voker-reflect**    | dynamic reflection                                     |
+| **voker-ecs**        | custom ECS implementation                              |
+| **voker-app**        | application management and plugin system               |
+| **voker-log**        | log plugin                                             |
+| **voker-time**       | time plugin                                            |
+| **voker-diagnostic** | diagnostic plugin (fps, memory-usage, etc.)            |
+| **voker-state**      | hierarchical finite state machine                      |
+| **voker-asset**      | asset system for ecs architecture                      |
