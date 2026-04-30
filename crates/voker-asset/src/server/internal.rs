@@ -1,22 +1,22 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::TypeId;
 use core::panic::AssertUnwindSafe;
 use core::task::Poll;
 use std::path::Path;
 
-use alloc::sync::Arc;
+use atomicow::CowArc;
 use crossbeam_channel::{Receiver, Sender};
 use futures_lite::{FutureExt, StreamExt};
 use voker_ecs::message::MessageQueue;
 use voker_ecs::world::World;
+use voker_os::atomic::AtomicUsize;
 use voker_os::sync::{PoisonError, RwLock};
 use voker_os::sync::{RwLockReadGuard, RwLockWriteGuard};
 use voker_task::IoTaskPool;
-
-use atomicow::CowArc;
 
 use super::UNTYPED_SOURCE_SUFFIX;
 use super::{AddAsyncError, LoadState, MissingAssetLoaderFull, WaitForAssetError};
@@ -66,6 +66,15 @@ pub(crate) enum AssetServerEvent {
 }
 
 // -----------------------------------------------------------------------------
+// AssetServerStats
+
+/// Tracks statistics of the asset server.
+pub(crate) struct AssetServerStats {
+    /// The number of load tasks that have been started.
+    pub(crate) started_load_tasks: AtomicUsize,
+}
+
+// -----------------------------------------------------------------------------
 // AssetServerData
 
 pub(crate) struct AssetServerData {
@@ -78,6 +87,7 @@ pub(crate) struct AssetServerData {
     pub meta_check_mode: MetaCheckMode,
     pub unapproved_path_mode: UnapprovedPathMode,
     pub watching_for_changes: bool, // optional, the type size is unchanged.
+    pub stats: AssetServerStats,
 }
 
 // -----------------------------------------------------------------------------
@@ -113,7 +123,15 @@ impl AssetServer {
             infos: RwLock::new(infos),
             unapproved_path_mode,
             watching_for_changes,
+            stats: AssetServerStats {
+                started_load_tasks: AtomicUsize::new(0),
+            },
         }))
+    }
+
+    pub(crate) fn add_started_load_tasks(&self) {
+        use core::sync::atomic::Ordering::Relaxed;
+        self.0.stats.started_load_tasks.fetch_add(1, Relaxed);
     }
 
     pub(crate) fn read_infos(&self) -> RwLockReadGuard<'_, AssetInfos> {
@@ -667,10 +685,10 @@ impl AssetServer {
         &self,
         handle: ErasedHandle,
         path: AssetPath<'static>,
-        mut infos: RwLockWriteGuard<AssetInfos>,
+        infos: RwLockWriteGuard<AssetInfos>,
         guard: G,
     ) {
-        infos.stats.started_load_tasks += 1;
+        self.add_started_load_tasks();
 
         voker_task::cfg::single_threaded! {
             ::core::mem::drop(infos);
@@ -806,7 +824,7 @@ impl AssetServer {
         }
 
         let index: TypedAssetIndex = (&handle).try_into().unwrap();
-        infos.stats.started_load_tasks += 1;
+        self.add_started_load_tasks();
 
         voker_task::cfg::single_threaded! {
             ::core::mem::drop(infos);
@@ -857,6 +875,7 @@ impl AssetServer {
     }
 
     pub(crate) fn reload_internal(&self, path: AssetPath<'static>, log: bool) {
+        self.add_started_load_tasks();
         let server = self.clone();
         IoTaskPool::get()
             .spawn(async move {
@@ -868,7 +887,7 @@ impl AssetServer {
 
                 for handle in handles {
                     // Count each reload as a started load.
-                    server.write_infos().stats.started_load_tasks += 1;
+                    server.add_started_load_tasks();
                     match server.load_internal(Some(handle), path.clone(), true, None).await {
                         Ok(_) => reloaded = true,
                         Err(err) => tracing::error!("{}", err),
@@ -882,7 +901,7 @@ impl AssetServer {
                 // type and loaded it). Hopefully the untyped load will find the right loader and
                 // reload all the subassets (though this is not guaranteed).
                 if !reloaded && server.read_infos().should_reload(&path) {
-                    server.write_infos().stats.started_load_tasks += 1;
+                    server.add_started_load_tasks();
                     match server.load_internal(None, path.clone(), true, None).await {
                         Ok(_) => reloaded = true,
                         Err(err) => tracing::error!("{}", err),
@@ -1051,7 +1070,7 @@ impl AssetServer {
             Ok(())
         }
 
-        self.write_infos().stats.started_load_tasks += 1;
+        self.add_started_load_tasks();
 
         let server = self.clone();
         IoTaskPool::get()

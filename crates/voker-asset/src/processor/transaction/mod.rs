@@ -83,7 +83,7 @@ pub enum ValidateLogError {
     /// An error that could not be recovered from. All assets will be reprocessed.
     #[error("Encountered an unrecoverable error. All assets will be reprocessed.")]
     UnrecoverableError,
-    /// A [`ReadLogError`].
+    /// A [`TransactionError`].
     #[error("Failed to read transcation log: {0}")]
     TransactionError(#[from] TransactionError),
     /// Duplicated process asset transactions occurred.

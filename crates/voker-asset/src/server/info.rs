@@ -138,6 +138,7 @@ pub(crate) enum HandleLoadingMode {
 // -----------------------------------------------------------------------------
 // AssetInfo
 
+/// Internal tracking record for a single managed asset.
 #[derive(Debug)]
 pub(crate) struct AssetInfo {
     pub(crate) weak_handle: Weak<StrongHandle>,
@@ -145,17 +146,17 @@ pub(crate) struct AssetInfo {
     pub(crate) load_state: LoadState,
     pub(crate) dep_load_state: DependencyLoadState,
     pub(crate) rec_dep_load_state: RecursiveDependencyLoadState,
-    /// 正向索引，当前资产直接依赖的项目
+    /// Forward index: direct dependencies of this asset that are still loading.
     pub(crate) loading_dependencies: HashSet<TypedAssetIndex>,
-    /// 正向索引，当前资产直接依赖的项目
+    /// Forward index: direct dependencies of this asset that have failed.
     pub(crate) failed_dependencies: HashSet<TypedAssetIndex>,
-    /// 正向索引，所有当前资产依赖的项目
+    /// Forward index: all transitive dependencies of this asset that are still loading.
     pub(crate) loading_rec_dependencies: HashSet<TypedAssetIndex>,
-    /// 正向索引，所有当前资产依赖的项目
+    /// Forward index: all transitive dependencies of this asset that have failed.
     pub(crate) failed_rec_dependencies: HashSet<TypedAssetIndex>,
-    /// 反向索引，直接依赖当前资产的项目
+    /// Reverse index: assets that are directly waiting on this asset to finish loading.
     pub(crate) dependents_waiting_on_load: HashSet<TypedAssetIndex>,
-    /// 反向索引，所有依赖当前资产的项目
+    /// Reverse index: assets that are waiting on this asset's full recursive dependency load.
     pub(crate) dependents_waiting_on_recursive_dep_load: HashSet<TypedAssetIndex>,
     /// The asset paths required to load this asset.
     ///
@@ -194,34 +195,27 @@ impl AssetInfo {
 }
 
 // -----------------------------------------------------------------------------
-// AssetServerStats
-
-/// Tracks statistics of the asset server.
-#[derive(Default, Clone, PartialEq, Eq)]
-pub(crate) struct AssetServerStats {
-    /// The number of load tasks that have been started.
-    pub(crate) started_load_tasks: usize,
-}
-
-// -----------------------------------------------------------------------------
 // AssetInfos
 
 type DepLoadedEventSender = fn(&mut World, AssetIndex);
 type DepFailedEventSender = fn(&mut World, AssetIndex, AssetPath<'static>, AssetLoadError);
 
+/// Central registry of all assets known to the [`AssetServer`](super::AssetServer).
+///
+/// Stores [`AssetInfo`] records keyed by [`TypedAssetIndex`], maintains path-to-index
+/// look-ups, and drives dependency-load-state propagation.
 #[derive(Default)]
 pub(crate) struct AssetInfos {
     pub infos: HashMap<TypedAssetIndex, AssetInfo>,
     pub path_to_index: HashMap<AssetPath<'static>, TypeIdMap<AssetIndex>>,
     pub handle_providers: TypeIdMap<AssetHandleProvider>,
     pub watching_for_changes: bool,
-    // 反向索引，Key 被哪些 Value 依赖。
+    /// Reverse index: maps each asset path to the set of paths that depend on it for hot-reloading.
     pub loader_dependents: HashMap<AssetPath<'static>, HashSet<AssetPath<'static>>>,
     pub living_labeled_assets: HashMap<AssetPath<'static>, HashSet<Box<str>>>,
     pub dependency_loaded_event_sender: TypeIdMap<DepLoadedEventSender>,
     pub dependency_failed_event_sender: TypeIdMap<DepFailedEventSender>,
     pub pending_tasks: HashMap<TypedAssetIndex, Task<()>>,
-    pub stats: AssetServerStats,
 }
 
 impl core::fmt::Debug for AssetInfos {
@@ -271,12 +265,13 @@ pub(crate) fn unwrap_with_context<T>(
 // create_handle_internal & get_or_create_handle_internal
 
 impl AssetInfos {
-    /// 根据 TypeId 创建资产，资产路径可为空（因此可动态创建）。
+    /// Allocates a new handle for an asset identified by `type_id`.
     ///
-    /// - 分配新 `AssetInfo` 并插入 `AssetInfos`。
-    /// - 此函数**不**插入 path_to_index 索引。
-    /// - 如果 loading == true, info 的三个状态将设为 loading。
-    /// - 如果 watching_for_changes = true 且存在资产路径，`living_labeled_assets` 会插入当前值。
+    /// - Allocates a fresh [`AssetInfo`] and inserts it into the `infos` map.
+    /// - Does **not** insert into `path_to_index`; callers are responsible for that.
+    /// - If `loading` is `true`, all three load-state fields are set to `Loading`.
+    /// - If `watching_for_changes` is `true` and the path contains a label, the label
+    ///   is recorded in `living_labeled_assets`.
     fn create_handle_internal(
         infos: &mut HashMap<TypedAssetIndex, AssetInfo>,
         handle_providers: &TypeIdMap<AssetHandleProvider>,
@@ -312,11 +307,13 @@ impl AssetInfos {
         Ok(ErasedHandle::Strong(handle))
     }
 
-    /// 根据 path 和 type_id 获取资产句柄
+    /// Returns an existing handle for `(path, type_id)`, or creates a new one.
     ///
-    /// 如果资产不存在，会创建 AssetInfo 并插入（通过 `create_handle_internal`）。
-    ///
-    /// 如果已存在，直接获取句柄（句柄失效时重分配）。
+    /// - If no entry exists, delegates to [`Self::create_handle_internal`] and inserts
+    ///   the resulting index into `path_to_index`.
+    /// - If an entry exists but all strong handles have been dropped (the weak ref is
+    ///   dead), a new strong handle is allocated for the same `AssetIndex` and
+    ///   `handle_drops_to_skip` is incremented so the pending drop event is ignored.
     fn get_or_create_handle_internal(
         &mut self,
         path: AssetPath<'static>,

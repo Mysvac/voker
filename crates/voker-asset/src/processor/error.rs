@@ -11,6 +11,8 @@ use crate::processor::ValidateLogError;
 use crate::server::{AssetLoadError, MissingAssetLoader};
 
 /// Error encountered during [`AssetProcessor::process`].
+///
+/// [`AssetProcessor::process`]: crate::processor::AssetProcessor::process
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum AssetProcessError {

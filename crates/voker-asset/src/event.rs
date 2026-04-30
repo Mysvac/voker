@@ -10,6 +10,11 @@ use crate::server::AssetLoadError;
 // -----------------------------------------------------------------------------
 // AssetEvent
 
+/// Events emitted by [`Assets<A>`](crate::assets::Assets) for lifecycle changes of
+/// assets of type `A`.
+///
+/// Subscribe to this via the [`MessageQueue`](voker_ecs::message::MessageQueue) system
+/// parameter to react to asset additions, modifications, removals, or full loads.
 #[derive(Message)]
 pub enum AssetEvent<A: Asset> {
     /// Emitted whenever an [`Asset`] is added.
@@ -89,6 +94,7 @@ impl<A: Asset> Eq for AssetEvent<A> {}
 // -----------------------------------------------------------------------------
 // AssetLoadFailedEvent
 
+/// Emitted when an asset of type `A` fails to load.
 #[derive(Message, Debug)]
 pub struct AssetLoadFailedEvent<A: Asset> {
     /// The stable identifier of the asset that failed to load.

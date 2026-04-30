@@ -494,7 +494,7 @@ impl core::ops::Mul<Vec2> for Rot2 {
     }
 }
 
-#[cfg(any(feature = "approx", test, doc))]
+#[cfg(any(feature = "approx", test))]
 impl approx::AbsDiffEq for Rot2 {
     type Epsilon = f32;
     fn default_epsilon() -> f32 {
@@ -505,7 +505,7 @@ impl approx::AbsDiffEq for Rot2 {
     }
 }
 
-#[cfg(any(feature = "approx", test, doc))]
+#[cfg(any(feature = "approx", test))]
 impl approx::RelativeEq for Rot2 {
     fn default_max_relative() -> f32 {
         f32::EPSILON
@@ -516,7 +516,7 @@ impl approx::RelativeEq for Rot2 {
     }
 }
 
-#[cfg(any(feature = "approx", test, doc))]
+#[cfg(any(feature = "approx", test))]
 impl approx::UlpsEq for Rot2 {
     fn default_max_ulps() -> u32 {
         4

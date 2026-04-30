@@ -13,6 +13,8 @@ use crate::server::AssetServer;
 // ProcessContext
 
 /// Context passed to [`AssetProcessor::process`], providing access to the source asset data.
+///
+/// [`AssetProcessor::process`]: crate::processor::AssetProcessor::process
 pub struct ProcessContext<'a> {
     pub(crate) server: &'a AssetServer,
     /// Accumulates process dependencies discovered during processing.

@@ -45,6 +45,8 @@ pub enum AssetLoadError {
     RequestedHandleTypeMismatch(#[from] RequestedHandleTypeMismatch),
     #[error("Attempted to load an asset with an empty path \"{0}\"")]
     EmptyPath(AssetPath<'static>),
+    #[error("Asset path '{0}' is unapproved (escapes the source root). See UnapprovedPathMode.")]
+    UnapprovedPath(AssetPath<'static>),
     #[error("Encountered an error while reading asset metadata bytes for `{0}`.")]
     AssetMetaReadError(AssetPath<'static>),
     #[error("Asset '{0}' is configured to be ignored. It cannot be loaded.")]

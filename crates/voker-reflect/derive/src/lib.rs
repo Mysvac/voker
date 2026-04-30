@@ -140,8 +140,8 @@ mod string_expr;
 /// impl From<i32> for MyNum { /* ... */ }
 /// ```
 ///
-/// This inserts a [`ReflectConvert`] entry into the type's `TypeMeta`, which can later be retrieved
-/// from a [`TypeRegistry`] to perform dynamic conversions between reflected types:
+/// This inserts a `ReflectConvert` entry into the type's `TypeMeta`, which can later be retrieved
+/// from a `TypeRegistry` to perform dynamic conversions between reflected types:
 ///
 /// These attributes can only be applied at the type level.
 ///

@@ -530,7 +530,7 @@ impl<'a> AssetPath<'a> {
     }
 
     /// Returns `true` if this [`AssetPath`] points to a file that is
-    /// outside of its [`AssetSourceId`](crate::AssetSourceId) folder.
+    /// outside of its [`AssetSourceId`] folder.
     ///
     /// # Example
     ///

@@ -6,7 +6,7 @@ pub use registry::*;
 /// [`AssetSource`]: crate::io::AssetSource
 pub const EMBEDDED: &str = "embedded";
 
-/// Load an [embedded asset](embedded_asset).
+/// Load an [embedded asset].
 ///
 /// This is useful if the embedded asset in question is not publicly exposed,
 /// but you need to use it internally.
@@ -38,6 +38,8 @@ pub const EMBEDDED: &str = "embedded";
 /// let handle: Handle<Image> = load_embedded_asset!("textures/icon.png", app);
 /// ```
 ///
+/// [embedded asset]: crate::embedded_asset
+/// [`embedded_asset!`]: crate::embedded_asset
 /// [`LoadBuilder::with_settings`]: crate::server::LoadBuilder::with_settings
 #[macro_export]
 macro_rules! load_embedded_asset {
@@ -62,6 +64,7 @@ macro_rules! load_embedded_asset {
 /// This is used internally by [`embedded_asset`] and can be used to
 /// get a [`Path`] that matches the [`AssetPath`] used by that asset.
 ///
+/// [`embedded_asset`]: crate::embedded_asset
 /// [`AssetPath`]: crate::path::AssetPath
 #[macro_export]
 macro_rules! embedded_path {

@@ -87,7 +87,7 @@ pub trait DynamicAssetMeta: Any + Send + Sync {
     fn loader_settings(&self) -> Option<&dyn Settings>;
     /// Returns a mutable reference to the [`AssetLoader`] settings, if they exist.
     fn loader_settings_mut(&mut self) -> Option<&mut dyn Settings>;
-    /// Returns a reference to the [`Process`] settings, if they exist.
+    /// Returns a reference to the asset processor settings, if they exist.
     fn process_settings(&self) -> Option<&dyn Settings>;
     /// Serializes the internal [`AssetMeta`].
     fn serialize(&self) -> Vec<u8>;

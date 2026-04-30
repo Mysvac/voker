@@ -1,5 +1,5 @@
 
-# Entity-Component-System
+# ECS
 
 > README is modified from bevy_ecs.
 
@@ -141,7 +141,7 @@ fn main() {
     let mut schedule = Schedule::default();
 
     // Add our system to the schedule
-    schedule.add_system((), movement);
+    schedule.add_system(movement);
 
     // Run the schedule once. If your app has a "loop", you would run this once per loop
     schedule.run(&mut world);
@@ -410,7 +410,7 @@ let entity = world.spawn_empty().entity();
 
 world.add_observer(|explode: On<Explode>, mut commands: Commands| {
     println!("Entity {} goes BOOM!", explode.entity);
-    commands.entity(explode.entity).despawn();
+    commands.with_entity(explode.entity).despawn();
 });
 
 world.trigger(Explode { entity });

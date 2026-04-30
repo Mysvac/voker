@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 
 use alloc::sync::Arc;
-use voker_app::{App, Plugin, PostUpdate, PreUpdate, Startup};
+use voker_app::{App, Plugin, PostUpdate, PreUpdate, Startup, Update};
 use voker_ecs::schedule::{IntoSystemConfig, IntoSystemSetConfig};
 use voker_ecs::world::FromWorld;
 
@@ -25,6 +25,13 @@ use crate::server::{
 pub const DEFAULT_PROCESSED_FILE_PATH: &str = "imported_assets/default";
 pub const DEFAULT_UNPROCESSED_FILE_PATH: &str = "assets";
 
+/// Extension trait on [`App`] for asset system registration.
+///
+/// Provides ergonomic helpers for registering asset types, loaders, processors,
+/// and IO sources.  All methods require `AssetPlugin` (or a compatible plugin that
+/// inserts `AssetServer`) to have been added first — except
+/// [`register_asset_source`](AppAssetExt::register_asset_source), which must be
+/// called *before* `AssetPlugin`.
 pub trait AppAssetExt {
     fn preregister_asset_loader<L: AssetLoader>(
         &mut self,
@@ -131,6 +138,31 @@ impl AppAssetExt for App {
     }
 }
 
+/// Plugin that installs the asset pipeline into an [`App`].
+///
+/// `AssetPlugin` adds:
+/// - [`AssetServer`] resource,
+/// - default file-system `AssetSource` (reads from `assets/` by default),
+/// - `embedded` `AssetSource` backed by [`EmbeddedAssetRegistry`],
+/// - system sets: [`AssetServerEventSystems`],
+///   [`AssetTrackingSystems`],
+///   [`AssetEventSystems`],
+/// - built-in `LoadedFolder` and `LoadedUntypedAsset` asset types.
+///
+/// ## Configuration
+///
+/// ```rust
+/// use voker_asset::plugin::{AssetPlugin, DEFAULT_UNPROCESSED_FILE_PATH};
+/// use voker_asset::server::{AssetServerMode, UnapprovedPathMode};
+///
+/// let plugin = AssetPlugin {
+///     file_path: "my_assets".into(),
+///     ..Default::default()
+/// };
+/// ```
+///
+/// Enable `file_watcher` (feature flag) or set `watch_for_changes_override: Some(true)`
+/// to enable hot-reload.
 pub struct AssetPlugin {
     pub file_path: String,
     pub processed_file_path: String,
@@ -244,5 +276,38 @@ impl Plugin for AssetPlugin {
 
     fn cleanup(&mut self, _app: &mut App) {
         *self = Self::default(); // drop memory.
+    }
+}
+
+// -----------------------------------------------------------------------------
+// AssetDiagnosticsPlugin
+
+/// Adds [`AssetServer`] diagnostics to an app.
+///
+/// Requires [`DiagnosticsPlugin`](voker_diagnostic::DiagnosticsPlugin) to have been added first.
+///
+/// Registered diagnostics:
+/// - [`AssetServer::STARTED_LOAD_COUNT`] — cumulative count of all started load tasks.
+/// - [`AssetServer::PENDING_LOAD_COUNT`] — currently in-flight load tasks.
+#[derive(Default, Debug)]
+pub struct AssetDiagnosticsPlugin;
+
+impl Plugin for AssetDiagnosticsPlugin {
+    fn build(&self, app: &mut App) {
+        use voker_diagnostic::{AppDiagnosticExt, Diagnostic, DiagnosticsStore};
+
+        if app.world().get_resource::<DiagnosticsStore>().is_none() {
+            tracing::warn!("AssetDiagnosticsPlugin requires DiagnosticsPlugin to be added first.");
+            return;
+        }
+
+        app.register_diagnostic(
+            Diagnostic::new(AssetServer::STARTED_LOAD_COUNT)
+                .with_suffix(" loads")
+                .with_smoothing_factor(0.0)
+                .with_max_history_length(0),
+        )
+        .register_diagnostic(Diagnostic::new(AssetServer::PENDING_LOAD_COUNT).with_suffix(" loads"))
+        .add_systems(Update, (), AssetServer::diagnostic_system);
     }
 }

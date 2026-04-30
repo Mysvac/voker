@@ -1,14 +1,4 @@
-//! Logging facilities and configuration
-//!
-//! This crate re-exports macros from [`tracing`](https://docs.rs/tracing) and provides
-//! [`LogPlugin`] to initialize a process-wide subscriber.
-//! Platform-specific integrations are configured automatically:
-//! - Android: routed through Android system log.
-//! - iOS: routed through OSLog.
-//!
-//! # Feature Flags
-//! - `trace`: installs `tracing-error` span traces into panic output.
-//! - `trace_tracy_memory`: enables a profiled global allocator powered by Tracy.
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 extern crate alloc;

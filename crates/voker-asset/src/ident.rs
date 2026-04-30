@@ -19,6 +19,14 @@ use crate::asset::Asset;
 // -----------------------------------------------------------------------------
 // AssetIndex
 
+/// A generation-aware slot index that uniquely identifies an asset within [`Assets<A>`].
+///
+/// The index is laid out as two packed `u32` fields (`index` + `generation`) in a
+/// single `u64` on both little-endian and big-endian targets, making bitwise
+/// conversion via [`to_bits`](AssetIndex::to_bits) / [`from_bits`](AssetIndex::from_bits)
+/// safe and endian-independent.
+///
+/// [`Assets<A>`]: crate::assets::Assets
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Reflect)]
 #[reflect(Opaque)] // Fields order is not fixed, use `Opaque` to ensure logical stability.
 #[reflect(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -93,6 +101,13 @@ impl<'de> Deserialize<'de> for AssetIndex {
 // -----------------------------------------------------------------------------
 // AssetIndexAllocator
 
+/// Lock-free allocator for [`AssetIndex`] values.
+///
+/// New indices are handed out by atomically incrementing `next_index`.
+/// Freed slots are first pushed onto `recycled_queue`; the next call to
+/// [`reserve`](AssetIndexAllocator::reserve) pops from there, bumps the generation,
+/// re-pushes the entry to `recycled`, and returns it, making generation-based
+/// aliasing detectable.
 pub(crate) struct AssetIndexAllocator {
     pub next_index: AtomicU32,
     pub recycled_queue: SegQueue<AssetIndex>,
@@ -143,6 +158,15 @@ impl AssetIndexAllocator {
 // -----------------------------------------------------------------------------
 // AssetId
 
+/// A stable, typed identifier for a managed asset of type `A`.
+///
+/// There are two variants:
+/// - [`Index`](AssetId::Index): a runtime slot index, valid only within the current session.
+/// - [`Uuid`](AssetId::Uuid): a stable UUID, suitable for constant or cross-session references.
+///
+/// The default value is [`AssetId::Uuid`] with the well-known
+/// [`DEFAULT_UUID`](AssetId::DEFAULT_UUID), which is guaranteed to be distinct from
+/// [`INVALID_UUID`](AssetId::INVALID_UUID).
 #[derive(Reflect, Serialize, Deserialize)]
 #[reflect(Clone, Default, Debug, PartialEq, Hash, Serialize, Deserialize)]
 pub enum AssetId<A: Asset> {
@@ -300,6 +324,11 @@ impl<A: Asset> From<Uuid> for AssetId<A> {
 // -----------------------------------------------------------------------------
 // ErasedAssetId
 
+/// A type-erased asset identifier that carries the [`TypeId`] of the concrete asset.
+///
+/// Equivalent to [`AssetId<A>`] but usable when `A` is not known statically.
+/// Convert to/from typed form with [`typed`](ErasedAssetId::typed) or
+/// [`try_typed`](ErasedAssetId::try_typed).
 #[derive(Copy, Clone, Reflect)]
 #[reflect(Debug, Clone, PartialEq, Hash, PartialOrd)]
 pub enum ErasedAssetId {
@@ -579,6 +608,10 @@ impl<A: Asset> PartialOrd<AssetId<A>> for ErasedAssetId {
 // -----------------------------------------------------------------------------
 // AssetSourceId
 
+/// Identifies the [`AssetSource`](crate::io::AssetSource) that owns an asset path.
+///
+/// - [`Default`](AssetSourceId::Default): the unnamed primary source (e.g. `assets/`).
+/// - [`Name`](AssetSourceId::Name): a named secondary source registered with the asset server.
 #[derive(Default, Clone, Debug, Eq)]
 pub enum AssetSourceId<'a> {
     #[default]

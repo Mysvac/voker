@@ -70,6 +70,11 @@ impl From<std::io::Error> for AssetReaderError {
 pub use futures_io::AsyncRead;
 pub use futures_lite::AsyncReadExt;
 
+/// A readable byte stream used by the asset pipeline.
+///
+/// Extends [`AsyncRead`] with the ability to read all remaining bytes at once
+/// ([`read_all_bytes`](Reader::read_all_bytes)) and to optionally expose
+/// seeking via [`seekable`](Reader::seekable).
 pub trait Reader: AsyncRead + Unpin + Send + Sync {
     fn seekable(&mut self) -> Result<&mut dyn SeekableReader, ReaderNotSeekableError>;
 
@@ -120,6 +125,10 @@ pub struct ReaderNotSeekableError;
 // -----------------------------------------------------------------------------
 // AssetReader
 
+/// Reads raw asset bytes and directory listings from a source (filesystem, embedded, HTTP, …).
+///
+/// Implement this trait to back a custom [`AssetSource`](crate::io::AssetSource).
+/// The type-erased version [`ErasedAssetReader`] is created automatically for any `AssetReader`.
 pub trait AssetReader: Sized + Sync + Send + 'static {
     /// Returns a future to load the full file data at the provided path.
     fn read<'a>(
@@ -175,6 +184,7 @@ pub trait AssetReader: Sized + Sync + Send + 'static {
 
 type BoxedAssetReaderFuture<'a, T> = BoxedFuture<'a, Result<T, AssetReaderError>>;
 
+/// A type-erased [`AssetReader`] with boxed futures, used internally by the asset server.
 pub trait ErasedAssetReader: Send + Sync + 'static {
     /// Returns a future to load the full file data at the provided path.
     fn read<'a>(&'a self, path: &'a Path) -> BoxedAssetReaderFuture<'a, Box<dyn Reader + 'a>>;

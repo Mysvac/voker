@@ -103,7 +103,7 @@ impl Schedules {
 
     /// Adds one or many systems into `set` on the schedule identified by `label`.
     ///
-    /// All systems in `config` have their [`SystemId`] updated to include `set`
+    /// All systems in `config` have their `SystemId` updated to include `set`
     /// membership. Equivalent to calling [`Schedule::add_systems`].
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_systems<M>(

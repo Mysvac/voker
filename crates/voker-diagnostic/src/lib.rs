@@ -1,7 +1,4 @@
-//! Performance diagnostic plugins
-//!
-//! Provide basic data analysis on entity count, frame rate,
-//! and system overhead (CPU and Memory usage, etc.).
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![no_std]

@@ -8,7 +8,7 @@ use crate::handle::{ErasedHandle, Handle};
 use crate::loader::LoadedUntypedAsset;
 use crate::meta::{MetaTransform, Settings};
 use crate::path::AssetPath;
-use crate::server::AssetLoadError;
+use crate::server::{AssetLoadError, UnapprovedPathMode};
 use crate::utils::{bind_settings_transform, wrap_settings_transform};
 
 pub struct LoadBuilder<'a> {
@@ -117,6 +117,17 @@ impl<'a> LoadBuilder<'a> {
         )
     }
 
+    // We intentionally don't provide a `load_async` or `load_erased_async`, since these don't
+    // provide any value over doing a regular deferred load + `AssetServer::wait_for_asset_id`.
+    // `load_untyped_async` on the other hand lets you avoid dealing with the "missing type" of
+    // the asset (i.e., dealing with `LoadedUntypedAsset`).
+
+    /// Asynchronously load an asset that you do not know the type of statically.
+    ///
+    /// If you _do_ know the type of the asset, you should use [`AssetServer::load`].
+    ///
+    /// If you don't know the type of the asset, but you can't use an async method,
+    /// consider using [`LoadBuilder::load_untyped`].
     #[must_use = "not using returned handle may cause unexpected release of the asset"]
     pub async fn load_untyped_async<'b>(
         self,
@@ -127,9 +138,28 @@ impl<'a> LoadBuilder<'a> {
             return Err(AssetLoadError::EmptyPath(path.into_owned()));
         }
 
-        self.asset_server.write_infos().stats.started_load_tasks += 1;
+        if path.is_unapproved() {
+            match (
+                self.asset_server.unapproved_path_mode(),
+                self.override_unapproved,
+            ) {
+                (UnapprovedPathMode::Allow, _) | (UnapprovedPathMode::Deny, true) => {}
+                (UnapprovedPathMode::Deny, false) | (UnapprovedPathMode::Forbid, _) => {
+                    return Err(AssetLoadError::UnapprovedPath(path.into_owned()));
+                }
+            }
+        }
 
-        let result = self.asset_server.load_internal(None, path, false, None).await;
+        self.asset_server.add_started_load_tasks();
+
+        // Hold the guard for the duration of the async load so callers can
+        // use it to synchronise on completion (e.g. a barrier or channel).
+        let _guard = self.guard;
+
+        let result = self
+            .asset_server
+            .load_internal(None, path, false, self.meta_transform)
+            .await;
 
         // handle must be returned, since we didn't pass in an input handle
         result.map(|h| h.unwrap())

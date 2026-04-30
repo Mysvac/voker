@@ -33,6 +33,9 @@ impl<A: Asset> AssetContainer for A {
 // --------------------------------------------------------------
 // LoadedFolder
 
+/// An asset produced by loading a directory with [`AssetServer::load_folder`](crate::server::AssetServer::load_folder).
+///
+/// Contains strong handles to every asset file found recursively inside the folder.
 #[derive(TypePath)]
 #[type_path = "voker_asset::loader::LoadedFolder"]
 pub struct LoadedFolder {
@@ -57,6 +60,10 @@ pub(crate) struct LabeledAsset {
     pub(crate) handle: ErasedHandle,
 }
 
+/// A type-erased loaded asset produced by an [`AssetLoader`](crate::loader::AssetLoader).
+///
+/// Use [`downcast`](ErasedLoadedAsset::downcast) or the typed accessors [`get`](ErasedLoadedAsset::get) /
+/// [`get_mut`](ErasedLoadedAsset::get_mut) to recover the concrete asset.
 pub struct ErasedLoadedAsset {
     pub(crate) value: Box<dyn AssetContainer>,
     pub(crate) dependencies: HashSet<TypedAssetIndex>,
@@ -66,6 +73,10 @@ pub struct ErasedLoadedAsset {
     pub(crate) asset_id_to_asset_index: HashMap<ErasedAssetId, usize>,
 }
 
+/// A typed loaded asset together with its labeled sub-assets and dependency sets.
+///
+/// Returned by [`AssetLoader::load`](crate::loader::AssetLoader::load) through
+/// [`LoadContext`](crate::loader::LoadContext).
 pub struct LoadedAsset<A: Asset> {
     pub(crate) value: A,
     pub(crate) dependencies: HashSet<TypedAssetIndex>,
@@ -79,6 +90,8 @@ pub struct LoadedAsset<A: Asset> {
 // LoadedAsset Implementation
 
 impl<A: Asset> LoadedAsset<A> {
+    /// Constructs a [`LoadedAsset`] from `value`, automatically collecting all
+    /// `Handle`-typed fields as direct dependencies.
     pub fn with_dependencies(value: A) -> Self {
         let mut dependencies = HashSet::<TypedAssetIndex>::new();
 
@@ -98,30 +111,36 @@ impl<A: Asset> LoadedAsset<A> {
         }
     }
 
+    /// Consumes the [`LoadedAsset`] and returns the inner value.
     pub fn take(self) -> A {
         self.value
     }
 
+    /// Returns a reference to the inner asset value.
     pub fn get(&self) -> &A {
         &self.value
     }
 
+    /// Returns an iterator over all sub-asset labels.
     pub fn iter_labels(&self) -> impl ExactSizeIterator<Item = &str> {
         self.label_to_asset_index.keys().map(|s| &**s)
     }
 
+    /// Returns the erased sub-asset with the given `label`, or [`None`] if not found.
     pub fn get_labeled(&self, label: impl AsRef<str>) -> Option<&ErasedLoadedAsset> {
         let index = self.label_to_asset_index.get(label.as_ref())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Returns the erased sub-asset identified by `id`, or [`None`] if not found.
     pub fn get_labeled_by_id(&self, id: impl Into<ErasedAssetId>) -> Option<&ErasedLoadedAsset> {
         let index = self.asset_id_to_asset_index.get(&id.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Converts this typed [`LoadedAsset`] into a type-erased [`ErasedLoadedAsset`].
     pub fn erased(self) -> ErasedLoadedAsset {
         ErasedLoadedAsset {
             value: Box::new(self.value),
@@ -152,42 +171,53 @@ impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
 // LoadedAsset Implementation
 
 impl ErasedLoadedAsset {
+    /// Consumes the asset and downcasts it to `A`, returning [`None`] if the type doesn't match.
     pub fn take<A: Asset>(self) -> Option<A> {
         <Box<dyn Any>>::downcast::<A>(self.value).map(|a| *a).ok()
     }
 
+    /// Returns a reference to the asset downcast to `A`, or [`None`] if the type doesn't match.
     pub fn get<A: Asset>(&self) -> Option<&A> {
         <dyn Any>::downcast_ref::<A>(&self.value)
     }
 
+    /// Returns a mutable reference to the asset downcast to `A`, or [`None`] if the type doesn't match.
     pub fn get_mut<A: Asset>(&mut self) -> Option<&mut A> {
         <dyn Any>::downcast_mut::<A>(&mut self.value)
     }
 
+    /// Returns the [`TypeId`] of the concrete asset.
     pub fn asset_type_id(&self) -> TypeId {
         self.value.as_ref().type_id()
     }
 
+    /// Returns the type path string of the concrete asset.
     pub fn asset_type_path(&self) -> &'static str {
         self.value.reflect_type_path()
     }
 
+    /// Returns the erased sub-asset with the given `label`, or [`None`] if not found.
     pub fn get_labeled(&self, label: impl AsRef<str>) -> Option<&ErasedLoadedAsset> {
         let index = self.label_to_asset_index.get(label.as_ref())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Returns the erased sub-asset identified by `id`, or [`None`] if not found.
     pub fn get_labeled_by_id(&self, id: impl Into<ErasedAssetId>) -> Option<&ErasedLoadedAsset> {
         let index = self.asset_id_to_asset_index.get(&id.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Returns an iterator over all sub-asset labels.
     pub fn iter_labels(&self) -> impl ExactSizeIterator<Item = &str> {
         self.label_to_asset_index.keys().map(|s| &**s)
     }
 
+    /// Attempts to downcast into a typed [`LoadedAsset<A>`].
+    ///
+    /// Returns `Err(self)` (the original erased asset) if the type does not match.
     #[inline]
     #[expect(clippy::result_large_err, reason = "Err(self) is not a error")]
     pub fn downcast<A: Asset>(self) -> Result<LoadedAsset<A>, ErasedLoadedAsset> {
@@ -210,6 +240,11 @@ impl ErasedLoadedAsset {
 // -----------------------------------------------------------------------------
 // LoadedAsset Implementation
 
+/// An asset produced by an untyped load that wraps a handle to the actual asset.
+///
+/// Returned when calling [`LoadBuilder::load_untyped`].
+///
+/// [`LoadBuilder::load_untyped`]: crate::server::LoadBuilder::load_untyped
 #[derive(TypePath)]
 #[type_path = "voker_asset::loader::LoadedUntypedAsset"]
 pub struct LoadedUntypedAsset {

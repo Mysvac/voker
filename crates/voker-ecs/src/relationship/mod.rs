@@ -37,7 +37,7 @@
 //!
 //! # Query helpers
 //!
-//! [`Query`] is extended with relationship-aware traversal methods when the query data matches
+//! `Query` is extended with relationship-aware traversal methods when the query data matches
 //! either a [`Relationship`] or a [`RelationshipTarget`]:
 //!
 //! | Method | Description |

@@ -1,4 +1,4 @@
-//! Time utilities and scheduling support
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![no_std]

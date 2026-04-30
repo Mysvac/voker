@@ -22,7 +22,8 @@ use voker_ecs::world::World;
 use voker_utils::hash::HashSet;
 
 use alloc::sync::Arc;
-use voker_diagnostic::DiagnosticPath;
+use voker_diagnostic::{DiagnosticPath, DiagnosticsStore};
+use voker_ecs::borrow::Res;
 use voker_ecs::derive::Resource;
 
 use crate::asset::{Asset, VisitAssetDependencies};
@@ -39,13 +40,74 @@ use crate::path::AssetPath;
 
 pub const UNTYPED_SOURCE_SUFFIX: &str = "--untyped";
 
+/// Central coordinator for asset loading, caching, and lifecycle tracking.
+///
+/// `AssetServer` is a cheaply-cloneable handle to a shared `AssetServerData` instance.
+/// Add it to your app via [`AssetPlugin`](crate::plugin::AssetPlugin) and access it
+/// through `Res<AssetServer>`.
+///
+/// ## Loading
+///
+/// ```rust
+/// # use voker_asset::{AssetServer, Handle};
+/// # use voker_ecs::borrow::Res;
+/// # type Image = ();
+/// fn startup(server: Res<AssetServer>) {
+///     let handle: Handle<Image> = server.load("textures/player.png");
+/// }
+/// ```
+///
+/// [`load`](AssetServer::load) is non-blocking: it kicks off an async task and immediately
+/// returns a strong [`Handle`].  Read the asset from
+/// `Assets<A>` once `AssetServer::is_loaded` returns `true` or an
+/// [`AssetEvent::FullyLoaded`](crate::event::AssetEvent::FullyLoaded) is received.
+///
+/// ## Path deduplication
+///
+/// If `load` is called for a path that is already in flight or already cached, the server
+/// returns a new handle pointing to the same slot — no duplicate IO is performed.
+///
+/// ## Hot-reload
+///
+/// Enable the `file_watcher` feature to automatically reload assets when source files
+/// change.  [`AssetServer::reload`] also allows manual reloading.
+///
+/// ## Loader registration
+///
+/// Loaders must be registered before any asset with a matching extension is loaded:
+///
+/// ```rust
+/// # use voker_asset::{AssetServer, plugin::AppAssetExt};
+/// # use voker_app::App;
+/// // via App extension
+/// // app.register_asset_loader(MyLoader);
+/// // or after build
+/// // server.register_loader(MyLoader);
+/// ```
 #[derive(Resource, Clone)]
 #[repr(transparent)]
 pub struct AssetServer(Arc<AssetServerData>);
 
 impl AssetServer {
-    /// The number of loads that have been started by the server.
-    pub const STARTED_LOAD_COUNT: DiagnosticPath = DiagnosticPath::new("started_load_count");
+    /// Cumulative count of all load tasks started since the server was created.
+    pub const STARTED_LOAD_COUNT: DiagnosticPath = DiagnosticPath::new("asset/started_load_count");
+
+    /// Number of load tasks currently in-flight (not yet resolved).
+    pub const PENDING_LOAD_COUNT: DiagnosticPath = DiagnosticPath::new("asset/pending_load_count");
+
+    /// System that samples [`STARTED_LOAD_COUNT`](Self::STARTED_LOAD_COUNT) and
+    /// [`PENDING_LOAD_COUNT`](Self::PENDING_LOAD_COUNT) into [`DiagnosticsStore`].
+    ///
+    /// Added automatically by [`AssetDiagnosticsPlugin`](crate::plugin::AssetDiagnosticsPlugin).
+    pub fn diagnostic_system(server: Res<AssetServer>, mut store: ResMut<DiagnosticsStore>) {
+        use core::sync::atomic::Ordering;
+
+        let started = server.0.stats.started_load_tasks.load(Ordering::Relaxed);
+        store.add_measurement(&Self::STARTED_LOAD_COUNT, started as f64);
+
+        let pending = server.read_infos().pending_tasks.len();
+        store.add_measurement(&Self::PENDING_LOAD_COUNT, pending as f64);
+    }
 
     pub fn new(
         sources: Arc<AssetSources>,
@@ -550,7 +612,8 @@ pub fn handle_asset_server_events(world: &mut World) {
             }
         }
 
-        let reload_parent_folders = |path: &PathBuf, source: &AssetSourceId<'static>| {
+        let mut folders_to_reload = Vec::new();
+        let mut reload_parent_folders = |path: &PathBuf, source: &AssetSourceId<'static>| {
             for parent in path.ancestors().skip(1) {
                 let parent_asset_path =
                     AssetPath::from(parent.to_path_buf()).with_source(source.clone());
@@ -558,9 +621,7 @@ pub fn handle_asset_server_events(world: &mut World) {
                     tracing::info!(
                         "Reloading folder {parent_asset_path} because the content has changed"
                     );
-                    // `get_path_handles` only returns Strong hanle, so this is safe.
-                    let index = (&folder_handle).try_into().unwrap();
-                    server.load_folder_internal(index, parent_asset_path.clone());
+                    folders_to_reload.push((folder_handle, parent_asset_path.clone()));
                 }
             }
         };
@@ -622,6 +683,11 @@ pub fn handle_asset_server_events(world: &mut World) {
             ::core::mem::drop(infos);
         }
 
+        for (handle, path) in folders_to_reload {
+            // `get_path_handles` only returns Strong variants, so this is safe.
+            let index = (&handle).try_into().unwrap();
+            server.load_folder_internal(index, path);
+        }
         for path in paths_to_reload {
             server.reload_internal(path, true);
         }

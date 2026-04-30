@@ -201,7 +201,7 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
 ///
 /// Adding `#[bundle(effect)]` relaxes the field constraint to `Bundle` (instead
 /// of `DataBundle`) and sets `NEED_APPLY_EFFECT = true`. This causes
-/// [`Bundle::apply_effect`] to be called after all components have been written
+/// `Bundle::apply_effect` to be called after all components have been written
 /// to storage, forwarding to each field in declaration order.
 ///
 /// Effect bundles **cannot** be used with `spawn_batch` — doing so is a

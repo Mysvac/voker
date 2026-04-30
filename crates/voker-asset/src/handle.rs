@@ -102,6 +102,10 @@ impl AssetHandleProvider {
 // -----------------------------------------------------------------------------
 // StrongHandle
 
+/// Reference-counted metadata for a live asset slot.
+///
+/// Shared via [`Arc`]; when the last clone is dropped, a drop event is sent on `drop_sender`
+/// so the [`AssetServer`](crate::server::AssetServer) can recycle the slot.
 #[derive(TypePath)]
 #[type_path = "voker_asset::handle::StrongHandle"]
 pub struct StrongHandle {
@@ -142,6 +146,15 @@ impl Debug for StrongHandle {
 // -----------------------------------------------------------------------------
 // Handle
 
+/// A typed reference to a managed asset of type `A`.
+///
+/// - [`Handle::Strong`] keeps the referenced asset alive.  When the last strong clone is dropped
+///   the server is notified and may remove the asset.
+/// - [`Handle::Uuid`] is a lightweight, copy-able reference that does **not** keep the asset
+///   alive.  Useful for constant/const-item handles.
+///
+/// Obtain handles from [`AssetServer::load`](crate::server::AssetServer::load) or
+/// [`Assets::add`](crate::assets::Assets::add).
 #[derive(Reflect)]
 #[reflect(Default, Debug, Hash, PartialEq, PartialOrd, Clone)]
 pub enum Handle<A: Asset> {

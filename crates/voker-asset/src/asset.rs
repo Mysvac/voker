@@ -11,6 +11,26 @@ use crate::ident::{AssetId, ErasedAssetId};
 // -----------------------------------------------------------------------------
 // Asset
 
+/// Marker trait for all data types that can be loaded and managed by [`AssetServer`].
+///
+/// Implementors must also implement [`VisitAssetDependencies`] and [`TypePath`] so
+/// that the asset pipeline can discover and track sub-asset dependencies at runtime.
+///
+/// Derive with `#[derive(Asset)]` (from `voker-asset-derive`) alongside
+/// `#[derive(Reflect)]` on the type:
+///
+/// ```rust
+/// # use voker_asset::asset::Asset;
+/// # use voker_reflect::prelude::*;
+/// #[derive(Asset, Reflect)]
+/// pub struct MyImage {
+///     pub width:  u32,
+///     pub height: u32,
+///     pub pixels: Vec<u8>,
+/// }
+/// ```
+///
+/// [`AssetServer`]: crate::server::AssetServer
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an `Asset`",
     label = "invalid `Asset`",
@@ -23,7 +43,15 @@ impl Asset for () {}
 // -----------------------------------------------------------------------------
 // VisitAssetDependencies
 
+/// Allows the asset pipeline to enumerate all [`AssetId`]s
+/// that a value directly depends on.
+///
+/// The derive macro for [`Asset`] automatically implements this trait by inspecting
+/// all `Handle<A>` and `ErasedHandle` fields.  Manual implementations are needed only
+/// when dependencies are stored in a non-standard way (e.g. behind a custom smart
+/// pointer).
 pub trait VisitAssetDependencies {
+    /// Call `visit` once for every asset this value depends on.
     fn visit_dependencies(&self, visit: &mut dyn FnMut(ErasedAssetId));
 }
 
@@ -121,7 +149,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for HashSet<V> {
 }
 
 // -----------------------------------------------------------------------------
-// VisitAssetDependencies
+// AssetComponent
 
 /// A trait for components that can be used as asset identifiers, e.g. handle wrappers.
 pub trait AssetComponent: Component {
@@ -133,14 +161,24 @@ pub trait AssetComponent: Component {
 }
 
 // -----------------------------------------------------------------------------
-// App Extension
+// App Extension — System Sets
 
 /// System set for the server event handler that must run before [`AssetTrackingSystems`].
+///
+/// Processes `AssetServerEvent`s (load completions, failures, hot-reload triggers)
+/// received from background tasks and writes them into the ECS world.
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AssetServerEventSystems;
 
+/// System set for tracking handle drops and updating `Assets<A>` storage.
+///
+/// Runs after [`AssetServerEventSystems`] so that new loads processed in the
+/// same frame are visible before stale handles are recycled.
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AssetTrackingSystems;
 
+/// System set for flushing queued [`AssetEvent`](crate::event::AssetEvent) messages.
+///
+/// Runs in `PostUpdate`, after all asset mutations for the frame have been applied.
 #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AssetEventSystems;

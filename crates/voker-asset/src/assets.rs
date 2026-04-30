@@ -169,6 +169,18 @@ pub enum InvalidAssetGeneration {
 // -----------------------------------------------------------------------------
 // Assets
 
+/// Typed storage for all loaded assets of type `A`.
+///
+/// `Assets<A>` holds every asset value and drives change detection by queuing
+/// [`AssetEvent<A>`] messages whenever an asset is added, modified, removed, or
+/// becomes fully loaded.  It is registered as a [`Resource`] when
+/// [`app.init_asset::<A>()`](crate::plugin::AppAssetExt::init_asset) is called.
+///
+/// # Accessing assets
+///
+/// Use [`get`](Self::get) / [`get_mut`](Self::get_mut) with any type that implements
+/// `Into<AssetId<A>>` — including [`Handle<A>`](crate::handle::Handle) and
+/// [`AssetId<A>`].
 #[derive(Resource)]
 pub struct Assets<A: Asset> {
     table: AssetTable<A>,
@@ -193,10 +205,12 @@ impl<A: Asset> Default for Assets<A> {
 }
 
 impl<A: Asset> Assets<A> {
+    /// Returns a clone of the [`AssetHandleProvider`] for this asset type.
     pub fn handle_provider(&self) -> AssetHandleProvider {
         self.handle_provider.clone()
     }
 
+    /// Reserves a new strong handle without storing any asset value yet.
     pub fn reserve_handle(&self) -> Handle<A> {
         self.handle_provider.reserve_handle().typed_debug_checked::<A>()
     }
@@ -225,6 +239,10 @@ impl<A: Asset> Assets<A> {
         Ok(replaced)
     }
 
+    /// Stores `asset` under `id`.
+    ///
+    /// Returns [`Err`] if `id` is an `Index` variant whose generation does not match the
+    /// current slot (the slot was recycled or has already been removed).
     #[inline]
     pub fn insert(
         &mut self,
@@ -243,6 +261,9 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Inserts `asset` into a freshly allocated slot and returns a strong handle to it.
+    ///
+    /// Unlike [`insert`](Self::insert), `add` allocates the index automatically and always succeeds.
     #[inline]
     pub fn add(&mut self, asset: impl Into<A>) -> Handle<A> {
         let index = self.table.allocator.reserve();
@@ -250,6 +271,7 @@ impl<A: Asset> Assets<A> {
         Handle::Strong(self.handle_provider.build_handle(index, false, None, None))
     }
 
+    /// Returns `true` if an asset with the given `id` is currently stored.
     #[inline]
     pub fn contains(&self, id: impl Into<AssetId<A>>) -> bool {
         match id.into() {
@@ -258,6 +280,10 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Creates an additional strong handle for an asset that is already stored.
+    ///
+    /// Returns [`None`] if the asset does not exist or if the per-slot duplicate-handle
+    /// counter has reached its maximum (`u16::MAX`).
     #[inline]
     pub fn resolve_strong_handle(&mut self, id: AssetId<A>) -> Option<Handle<A>> {
         let index = match id {
@@ -285,6 +311,9 @@ impl<A: Asset> Assets<A> {
         ))
     }
 
+    /// Returns a mutable iterator over all `(AssetId, &mut A)` pairs.
+    ///
+    /// Every yielded asset is marked as modified and queues an [`AssetEvent::Modified`].
     #[inline]
     pub fn iter_mut(&mut self) -> AssetsMutIterator<'_, A> {
         AssetsMutIterator {
@@ -294,6 +323,7 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Returns an immutable iterator over all `(AssetId, &A)` pairs.
     #[inline]
     pub fn iter(&self) -> AssetsIterator<'_, A> {
         AssetsIterator {
@@ -302,6 +332,7 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Returns an iterator over all [`AssetId<A>`] values currently stored.
     #[inline]
     pub fn iter_id(&self) -> AssetIdIterator<'_, A> {
         AssetIdIterator {
@@ -310,16 +341,19 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Returns `true` if no assets are stored.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.table.len == 0 && self.hash_map.is_empty()
     }
 
+    /// Returns the total number of assets stored (both index-keyed and UUID-keyed).
     #[inline]
     pub fn len(&self) -> usize {
         self.table.len as usize + self.hash_map.len()
     }
 
+    /// Returns a reference to the asset with the given `id`, or [`None`] if not found.
     #[inline]
     pub fn get(&self, id: impl Into<AssetId<A>>) -> Option<&A> {
         match id.into() {
@@ -328,6 +362,7 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Returns a mutable reference to the asset without queuing a change event.
     #[inline]
     pub fn get_mut_untracked(&mut self, id: impl Into<AssetId<A>>) -> Option<&mut A> {
         match id.into() {
@@ -336,6 +371,11 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Returns a change-tracking mutable reference to the asset.
+    ///
+    /// An [`AssetEvent::Modified`] is queued when the returned [`AssetMut`] is dropped and
+    /// the value was accessed through [`DerefMut`] or
+    /// [`into_inner`](AssetMut::into_inner).
     #[inline]
     pub fn get_mut(&mut self, id: impl Into<AssetId<A>>) -> Option<AssetMut<'_, A>> {
         let id: AssetId<A> = id.into();
@@ -351,6 +391,8 @@ impl<A: Asset> Assets<A> {
         Some(AssetMut { asset, guard })
     }
 
+    /// Returns a mutable reference to the asset with `id`, inserting the result of
+    /// `insert_fn` first if the asset is not yet present.
     pub fn get_or_insert(
         &mut self,
         id: impl Into<AssetId<A>>,
@@ -365,6 +407,7 @@ impl<A: Asset> Assets<A> {
         Ok(self.get_mut(id).unwrap())
     }
 
+    /// Removes the asset without queuing a change event.
     pub fn remove_untracked(&mut self, id: impl Into<AssetId<A>>) -> Option<A> {
         match id.into() {
             AssetId::Index { index, .. } => {
@@ -375,6 +418,7 @@ impl<A: Asset> Assets<A> {
         }
     }
 
+    /// Removes the asset and queues an [`AssetEvent::Removed`] if it was present.
     pub fn remove(&mut self, id: impl Into<AssetId<A>>) -> Option<A> {
         let id: AssetId<A> = id.into();
         let result = self.remove_untracked(id);
@@ -465,6 +509,12 @@ struct AssetChangeNotifier<'a, A: Asset> {
     queued_events: &'a mut Vec<AssetEvent<A>>,
 }
 
+/// A change-tracking mutable reference to an asset in [`Assets<A>`].
+///
+/// Queues an [`AssetEvent::Modified`] on drop if the value was mutably accessed.
+/// Use [`into_inner`](Self::into_inner) to consume the guard and always mark the
+/// asset as modified, or [`into_inner_untracked`](Self::into_inner_untracked) to
+/// get the raw reference without marking it.
 pub struct AssetMut<'a, A: Asset> {
     asset: &'a mut A,
     guard: AssetChangeNotifier<'a, A>,

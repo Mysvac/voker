@@ -1,4 +1,4 @@
-# Asynchronous task pool
+# A refreshingly simple task executor for voker
 
 This is a lightweight threadpool implementation with minimal dependencies, designed specifically
 for voker as a lighter alternative to `rayon` for fork-join parallelism patterns.
@@ -146,6 +146,9 @@ mode with two executor types:
 - `std`: Enables standard library support and multi-threaded mode.
 
 ### Optional Features
+
+- **`web`**: Enables WASM support, using `wasm_bindgen_futures` for the event loop. Implicitly
+  requires standard library support but can be used without this crate's `std` feature.
 
 - **`async_io`**: Available only in non-WASM `std` environments. Uses `async_io::block_on` as
   the blocking function for executors, which may improve efficiency if the project already uses

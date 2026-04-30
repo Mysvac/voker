@@ -9,12 +9,28 @@ use crate::asset::Asset;
 use crate::handle::Handle;
 use crate::ident::{ErasedAssetId, TypedAssetIndex};
 use crate::io::Reader;
-use crate::loader::{Deferred, LabeledAsset, LoadedAsset, NestedLoader, ReadAssetBytesError};
-use crate::loader::{ErasedAssetLoader, ErasedLoadedAsset, ImmediateLoadError, StaticTyped};
+use crate::loader::{ErasedAssetLoader, ErasedLoadedAsset, LoadDirectError};
+use crate::loader::{LabeledAsset, LoadedAsset, NestedLoadBuilder, ReadAssetBytesError};
 use crate::meta::{AssetHash, DeserializeMetaError, ProcessedInfo, ProcessedInfoMinimal, Settings};
 use crate::path::AssetPath;
 use crate::server::{AssetServer, AssetServerMode};
 
+/// Context passed to [`AssetLoader::load`](crate::loader::AssetLoader::load) during an asset load.
+///
+/// `LoadContext` gives a loader access to the asset server for loading nested/sub-assets,
+/// and accumulates the dependency graph for the asset being loaded.
+///
+/// ## Sub-assets (labeled assets)
+///
+/// Formats that contain multiple assets in one file (e.g. GLTF) can produce additional
+/// named assets via [`begin_labeled_asset`](LoadContext::begin_labeled_asset) and
+/// [`add_labeled_asset`](LoadContext::add_labeled_asset).  Callers can then address
+/// each sub-asset with the `#label` suffix: `"scene.gltf#Mesh0"`.
+///
+/// ## Finishing
+///
+/// Call [`finish`](LoadContext::finish) with the primary asset value to produce a
+/// [`LoadedAsset`](crate::loader::LoadedAsset) that the server will store.
 pub struct LoadContext<'a> {
     // use `&AssetServerData` instead of `&AssetServer`
     // to reduce once indirect addressing
@@ -52,6 +68,10 @@ impl<'a> LoadContext<'a> {
         }
     }
 
+    /// Creates a child [`LoadContext`] for building a labeled sub-asset.
+    ///
+    /// Finish the child context with [`finish`](LoadContext::finish) and pass the result to
+    /// [`add_loaded_labeled_asset`](LoadContext::add_loaded_labeled_asset).
     #[inline]
     pub fn begin_labeled_asset(&self) -> LoadContext<'_> {
         Self {
@@ -67,10 +87,14 @@ impl<'a> LoadContext<'a> {
         }
     }
 
+    /// Returns the path of the asset currently being loaded.
     pub fn path(&self) -> &AssetPath<'static> {
         &self.asset_path
     }
 
+    /// Consumes this context and produces the final [`LoadedAsset`].
+    ///
+    /// Scans `value`'s `Handle` fields to populate the direct-dependency set.
     pub fn finish<A: Asset>(mut self, value: A) -> LoadedAsset<A> {
         value.visit_dependencies(&mut |asset_id| {
             match asset_id {
@@ -93,6 +117,10 @@ impl<'a> LoadContext<'a> {
         }
     }
 
+    /// Convenience method for building a labeled sub-asset inside a closure.
+    ///
+    /// Creates a child context, calls `load` with it, and — on success — calls
+    /// [`finish`](LoadContext::finish) and registers the result with `label`.
     pub fn labeled_asset_scope<A: Asset, E>(
         &mut self,
         label: impl Into<CowArc<'static, str>>,
@@ -104,6 +132,7 @@ impl<'a> LoadContext<'a> {
         Ok(self.add_loaded_labeled_asset(label, loaded_asset))
     }
 
+    /// Registers a sub-asset value under the given `label` and returns a strong handle to it.
     pub fn add_labeled_asset<A: Asset>(
         &mut self,
         label: impl Into<CowArc<'static, str>>,
@@ -115,6 +144,7 @@ impl<'a> LoadContext<'a> {
         self.add_loaded_labeled_asset(label, loaded_asset)
     }
 
+    /// Registers a pre-built [`LoadedAsset`] under the given `label` and returns a strong handle to it.
     pub fn add_loaded_labeled_asset<A: Asset>(
         &mut self,
         label: impl Into<CowArc<'static, str>>,
@@ -160,11 +190,16 @@ impl<'a> LoadContext<'a> {
         handle
     }
 
+    /// Returns `true` if a labeled asset with the given `label` is currently live.
     pub fn has_labeled_asset<'b>(&self, label: impl Into<CowArc<'b, str>>) -> bool {
         let path = self.asset_path.clone().with_label(label.into());
         self.asset_server.contains_by_path(&path)
     }
 
+    /// Reads all bytes of the asset at `path`, registering it as a loader dependency.
+    ///
+    /// When `populate_hashes` is enabled (used in the asset processor), also reads and
+    /// records the asset's content hash from its `.meta` file.
     pub async fn read_asset_bytes<'b, 'c>(
         &'b mut self,
         path: impl Into<AssetPath<'c>>,
@@ -231,25 +266,32 @@ impl<'a> LoadContext<'a> {
         handle
     }
 
+    /// Returns the erased sub-asset registered under `label`, or [`None`] if absent.
     pub fn get_labeled(&self, label: impl AsRef<str>) -> Option<&ErasedLoadedAsset> {
         let index = self.label_to_asset_index.get(label.as_ref())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Returns the erased sub-asset identified by `id`, or [`None`] if absent.
     pub fn get_labeled_by_id(&self, id: impl Into<ErasedAssetId>) -> Option<&ErasedLoadedAsset> {
         let index = self.asset_id_to_asset_index.get(&id.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
 
+    /// Create a builder for loading nested assets within this context.
+    ///
+    /// Use the returned [`NestedLoadBuilder`] to configure settings, override
+    /// unapproved-path handling, and then call a terminal method to start the load.
     #[must_use]
-    pub fn loader(&mut self) -> NestedLoader<'a, '_, StaticTyped, Deferred> {
-        NestedLoader::new(self)
+    pub fn load_builder(&mut self) -> NestedLoadBuilder<'a, '_> {
+        NestedLoadBuilder::new(self)
     }
 
+    /// Shorthand for `self.load_builder().load(path)`.
     pub fn load<'b, A: Asset>(&mut self, path: impl Into<AssetPath<'b>>) -> Handle<A> {
-        self.loader().load(path)
+        self.load_builder().load(path)
     }
 
     pub(crate) async fn load_direct_internal(
@@ -259,7 +301,7 @@ impl<'a> LoadContext<'a> {
         loader: &dyn ErasedAssetLoader,
         reader: &mut dyn Reader,
         processed_info: Option<&ProcessedInfo>,
-    ) -> Result<ErasedLoadedAsset, ImmediateLoadError> {
+    ) -> Result<ErasedLoadedAsset, LoadDirectError> {
         let loaded_asset = self
             .asset_server
             .load_with_loader(
@@ -271,7 +313,7 @@ impl<'a> LoadContext<'a> {
                 self.populate_hashes,
             )
             .await
-            .map_err(|error| ImmediateLoadError::LoadError {
+            .map_err(|error| LoadDirectError::LoadError {
                 dependency: path.clone(),
                 error,
             })?;

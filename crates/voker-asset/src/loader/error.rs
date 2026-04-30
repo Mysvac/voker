@@ -35,7 +35,9 @@ pub struct AssetLoaderPanic {
 // -----------------------------------------------------------------------------
 // ReadAssetBytesError
 
-/// An error produced when calling [`LoadContext::read_asset_bytes`]
+/// An error produced when calling [`LoadContext::read_asset_bytes`].
+///
+/// [`LoadContext::read_asset_bytes`]: crate::loader::LoadContext::read_asset_bytes
 #[derive(Error, Debug)]
 pub enum ReadAssetBytesError {
     #[error("Attempted to load an asset with an empty path `{0}`")]
@@ -61,7 +63,7 @@ pub enum ReadAssetBytesError {
 // LoadDirectError
 
 #[derive(Error, Debug)]
-pub enum ImmediateLoadError {
+pub enum LoadDirectError {
     #[error("Attempted to load an asset with an empty path \"{0}\"")]
     EmptyPath(AssetPath<'static>),
     #[error(
