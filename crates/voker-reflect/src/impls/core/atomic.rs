@@ -1,13 +1,14 @@
 //! Even if the atomic variable uses `portable_atomic`, its type path is still `core::sync::atomic::...`.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
 
 use crate::derive::{impl_auto_register, impl_reflect, impl_type_path};
 
 impl_reflect! {
-    #[reflect(type_path = "core::sync::atomic::Ordering")]
-    #[reflect(clone, debug, hash, eq)]
+    #[type_path = "core::sync::atomic::Ordering"]
+    #[reflect(Clone, Debug, Hash, PartialEq)]
     pub enum Ordering {
         Relaxed,
         Release,
@@ -55,10 +56,10 @@ macro_rules! impl_reflect_for_atomic {
                     Ok(())
                 } else {
                     Err($crate::ops::ApplyError::MismatchedType {
-                        from_type: Into::into($crate::info::DynamicTypePath::reflect_type_path(
+                        from_type: Cow::Borrowed($crate::info::DynamicTypePath::reflect_type_path(
                             value,
                         )),
-                        to_type: Into::into(<Self as $crate::info::TypePath>::type_path()),
+                        to_type: Cow::Borrowed(<Self as $crate::info::TypePath>::type_path()),
                     })
                 }
             }
@@ -76,10 +77,7 @@ macro_rules! impl_reflect_for_atomic {
 
         impl $crate::registry::GetTypeMeta for $ty {
             fn get_type_meta() -> $crate::registry::TypeMeta {
-                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_data::<$crate::registry::ReflectFromPtr>(
-                    $crate::registry::FromType::<Self>::from_type(),
-                );
+                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(2);
                 type_meta.insert_data::<$crate::registry::ReflectFromReflect>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );
@@ -92,27 +90,27 @@ macro_rules! impl_reflect_for_atomic {
     };
 }
 
-impl_type_path!((in core::sync::atomic as AtomicI8) voker_os::sync::atomic::AtomicI8);
-impl_type_path!((in core::sync::atomic as AtomicU8) voker_os::sync::atomic::AtomicU8);
-impl_type_path!((in core::sync::atomic as AtomicI16) voker_os::sync::atomic::AtomicI16);
-impl_type_path!((in core::sync::atomic as AtomicU16) voker_os::sync::atomic::AtomicU16);
-impl_type_path!((in core::sync::atomic as AtomicI32) voker_os::sync::atomic::AtomicI32);
-impl_type_path!((in core::sync::atomic as AtomicU32) voker_os::sync::atomic::AtomicU32);
-impl_type_path!((in core::sync::atomic as AtomicI64) voker_os::sync::atomic::AtomicI64);
-impl_type_path!((in core::sync::atomic as AtomicU64) voker_os::sync::atomic::AtomicU64);
-impl_type_path!((in core::sync::atomic as AtomicIsize) voker_os::sync::atomic::AtomicIsize);
-impl_type_path!((in core::sync::atomic as AtomicUsize) voker_os::sync::atomic::AtomicUsize);
-impl_type_path!((in core::sync::atomic as AtomicBool) voker_os::sync::atomic::AtomicBool);
-// impl_type_path!((in core::sync::atomic as AtomicPtr) voker_os::sync::atomic::AtomicPtr<T>);
+impl_type_path!((in core::sync::atomic as AtomicI8) voker_os::atomic::AtomicI8);
+impl_type_path!((in core::sync::atomic as AtomicU8) voker_os::atomic::AtomicU8);
+impl_type_path!((in core::sync::atomic as AtomicI16) voker_os::atomic::AtomicI16);
+impl_type_path!((in core::sync::atomic as AtomicU16) voker_os::atomic::AtomicU16);
+impl_type_path!((in core::sync::atomic as AtomicI32) voker_os::atomic::AtomicI32);
+impl_type_path!((in core::sync::atomic as AtomicU32) voker_os::atomic::AtomicU32);
+impl_type_path!((in core::sync::atomic as AtomicI64) voker_os::atomic::AtomicI64);
+impl_type_path!((in core::sync::atomic as AtomicU64) voker_os::atomic::AtomicU64);
+impl_type_path!((in core::sync::atomic as AtomicIsize) voker_os::atomic::AtomicIsize);
+impl_type_path!((in core::sync::atomic as AtomicUsize) voker_os::atomic::AtomicUsize);
+impl_type_path!((in core::sync::atomic as AtomicBool) voker_os::atomic::AtomicBool);
+// impl_type_path!((in core::sync::atomic as AtomicPtr) voker_os::atomic::AtomicPtr<T>);
 
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicBool, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicI8, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicU8, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicI16, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicU16, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicI32, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicU32, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicI64, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicU64, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicIsize, Ordering::SeqCst);
-impl_reflect_for_atomic!(::voker_os::sync::atomic::AtomicUsize, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicBool, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicI8, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicU8, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicI16, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicU16, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicI32, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicU32, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicI64, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicU64, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicIsize, Ordering::SeqCst);
+impl_reflect_for_atomic!(::voker_os::atomic::AtomicUsize, Ordering::SeqCst);

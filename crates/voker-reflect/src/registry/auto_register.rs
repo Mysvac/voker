@@ -5,6 +5,9 @@ use voker_inventory as inv;
 use crate::derive::Reflect;
 use crate::registry::{GetTypeMeta, TypeMeta, TypeRegistry};
 
+// -----------------------------------------------------------------------------
+// Collector
+
 /// Internal type used to implement automatic registration
 /// by collecting registration function pointers.
 pub struct RegisterFn(fn(&mut TypeRegistry) -> &mut TypeRegistry);
@@ -22,6 +25,9 @@ inv::collect!(RegisterFn);
 
 inv::submit!(RegisterFn::of::<AutoRegisterFlag>() => RegisterFn);
 
+// -----------------------------------------------------------------------------
+// Flag
+
 /// A flag used to mark that automatic registration has been completed.
 #[derive(Reflect)]
 #[reflect(FromReflect = false, GetTypeMeta = false)]
@@ -34,6 +40,9 @@ impl GetTypeMeta for AutoRegisterFlag {
         TypeMeta::new::<Self>()
     }
 }
+
+// -----------------------------------------------------------------------------
+// TypeRegistry
 
 impl TypeRegistry {
     /// Automatically registers all non-generic types derived with
@@ -60,7 +69,7 @@ impl TypeRegistry {
     /// # use std::any::TypeId;
     /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectDefault}};
     /// #[derive(Reflect, Default)]
-    /// #[reflect(default)]
+    /// #[reflect(Default)]
     /// struct Foo {
     ///     name: Option<String>,
     ///     value: i32,

@@ -192,8 +192,7 @@ macro_rules! impl_reflect_for_hashmap {
             S: $crate::info::TypePath + ::core::hash::BuildHasher + Default + Send + Sync,
         {
             fn get_type_meta() -> $crate::registry::TypeMeta {
-                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_data::<$crate::registry::ReflectFromPtr>($crate::registry::FromType::<Self>::from_type());
+                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(2);
                 type_meta.insert_data::<$crate::registry::ReflectFromReflect>($crate::registry::FromType::<Self>::from_type());
                 type_meta.insert_data::<$crate::registry::ReflectDefault>($crate::registry::FromType::<Self>::from_type());
                 type_meta
@@ -210,7 +209,7 @@ macro_rules! impl_reflect_for_hashmap {
 pub(crate) use impl_reflect_for_hashmap;
 
 // -----------------------------------------------------------------------------
-// For NoOpHashMap
+// For NoopHashMap
 
 macro_rules! impl_reflect_for_fixedhashmap {
     ($ty:path) => {
@@ -449,10 +448,7 @@ macro_rules! impl_reflect_for_fixedhashmap {
             V: $crate::FromReflect + $crate::info::Typed + $crate::registry::GetTypeMeta,
         {
             fn get_type_meta() -> $crate::registry::TypeMeta {
-                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(3);
-                type_meta.insert_data::<$crate::registry::ReflectFromPtr>(
-                    $crate::registry::FromType::<Self>::from_type(),
-                );
+                let mut type_meta = $crate::registry::TypeMeta::with_capacity::<Self>(2);
                 type_meta.insert_data::<$crate::registry::ReflectFromReflect>(
                     $crate::registry::FromType::<Self>::from_type(),
                 );

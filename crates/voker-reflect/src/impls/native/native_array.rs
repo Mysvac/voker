@@ -1,11 +1,10 @@
-use crate::{
-    FromReflect, Reflect,
-    impls::{GenericTypeInfoCell, GenericTypePathCell},
-    info::{ArrayInfo, TypeInfo, TypePath, Typed},
-    ops::{Array, ArrayItemIter, ReflectCloneError},
-    registry::{FromType, GetTypeMeta, ReflectFromPtr, TypeMeta, TypeRegistry},
-};
 use alloc::{borrow::ToOwned, boxed::Box, string::ToString, vec::Vec};
+
+use crate::impls::{GenericTypeInfoCell, GenericTypePathCell};
+use crate::info::{ArrayInfo, TypeInfo, TypePath, Typed};
+use crate::ops::{Array, ArrayItemIter, ReflectCloneError};
+use crate::registry::{GetTypeMeta, TypeMeta, TypeRegistry};
+use crate::{FromReflect, Reflect};
 
 impl<T: TypePath> TypePath for [T]
 where
@@ -138,9 +137,7 @@ impl<T: Reflect + Typed, const N: usize> Array for [T; N] {
 
 impl<T: Reflect + Typed + GetTypeMeta, const N: usize> GetTypeMeta for [T; N] {
     fn get_type_meta() -> TypeMeta {
-        let mut type_meta = TypeMeta::with_capacity::<[T; N]>(1);
-        type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
-        type_meta
+        TypeMeta::new::<[T; N]>()
     }
 
     fn register_dependencies(registry: &mut TypeRegistry) {

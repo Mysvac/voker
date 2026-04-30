@@ -12,6 +12,18 @@ pub(crate) fn get_struct_clone_impl(info: &ReflectStruct) -> TokenStream {
     let macro_utils_ = crate::path::macro_utils_(voker_reflect_path);
     let reflect_ = crate::path::reflect_(voker_reflect_path);
     let reflect_clone_error_ = crate::path::reflect_clone_error_(voker_reflect_path);
+    let type_path_ = crate::path::type_path_(voker_reflect_path);
+
+    if meta.attrs().avail_traits.not_cloneable.is_some() {
+        return quote! {
+            #[inline]
+            fn reflect_clone(&self) -> #ResultFP<#macro_utils_::Box<dyn #reflect_>, #reflect_clone_error_> {
+                #ResultFP::Err(#reflect_clone_error_::NotSupport {
+                    type_path: <Self as #type_path_>::type_path(),
+                })
+            }
+        };
+    }
 
     if let Some(span) = meta.attrs().avail_traits.clone {
         let reflect_clone = syn::Ident::new("reflect_clone", span);
@@ -44,15 +56,41 @@ pub(crate) fn get_struct_clone_impl(info: &ReflectStruct) -> TokenStream {
             }
         }
     } else {
-        let mut tokens = TokenStream::new();
+        let mut unsupported = false;
+        for field in info.fields().iter().filter(|f| f.is_ignore()) {
+            if !field.cloneable() {
+                unsupported = true;
+                break;
+            }
+        }
 
+        if unsupported {
+            return quote! {
+                fn reflect_clone(&self) -> #ResultFP<#macro_utils_::Box<dyn #reflect_>, #reflect_clone_error_> {
+                    #ResultFP::Err(#reflect_clone_error_::NotSupport {
+                        type_path: <Self as #type_path_>::type_path(),
+                    })
+                }
+            };
+        }
+
+        // All ignored fields provide clone info -> generate mixed clone code:
+        let mut tokens = TokenStream::new();
         for field in info.fields().iter() {
             let field_ty = &field.data.ty;
             let member = field.to_member();
 
-            tokens.extend(quote! {
-                #member: #macro_utils_::reflect_clone_field::<#field_ty>(&self.#member)?,
-            });
+            if field.attrs.ignore.is_some() {
+                // use direct Clone for ignored fields (user promised clone via attribute)
+                tokens.extend(quote! {
+                    #member: <#field_ty as #CloneFP>::clone(&self.#member),
+                });
+            } else {
+                // use reflect-based clone for active fields
+                tokens.extend(quote! {
+                    #member: #macro_utils_::reflect_clone_field::<#field_ty>(&self.#member)?,
+                });
+            }
         }
 
         quote! {

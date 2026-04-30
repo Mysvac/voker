@@ -21,7 +21,7 @@ use crate::world::World;
 pub struct CommandQueue {
     bytes: Vec<MaybeUninit<u8>>,
     cursor: usize,
-    panic_recovery: Vec<MaybeUninit<u8>>,
+    _panic_recovery: Vec<MaybeUninit<u8>>,
     caller: DebugLocation,
 }
 
@@ -30,7 +30,7 @@ pub struct CommandQueue {
 pub(crate) struct RawCommandQueue {
     bytes: NonNull<Vec<MaybeUninit<u8>>>,
     cursor: NonNull<usize>,
-    panic_recovery: NonNull<Vec<MaybeUninit<u8>>>,
+    _panic_recovery: NonNull<Vec<MaybeUninit<u8>>>,
 }
 
 /// Function pointer used to execute (or drop) a command and advance the cursor.
@@ -52,7 +52,7 @@ impl RawCommandQueue {
     #[inline(always)]
     pub unsafe fn is_empty(&self) -> bool {
         // SAFETY: Pointers are guaranteed to be valid by requirements on `.clone_unsafe`
-        // It should be `>=`, because the `append` function does not modify the cursor.
+        // It should be `>=`, because the `append` function does not modify the cursor (maybe).
         (unsafe { *self.cursor.as_ref() }) >= (unsafe { self.bytes.as_ref().len() })
     }
 
@@ -89,7 +89,7 @@ impl RawCommandQueue {
                     world.flush();
                 } else {
                     // If the input world is `None`, we drop the data directly.
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     ::core::mem::drop(command)
                 }
             },
@@ -166,12 +166,12 @@ impl RawCommandQueue {
 
             #[cfg(feature = "std")]
             if let Err(payload) = ::std::panic::catch_unwind(f) {
-                let panic_recovery = unsafe { self.panic_recovery.as_mut() };
+                let _panic_recovery = unsafe { self._panic_recovery.as_mut() };
                 let bytes = unsafe { self.bytes.as_mut() };
                 let current_stop = bytes.len();
 
                 // We need to use a stack to maintain order.
-                panic_recovery.extend_from_slice(&bytes[local_cursor..current_stop]);
+                _panic_recovery.extend_from_slice(&bytes[local_cursor..current_stop]);
 
                 unsafe {
                     bytes.set_len(start);
@@ -180,7 +180,7 @@ impl RawCommandQueue {
 
                 // Restore remaining commands when reaching the top-level apply pass.
                 if start == 0 {
-                    bytes.append(panic_recovery);
+                    bytes.append(_panic_recovery);
                 }
 
                 ::std::panic::resume_unwind(payload);
@@ -234,7 +234,7 @@ impl Drop for CommandQueue {
     fn drop(&mut self) {
         if !self.bytes.is_empty() {
             let caller = self.caller;
-            log::warn!("CommandQueue has un-applied commands being dropped. {caller}");
+            tracing::warn!("CommandQueue has un-applied commands being dropped. {caller}");
             unsafe { self.raw().apply_or_drop(None) };
         }
     }
@@ -246,7 +246,7 @@ impl Default for CommandQueue {
         Self {
             bytes: Vec::new(),
             cursor: 0,
-            panic_recovery: Vec::new(),
+            _panic_recovery: Vec::new(),
             caller: DebugLocation::caller(),
         }
     }
@@ -259,7 +259,7 @@ impl CommandQueue {
         RawCommandQueue {
             bytes: NonNull::from_mut(&mut self.bytes),
             cursor: NonNull::from_mut(&mut self.cursor),
-            panic_recovery: NonNull::from_mut(&mut self.panic_recovery),
+            _panic_recovery: NonNull::from_mut(&mut self._panic_recovery),
         }
     }
 
@@ -270,7 +270,7 @@ impl CommandQueue {
         Self {
             bytes: Vec::new(),
             cursor: 0,
-            panic_recovery: Vec::new(),
+            _panic_recovery: Vec::new(),
             caller: DebugLocation::caller(),
         }
     }

@@ -4,8 +4,9 @@ use core::fmt::Debug;
 use voker_utils::extra::TypeIdMap;
 use voker_utils::hash::{HashMap, HashSet};
 
-use crate::info::{TypeInfo, Typed};
-use crate::registry::{FromType, GetTypeMeta, TypeData, TypeMeta};
+use crate::Reflect;
+use crate::info::{TypeInfo, TypePath, Typed};
+use crate::registry::{FromType, GetTypeMeta, ReflectConvert, TypeData, TypeMeta};
 
 // -----------------------------------------------------------------------------
 // TypeRegistry
@@ -170,7 +171,7 @@ impl TypeRegistry {
     /// # use core::any::TypeId;
     /// # use voker_reflect::{Reflect, registry::{TypeRegistry, ReflectDefault}};
     /// #[derive(Reflect, Default)]
-    /// #[reflect(default)]
+    /// #[reflect(Default)]
     /// struct Foo {
     ///   name: Option<String>,
     ///   value: i32
@@ -238,6 +239,130 @@ impl TypeRegistry {
                 core::any::type_name::<D>(),
             ),
         }
+        self
+    }
+
+    /// Registers a infallible conversion route from `X` into `Y`.
+    ///
+    /// This function just register `X -> Y` in X's [`ReflectConvert`],
+    /// Does **not** register `Y <- X` in Y's [`ReflectConvert`],
+    ///
+    /// # Panic
+    /// Panics if the source type `X` is not registered.
+    pub fn register_type_into<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + Into<Y>,
+        Y: Reflect + TypePath,
+    {
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
+            panic!(
+                "attempted to call `register_type_into` for `{path}` without registering it first"
+            )
+        }
+
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_into::<X, Y>(),
+            None => {
+                let mut data = ReflectConvert::new::<X>();
+                data.register_into::<X, Y>();
+                meta.insert_data(data);
+            }
+        }
+
+        self
+    }
+
+    /// Registers a infallible conversion that obtain `X` from `Y`.
+    ///
+    /// This function just register `X <- Y` in X's [`ReflectConvert`],
+    /// Does **not** register `Y -> X` in Y's [`ReflectConvert`],
+    ///
+    /// # Panic
+    /// Panics if the source type `X` is not registered.
+    pub fn register_type_from<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + From<Y>,
+        Y: Reflect + TypePath,
+    {
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
+            panic!(
+                "attempted to call `register_type_from` for `{path}` without registering it first"
+            )
+        }
+
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_from::<X, Y>(),
+            None => {
+                let mut data = ReflectConvert::new::<X>();
+                data.register_from::<X, Y>();
+                meta.insert_data(data);
+            }
+        }
+
+        self
+    }
+
+    /// Registers a fallible conversion that obtain `X` from `Y`.
+    ///
+    /// This function register `X -> Y` in X's [`ReflectConvert`],
+    /// and `Y <- X` in Y's [`ReflectConvert`].
+    ///
+    /// # Panic
+    /// Panics if the source type `X` or `Y` is not registered.
+    pub fn register_type_conversion<X, Y, F>(&mut self, f: F) -> &mut Self
+    where
+        X: Reflect + TypePath,
+        Y: Reflect + TypePath,
+        F: Fn(X) -> Result<Y, X> + Clone + Send + Sync + 'static,
+    {
+        #[cold]
+        #[inline(never)]
+        fn unregistered_type(path: &str) -> ! {
+            panic!(
+                "attempted to call `register_type_conversion` for `{path}` without registering it first"
+            )
+        }
+
+        // X -> Y
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<X>()) else {
+            unregistered_type(X::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_custom_into::<X, Y, F>(f.clone()),
+            None => {
+                let mut data = ReflectConvert::new::<X>();
+                data.register_custom_into::<X, Y, F>(f.clone());
+                meta.insert_data(data);
+            }
+        }
+
+        // Y <- X
+        let Some(meta) = self.type_meta_table.get_mut(TypeId::of::<Y>()) else {
+            unregistered_type(Y::type_path());
+        };
+
+        match meta.get_data_mut::<ReflectConvert>() {
+            Some(data) => data.register_custom_from::<Y, X, F>(f),
+            None => {
+                let mut data = ReflectConvert::new::<Y>();
+                data.register_custom_from::<Y, X, F>(f);
+                meta.insert_data(data);
+            }
+        }
+
         self
     }
 
@@ -410,8 +535,8 @@ impl Debug for TypeRegistry {
 // -----------------------------------------------------------------------------
 // TypeRegistryArc
 
-use voker_os::sync::{Arc, PoisonError};
-use voker_os::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use alloc::sync::Arc;
+use voker_os::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Clone, Default)]
 pub struct TypeRegistryArc {
@@ -453,7 +578,7 @@ mod tests {
     use super::{TypeRegistry, TypeRegistryArc};
     use crate::Reflect;
     use crate::info::TypePath;
-    use crate::registry::{ReflectDefault, ReflectFromPtr};
+    use crate::registry::ReflectDefault;
 
     mod foo {
         use crate::Reflect;
@@ -470,7 +595,7 @@ mod tests {
     }
 
     #[derive(Reflect, Default)]
-    #[reflect(default)]
+    #[reflect(Default)]
     struct NeedsDefault {
         value: i32,
     }
@@ -495,7 +620,6 @@ mod tests {
         let type_id = TypeId::of::<NeedsDefault>();
         assert!(registry.contains(type_id));
         assert!(registry.get_type_data::<ReflectDefault>(type_id).is_some());
-        assert!(registry.get_type_data::<ReflectFromPtr>(type_id).is_some());
 
         let with_default: Vec<_> = registry
             .iter_with_data::<ReflectDefault>()

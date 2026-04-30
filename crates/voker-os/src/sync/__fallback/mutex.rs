@@ -248,16 +248,12 @@ impl<T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'_, T> {
     }
 }
 
-// provided for `Condvar` implementation.
-pub(super) fn guard_lock<'a, T: ?Sized>(guard: &MutexGuard<'a, T>) -> &'a Futex {
-    &guard.lock.futex
-}
-
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::fmt::Debug;
+    use alloc::sync::Arc;
+    use core::fmt::Debug;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, mpsc::channel};
+    use std::sync::{mpsc::channel};
     use std::{hint, mem, thread};
 
     use super::Mutex;

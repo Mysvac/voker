@@ -15,7 +15,7 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::ptr;
 
 use super::{Backoff, CachePadded};
-use crate::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use crate::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 // Bits indicating the state of a slot:
 // * If a value has been written into the slot, `WRITE` is set.
@@ -362,7 +362,7 @@ impl<T> SegQueue<T> {
             let mut new_head = head + (1 << SHIFT);
 
             if new_head & HAS_NEXT == 0 {
-                crate::sync::atomic::fence(Ordering::SeqCst);
+                crate::atomic::fence(Ordering::SeqCst);
                 let tail = self.tail.index.load(Ordering::Relaxed);
 
                 // If the tail equals the head, that means the queue is empty.

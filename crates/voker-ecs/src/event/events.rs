@@ -2,10 +2,10 @@ use alloc::vec::Vec;
 use core::any::TypeId;
 use core::fmt::Debug;
 
+use voker_utils::debug::DebugName;
 use voker_utils::extra::TypeIdMap;
 
 use super::{Event, EventId};
-use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // EventMeta
@@ -144,6 +144,12 @@ impl Events {
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<EventId> {
         self.mapper.get(type_id).copied()
+    }
+
+    /// Returns the event debug name for the given ID.
+    #[inline]
+    pub fn get_name(&self, id: EventId) -> Option<DebugName> {
+        self.metas.get(id.index()).map(EventMeta::name)
     }
 
     /// Returns the event info for the given ID.

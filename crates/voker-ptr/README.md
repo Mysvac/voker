@@ -1,4 +1,4 @@
-# voker-ptr
+# Pointer extension
 
 Lightweight pointer wrappers for internal runtime code.
 

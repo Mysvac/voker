@@ -3,7 +3,7 @@ use core::hash::{BuildHasher, Hash};
 
 use alloc::vec::Vec;
 use voker_utils::extra::{ArrayDeque, BlockList};
-use voker_utils::hash::{HashMap, HashSet, NoOpHashMap, NoOpHashSet, SparseHashMap, SparseHashSet};
+use voker_utils::hash::{HashMap, HashSet, NoopHashMap, NoopHashSet, SparseHashMap, SparseHashSet};
 use voker_utils::index::{IndexMap, IndexSet, SparseIndexMap, SparseIndexSet};
 use voker_utils::vec::{ArrayVec, FastVec, FastVecData, SmallVec};
 
@@ -169,7 +169,7 @@ impl_map_entities_for_map! {
 }
 
 impl_map_entities_for_map! {
-    <K: MapEntities + Eq + Hash, V: MapEntities> MapEntities for NoOpHashMap<K, V>
+    <K: MapEntities + Eq + Hash, V: MapEntities> MapEntities for NoopHashMap<K, V>
 }
 
 impl_map_entities_for_map! {
@@ -209,7 +209,7 @@ impl_map_entities_for_set! {
 }
 
 impl_map_entities_for_set! {
-    <T: MapEntities + Eq + Hash> MapEntities for NoOpHashSet<T>
+    <T: MapEntities + Eq + Hash> MapEntities for NoopHashSet<T>
 }
 
 impl_map_entities_for_set! {

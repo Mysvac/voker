@@ -1,4 +1,4 @@
-# voker-utils
+# Platform independent extensions
 
 Platform-agnostic utility crate for collection primitives,
 hashing helpers, index containers, and small no_std-friendly helpers.
@@ -26,8 +26,10 @@ hashing helpers, index containers, and small no_std-friendly helpers.
 - Numeric helper types.
 - Includes `NonMax` wrappers (niche-value optimization style helpers).
 
+### `smol`
+- Small buffer optimized string, re-export `smol_str` crate.
+
 ### Top-level helpers
-- `cold_path`: Branch hint helper for cold paths.
 - `range_invoke`: Macro utility for repeated range-based invocation.
 
 ## Notes

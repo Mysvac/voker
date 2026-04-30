@@ -1,6 +1,8 @@
 use core::fmt::Debug;
 
 use bitflags::bitflags;
+#[cfg(feature = "trace")]
+use voker_utils::debug::DebugName;
 
 use crate::system::SystemId;
 use crate::tick::Tick;
@@ -21,11 +23,13 @@ bitflags! {
 }
 
 /// Metadata container for system execution information.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct SystemMeta {
     pub(crate) id: SystemId,
     pub(crate) flags: SystemFlags,
     pub(crate) last_run: Tick,
+    #[cfg(feature = "trace")]
+    pub(crate) system_span: tracing::Span,
 }
 
 impl Debug for SystemMeta {
@@ -42,11 +46,15 @@ impl Debug for SystemMeta {
 
 impl SystemMeta {
     #[inline]
-    pub(crate) const fn new<T: 'static>() -> Self {
+    pub(crate) fn new<T: 'static>() -> Self {
+        #[cfg(feature = "trace")]
+        let name = DebugName::type_name::<T>();
         Self {
             id: SystemId::of::<T>(),
             flags: SystemFlags::empty(),
             last_run: Tick::new(0),
+            #[cfg(feature = "trace")]
+            system_span: tracing::info_span!(parent: None, "system", name = name.parse()),
         }
     }
 

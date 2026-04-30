@@ -74,7 +74,7 @@ impl EntityOwned<'_> {
             let world = unsafe { self.world.full_mut() };
             unsafe {
                 world.entities.set_despawned(self.entity).unwrap_or_else(|e| {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     panic!("The location is `EntityOwned` should be valid. {e}");
                 });
             }

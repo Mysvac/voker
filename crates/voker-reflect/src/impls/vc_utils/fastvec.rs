@@ -1,21 +1,21 @@
 use crate::derive::impl_type_path;
 
-impl_type_path!(::voker_utils::vec::ArrayVec<T, const N: usize>);
-impl_type_path!(::voker_utils::vec::FastVec<T, const N: usize>);
-impl_type_path!(::voker_utils::vec::SmallVec<T, const N: usize>);
+impl_type_path!((in fastvec) ArrayVec<T, const N: usize>);
+impl_type_path!((in fastvec) FastVec<T, const N: usize>);
+impl_type_path!((in fastvec) SmallVec<T, const N: usize>);
 
 // -----------------------------------------------------------------------------
 // SmallVec
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use voker_utils::vec::SmallVec;
+use voker_utils::vec::{ArrayVec, FastVec, SmallVec};
 
 use crate::info::{ConstParamInfo, GenericInfo, Generics};
 use crate::info::{ListInfo, TypeInfo, TypeParamInfo, Typed};
 use crate::ops::{ApplyError, List, ListItemIter, ReflectCloneError};
+use crate::registry::ReflectFromReflect;
 use crate::registry::{FromType, GetTypeMeta, ReflectDefault, TypeMeta};
-use crate::registry::{ReflectFromPtr, ReflectFromReflect};
 use crate::{FromReflect, Reflect, impls};
 
 impl<T: Typed + FromReflect, const N: usize> Typed for SmallVec<T, N> {
@@ -135,9 +135,8 @@ impl<T: Typed + FromReflect, const N: usize> FromReflect for SmallVec<T, N> {
 
 impl<T: Typed + FromReflect + GetTypeMeta, const N: usize> GetTypeMeta for SmallVec<T, N> {
     fn get_type_meta() -> TypeMeta {
-        let mut meta = TypeMeta::with_capacity::<Self>(3);
+        let mut meta = TypeMeta::with_capacity::<Self>(2);
         meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }

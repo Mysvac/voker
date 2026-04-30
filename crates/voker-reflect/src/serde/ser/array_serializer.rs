@@ -2,7 +2,6 @@ use serde_core::ser::SerializeTuple;
 use serde_core::{Serialize, Serializer};
 
 use super::{SerializeDriver, SerializeProcessor};
-
 use crate::ops::Array;
 use crate::registry::TypeRegistry;
 

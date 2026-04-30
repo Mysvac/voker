@@ -81,7 +81,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Si
         match unsafe { Single::new(world, state, last_run, this_run) } {
             Ok(ret) => Ok(ret),
             Err(e) => {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let error = SystemParamError::new::<Self>()
                     .with_severity(Severity::Warning)
                     .with_info(ToString::to_string(&e));

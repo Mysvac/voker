@@ -16,11 +16,11 @@ pub mod table;
 // Exports
 
 pub use hasher::{FixedHashState, FixedHasher};
-pub use hasher::{NoOpHashState, NoOpHasher};
+pub use hasher::{NoopHashState, NoopHasher};
 pub use hasher::{SparseHashState, SparseHasher};
 
-pub use map::{HashMap, NoOpHashMap, SparseHashMap};
-pub use set::{HashSet, NoOpHashSet, SparseHashSet};
+pub use map::{HashMap, NoopHashMap, SparseHashMap};
+pub use set::{HashSet, NoopHashSet, SparseHashSet};
 pub use table::HashTable;
 
 pub use hashbrown::Equivalent;

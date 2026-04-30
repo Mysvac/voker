@@ -1,4 +1,4 @@
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote};
 use syn::Ident;
 
@@ -7,10 +7,7 @@ use super::get_common_from_reflect_tokens;
 use crate::derive_data::ReflectStruct;
 
 // Generate `FromReflect::from_reflect` tokens for struct and tuple-struct.
-pub(crate) fn impl_struct_from_reflect(
-    info: &ReflectStruct,
-    is_tuple: bool,
-) -> proc_macro2::TokenStream {
+pub(crate) fn impl_struct_from_reflect(info: &ReflectStruct, is_tuple: bool) -> TokenStream {
     use crate::path::fp::{DefaultFP, OptionFP};
     let option_ = OptionFP.to_token_stream();
 
@@ -37,11 +34,11 @@ pub(crate) fn impl_struct_from_reflect(
 
     let clone_tokens = get_common_from_reflect_tokens(meta, &input_);
 
-    let (active_members, active_values): (Vec<_>, Vec<_>) = info
+    let (mut active_members, mut active_values): (Vec<_>, Vec<_>) = info
         .active_fields()
         .map(|field| {
             let member = field.to_member();
-            let field_ty = field.data.ty.clone();
+            let field_ty = &field.data.ty;
             let accessor = field.reflect_accessor();
             let value = quote! {
                 match #struct_trait_path_::field(#input_, #accessor) {
@@ -61,7 +58,7 @@ pub(crate) fn impl_struct_from_reflect(
                 }
             }
         } else {
-            crate::utils::empty()
+            TokenStream::new()
         };
 
         quote! {
@@ -77,12 +74,27 @@ pub(crate) fn impl_struct_from_reflect(
             }
         }
     } else {
-        quote! {
-            if let #reflect_ref_::#struct_kind_(#input_) = #reflect_::reflect_ref(#input_) {
-                let __this = Self {
-                    #(#active_members: #active_values?,)*
-                };
-                return #OptionFP::Some(__this);
+        let mut unsupported = false;
+        for field in info.fields().iter().filter(|f| f.is_ignore()) {
+            if !field.defaultable() {
+                unsupported = true;
+                break;
+            }
+            let field_ty = &field.data.ty;
+            active_members.push(field.to_member());
+            active_values.push(quote!(Some(<#field_ty as #DefaultFP>::default())));
+        }
+
+        if unsupported {
+            TokenStream::new()
+        } else {
+            quote! {
+                if let #reflect_ref_::#struct_kind_(#input_) = #reflect_::reflect_ref(#input_) {
+                    let __this = Self {
+                        #(#active_members: #active_values?,)*
+                    };
+                    return #OptionFP::Some(__this);
+                }
             }
         }
     };

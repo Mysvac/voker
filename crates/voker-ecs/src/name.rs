@@ -20,7 +20,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use voker_reflect::Reflect;
 use voker_utils::hash::FixedHashState;
 
-use voker_ecs_derive::Component;
+use crate::derive::Component;
+use crate::reflect::{ReflectComponent, ReflectFromWorld};
 
 /// A pre-built component for representing names.
 ///
@@ -40,7 +41,9 @@ use voker_ecs_derive::Component;
 /// assert_eq!(name.as_str(), "Hero");
 /// ```
 #[derive(Component, Reflect, Clone)]
-#[reflect(Opaque, full)]
+#[reflect(Opaque, Default, Clone, Debug, Hash)]
+#[reflect(PartialEq, PartialOrd, Serialize, Deserialize)]
+#[type_data(ReflectComponent, ReflectFromWorld)]
 pub struct Name {
     name: Cow<'static, str>,
     hash: u64,

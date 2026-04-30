@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::any::TypeId;
 use core::fmt::Debug;
+use voker_utils::debug::DebugName;
 
 use voker_utils::extra::TypeIdMap;
 
@@ -43,6 +44,12 @@ impl Resources {
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<ResourceId> {
         self.mapper.get(type_id).copied()
+    }
+
+    /// Returns the resource name for the given ID.
+    #[inline]
+    pub fn get_name(&self, id: ResourceId) -> Option<DebugName> {
+        self.infos.get(id.index()).map(ResourceInfo::name)
     }
 
     /// Returns the resource info for the given ID.

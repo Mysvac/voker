@@ -27,17 +27,32 @@ impl<'w> EntityOwned<'w> {
         self
     }
 
+    /// Spawns source entities linked to `self` through relationship `R`.
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn with_related_entities<R: Relationship>(
+        &mut self,
+        func: impl FnOnce(&mut RelatedSpawner<R>),
+    ) -> &mut Self {
+        let this = self.entity();
+
+        self.world_scope(|world| {
+            func(&mut RelatedSpawner::new(world, this));
+        });
+
+        self
+    }
+
     /// Adds one existing source entity to this target through `R`.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
-        self.insert_related::<R>(&[entity])
+        self.add_relateds::<R>(&[entity])
     }
 
     /// Adds multiple existing source entities to this target through `R`.
     ///
     /// Existing `R` components are retargeted in place when possible.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
+    pub fn add_relateds<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let this = self.entity();
         let caller = DebugLocation::caller();
 
@@ -83,12 +98,11 @@ impl<'w> EntityOwned<'w> {
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn_related<R: RelationshipTarget>(&mut self) -> &mut Self {
         let caller = DebugLocation::caller();
-        if let Some(sources) = self.get::<R>() {
-            // We have to collect here to defer removal, allowing observers and hooks to see this data
-            // before it is finally removed.
-            let sources = sources.iter().collect::<Vec<Entity>>();
+        if let Some(relationship_target) = self.get::<R>() {
+            let sources: Vec<Entity> = relationship_target.iter().collect();
             self.world_scope(|world| {
-                for entity in sources {
+                // Deleting from the end keeps Vec removal O(1) per entity.
+                for &entity in sources.iter().rev() {
                     let _ = world.despawn_with_caller(entity, caller);
                 }
             });
@@ -98,31 +112,31 @@ impl<'w> EntityOwned<'w> {
 
     /// Detaches all sources linked through relationship `L`.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn detach_all_related<L: Relationship>(&mut self) -> &mut Self {
-        self.detach_related::<L::RelationshipTarget>()
+    pub fn detach_all_related<R: Relationship>(&mut self) -> &mut Self {
+        self.detach_related::<R::RelationshipTarget>()
     }
 
     /// Despawns all sources linked through relationship `L`.
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn despawn_all_related<L: Relationship>(&mut self) -> &mut Self {
-        self.despawn_related::<L::RelationshipTarget>()
+    pub fn despawn_all_related<R: Relationship>(&mut self) -> &mut Self {
+        self.despawn_related::<R::RelationshipTarget>()
     }
 
     /// Inserts `bundle` on this entity and recursively on all linked sources.
     ///
     /// Traversal follows `L` edges from target to sources. Cycles are not
     /// detected and can lead to infinite recursion.
-    pub fn insert_recursive<L: RelationshipTarget>(
+    pub fn insert_recursive<R: RelationshipTarget>(
         &mut self,
         bundle: impl Bundle + Clone,
     ) -> &mut Self {
         self.insert(bundle.clone());
 
-        if let Some(relationship_target) = self.get::<L>() {
+        if let Some(relationship_target) = self.get::<R>() {
             let sources: Vec<Entity> = relationship_target.iter().collect();
-            for source in sources {
+            for source in sources.iter().copied() {
                 self.world_scope(|world| {
-                    world.entity_owned(source).insert_recursive::<L>(bundle.clone());
+                    world.entity_owned(source).insert_recursive::<R>(bundle.clone());
                 });
             }
         }
@@ -134,14 +148,14 @@ impl<'w> EntityOwned<'w> {
     ///
     /// Traversal follows `L` edges from target to sources. Cycles are not
     /// detected and can lead to infinite recursion.
-    pub fn remove_recursive<L: RelationshipTarget, B: Bundle>(&mut self) -> &mut Self {
+    pub fn remove_recursive<R: RelationshipTarget, B: Bundle>(&mut self) -> &mut Self {
         self.remove::<B>();
 
-        if let Some(relationship_target) = self.get::<L>() {
+        if let Some(relationship_target) = self.get::<R>() {
             let sources: Vec<Entity> = relationship_target.iter().collect();
-            for source in sources {
+            for source in sources.iter().copied() {
                 self.world_scope(|world| {
-                    world.entity_owned(source).remove_recursive::<L, B>();
+                    world.entity_owned(source).remove_recursive::<R, B>();
                 });
             }
         }
@@ -172,7 +186,6 @@ fn modify_or_insert_relationship_with_caller<R: Relationship>(
             modified
         });
 
-        this.relocate();
         if modified {
             return;
         }
@@ -205,32 +218,32 @@ impl<'a> EntityCommands<'a> {
     ///
     /// See [`add_related`](Self::add_related) if you want to relate more than one entity.
     pub fn add_related<R: Relationship>(&mut self, entity: Entity) -> &mut Self {
-        self.push(move |mut entity_owned: EntityOwned| {
-            entity_owned.insert_related::<R>(&[entity]);
+        self.queue(move |mut entity_owned: EntityOwned| {
+            entity_owned.add_relateds::<R>(&[entity]);
         })
     }
 
     /// Relates the given entities to this entity with the relation `R`.
     ///
     /// See [`add_related`](Self::add_related) if you want to relate only one entity.
-    pub fn insert_related<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
+    pub fn add_relateds<R: Relationship>(&mut self, entities: &[Entity]) -> &mut Self {
         let entities: Box<[Entity]> = entities.into();
 
-        self.push(move |mut entity: EntityOwned| {
-            entity.insert_related::<R>(&entities);
+        self.queue(move |mut entity: EntityOwned| {
+            entity.add_relateds::<R>(&entities);
         })
     }
 
     /// Removes the relation `R` between this entity and all its related entities.
     pub fn detach_all_related<R: Relationship>(&mut self) -> &mut Self {
-        self.push(|mut entity: EntityOwned| {
+        self.queue(|mut entity: EntityOwned| {
             entity.detach_all_related::<R>();
         })
     }
 
     /// Removes all related source entities linked through `R` by despawning them.
     pub fn despawn_all_related<R: Relationship>(&mut self) -> &mut Self {
-        self.push(|mut entity: EntityOwned| {
+        self.queue(|mut entity: EntityOwned| {
             entity.despawn_all_related::<R>();
         })
     }
@@ -239,21 +252,21 @@ impl<'a> EntityCommands<'a> {
     pub fn remove_related<R: Relationship>(&mut self, related: &[Entity]) -> &mut Self {
         let related: Box<[Entity]> = related.into();
 
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.remove_related::<R>(&related);
         })
     }
 
     /// Removes the target cache component `R` from this entity, detaching sources.
     pub fn detach_related<R: RelationshipTarget>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.detach_related::<R>();
         })
     }
 
     /// Despawns source entities listed by target cache `R`.
     pub fn despawn_related<R: RelationshipTarget>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.despawn_related::<R>();
         })
     }
@@ -269,7 +282,7 @@ impl<'a> EntityCommands<'a> {
         &mut self,
         bundle: impl Bundle + Clone,
     ) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.insert_recursive::<R>(bundle);
         })
     }
@@ -282,7 +295,7 @@ impl<'a> EntityCommands<'a> {
     /// This method should only be called on relationships that form a tree-like structure.
     /// Any cycles will cause this method to loop infinitely.
     pub fn remove_recursive<R: RelationshipTarget, B: Bundle>(&mut self) -> &mut Self {
-        self.push(move |mut entity: EntityOwned| {
+        self.queue(move |mut entity: EntityOwned| {
             entity.remove_recursive::<R, B>();
         })
     }
@@ -316,6 +329,12 @@ impl<'w, R: Relationship> RelatedSpawner<'w, R> {
     /// Spawns one source entity linked to the configured target.
     pub fn spawn(&mut self, bundle: impl Bundle) -> EntityOwned<'_> {
         self.world.spawn((R::from_target(self.target), bundle))
+    }
+
+    /// Spawns an entity with an `R` relationship targeting the `target`
+    /// entity this spawner was initialized with.
+    pub fn spawn_empty(&mut self) -> EntityOwned<'_> {
+        self.world.spawn(R::from_target(self.target))
     }
 
     /// Returns the relationship target entity.
@@ -363,6 +382,12 @@ impl<'w, R: Relationship> RelatedSpawnerCommands<'w, R> {
     /// entity this spawner was initialized with.
     pub fn spawn(&mut self, bundle: impl Bundle) -> EntityCommands<'_> {
         self.commands.spawn((R::from_target(self.target), bundle))
+    }
+
+    /// Spawns an entity with an `R` relationship targeting the `target`
+    /// entity this spawner was initialized with.
+    pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
+        self.commands.spawn(R::from_target(self.target))
     }
 
     /// Returns the "target entity" used when spawning entities with an `R` [`Relationship`].

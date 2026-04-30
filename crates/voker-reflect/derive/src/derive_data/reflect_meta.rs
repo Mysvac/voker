@@ -5,20 +5,20 @@ use quote::quote;
 use syn::{Generics, Ident, ImplGenerics, Path, Type, TypeGenerics};
 use syn::{Token, punctuated::Punctuated, visit::Visit};
 
-use super::{TypeAttributes, TypeParser};
-use crate::utils::StringExpr;
+use super::{TypeAttributes, TypeSignature};
+use crate::string_expr::StringExpr;
 
 pub(crate) struct ReflectMeta<'a> {
     voker_reflect_path: Path,
     attrs: TypeAttributes,
-    type_parser: TypeParser<'a>,
+    type_parser: TypeSignature<'a>,
     // cannot use `BTreeSet` becausee `syn::Type` does not impl `Ord`.
     active_types: HashSet<&'a Type, FixedState>,
 }
 
 impl<'a> ReflectMeta<'a> {
     #[inline]
-    pub fn new(attrs: TypeAttributes, type_parser: TypeParser<'a>) -> Self {
+    pub fn new(attrs: TypeAttributes, type_parser: TypeSignature<'a>) -> Self {
         Self {
             attrs,
             type_parser,
@@ -53,7 +53,7 @@ impl<'a> ReflectMeta<'a> {
     /// ```
     #[inline]
     pub fn with_docs_expression(&self) -> TokenStream {
-        self.attrs.docs.get_expression_with()
+        self.attrs.docs.get_with_expression()
     }
 
     /// Generate custom attibutes codes
@@ -70,7 +70,7 @@ impl<'a> ReflectMeta<'a> {
     pub fn with_custom_attributes_expression(&self) -> TokenStream {
         self.attrs
             .custom_attributes
-            .get_expression_with(&self.voker_reflect_path)
+            .get_with_expression(&self.voker_reflect_path)
     }
 
     /// Generate generics codes
@@ -131,7 +131,7 @@ impl<'a> ReflectMeta<'a> {
             .collect::<Punctuated<_, Token![,]>>();
 
         if generics.is_empty() {
-            return crate::utils::empty();
+            return TokenStream::new();
         }
 
         quote! {
@@ -147,13 +147,13 @@ impl<'a> ReflectMeta<'a> {
     }
 
     #[inline]
-    pub fn contains_generics(&self) -> bool {
-        self.type_parser.contains_generics()
+    pub fn has_type_const_generics(&self) -> bool {
+        self.type_parser.has_type_const_generics()
     }
 
     #[inline]
-    pub fn without_generics(&self) -> bool {
-        self.type_parser.without_generics()
+    pub fn no_generics(&self) -> bool {
+        self.type_parser.no_generics()
     }
 
     #[inline]
@@ -323,7 +323,7 @@ impl<'a> ReflectMeta<'a> {
 
         generic_where_clause.extend(quote! { #predicates });
         let where_clause = if generic_where_clause.is_empty() {
-            crate::utils::empty()
+            TokenStream::new()
         } else {
             let mut buffer = quote! { where };
             buffer.extend(generic_where_clause);
@@ -395,14 +395,14 @@ impl<'a> ReflectMeta<'a> {
             let get_type_meta_ = crate::path::get_type_meta_(voker_reflect_path);
             quote!( + #get_type_meta_ )
         } else {
-            crate::utils::empty()
+            TokenStream::new()
         };
 
         let add_from_reflect_ = if add_from_reflect {
             let from_reflect_ = crate::path::from_reflect_(voker_reflect_path);
             quote!( + #from_reflect_ )
         } else {
-            crate::utils::empty()
+            TokenStream::new()
         };
 
         self.active_types
@@ -425,7 +425,7 @@ impl<'a> ReflectMeta<'a> {
         let is_const_express = with_custom_attributes.is_empty()
             && with_docs.is_empty()
             && with_generics.is_empty()
-            && self.without_generics();
+            && self.no_generics();
 
         let self_token = if is_const_express {
             self.real_ident()

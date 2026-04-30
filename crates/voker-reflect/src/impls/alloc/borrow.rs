@@ -1,5 +1,6 @@
 use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -7,9 +8,8 @@ use crate::derive::impl_type_path;
 use crate::impls::GenericTypeInfoCell;
 use crate::info::{ListInfo, OpaqueInfo, TypeInfo, TypePath, Typed};
 use crate::ops::{ApplyError, List, ListItemIter};
-use crate::registry::{
-    FromType, GetTypeMeta, ReflectDefault, ReflectFromPtr, TypeMeta, TypeRegistry,
-};
+use crate::registry::{FromType, GetTypeMeta, ReflectConvert};
+use crate::registry::{ReflectDefault, TypeMeta, TypeRegistry};
 use crate::registry::{ReflectDeserialize, ReflectFromReflect, ReflectSerialize};
 use crate::{FromReflect, Reflect};
 
@@ -74,11 +74,15 @@ impl Reflect for Cow<'static, str> {
 impl GetTypeMeta for Cow<'static, str> {
     fn get_type_meta() -> TypeMeta {
         let mut meta = TypeMeta::with_capacity::<Self>(5);
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
+        let mut converter = ReflectConvert::new::<Self>();
+        converter.register_from::<Self, &'static str>();
+        converter.register_from::<Self, String>();
+        converter.register_into::<Self, String>();
+        meta.insert_data(converter);
         meta
     }
 }
@@ -196,9 +200,8 @@ impl<T: FromReflect + Typed + Clone> FromReflect for Cow<'static, [T]> {
 
 impl<T: FromReflect + Typed + Clone + GetTypeMeta> GetTypeMeta for Cow<'static, [T]> {
     fn get_type_meta() -> TypeMeta {
-        let mut meta = TypeMeta::with_capacity::<Self>(3);
+        let mut meta = TypeMeta::with_capacity::<Self>(2);
         meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }

@@ -157,7 +157,7 @@ fn get_event_target_field(ast: &DeriveInput) -> syn::Result<syn::Member> {
             target.ok_or_else(|| {
                 syn::Error::new(
                     fields.span(),
-                    "EntityEvent derive expected unnamed structs\
+                    "EntityEvent derive expected unnamed structs \
                 with one field or with a field annotated with #[event_target].",
                 )
             })
@@ -180,15 +180,15 @@ fn get_event_target_field(ast: &DeriveInput) -> syn::Result<syn::Member> {
             target.ok_or_else(|| {
                 syn::Error::new(
                     fields.span(),
-                    "EntityEvent derive expected unnamed structs\
+                    "EntityEvent derive expected unnamed structs \
                 with one field or with a field annotated with #[event_target].",
                 )
             })
         }
         Fields::Unit => Err(syn::Error::new(
             fields.span(),
-            "EntityEvent derive does not work on unit structs.\
-            Your type must have a field to store the `Entity` target,\
+            "EntityEvent derive does not work on unit structs. \
+            Your type must have a field to store the `Entity` target, \
             such as `Attack(Entity)` or `Attack { #[event_target] entity: Entity }`.",
         )),
     }

@@ -1,10 +1,18 @@
+//! World-level schedule registry.
+//!
+//! [`Schedules`] is a [`Resource`] that maps [`ScheduleLabel`]s to their
+//! [`Schedule`] instances. It provides insertion and lookup helpers and is
+//! the authoritative store consulted when a world runs a schedule by label.
+//!
+//! [`Resource`]: crate::resource::Resource
+
 use core::fmt::Debug;
 
 use voker_utils::hash::HashMap;
 
 use super::{InternedScheduleLabel, Schedule, ScheduleLabel};
-use crate::schedule::{ActionSystem, ConditionSystem, IntoSystemConfig};
-use crate::system::{IntoSystem, SystemId};
+use crate::schedule::IntoSystemConfig;
+use crate::system::{IntoSystem, SystemSet};
 
 // -----------------------------------------------------------------------------
 // Schedules
@@ -93,158 +101,29 @@ impl Schedules {
         self.mapper.iter_mut().map(|(label, schedule)| (&**label, schedule))
     }
 
-    /// Inserts a system into the schedule identified by `label`.
+    /// Adds one or many systems into `set` on the schedule identified by `label`.
     ///
-    /// - Returns `true` if this inserted a new system name.
-    /// - Returns `false` if an existing system with the same name was replaced.
-    ///
-    /// # Panics
-    /// Panics if the number of systems in the target schedule exceeds `u16::MAX`.
-    pub fn insert_action(&mut self, label: impl ScheduleLabel, system: ActionSystem) -> bool {
-        self.entry(label).insert_action(system)
-    }
-
-    /// Inserts a condition into the schedule identified by `label`.
-    ///
-    /// - Returns `true` if this inserted a new condition name.
-    /// - Returns `false` if an existing condition with the same name was replaced.
-    ///
-    /// # Panics
-    /// Panics if the number of systems in the target schedule exceeds `u16::MAX`.
-    pub fn insert_condition(&mut self, label: impl ScheduleLabel, system: ConditionSystem) -> bool {
-        self.entry(label).insert_condition(system)
-    }
-
-    /// Removes a system/condition from the schedule identified by `label`.
-    ///
-    /// - Returns `false` if the system does not exist.
-    /// - Returns `true` if the system existed and was removed.
-    pub fn remove_system(&mut self, label: impl ScheduleLabel, name: SystemId) -> bool {
-        self.entry(label).remove(name)
-    }
-
-    /// Adds an explicit ordering edge: `before -> after`.
-    ///
-    /// Returns `false` if either system name is not present.
-    ///
-    /// If the edge already exists, this is idempotent.
-    pub fn insert_order(
-        &mut self,
-        label: impl ScheduleLabel,
-        before: SystemId,
-        after: SystemId,
-    ) -> bool {
-        self.entry(label).insert_order(before, after)
-    }
-
-    /// Adds an explicit ordering edge: `before -> after`.
-    ///
-    /// Returns `false` if either system name is not present.
-    ///
-    /// If the edge already exists, this is idempotent.
-    pub fn insert_run_if(
-        &mut self,
-        label: impl ScheduleLabel,
-        runnable: SystemId,
-        condition: SystemId,
-    ) -> bool {
-        self.entry(label).insert_run_if(runnable, condition)
-    }
-
-    /// Removes an explicit ordering edge: `before -> after`.
-    ///
-    /// Returns `false` if either system name is not present or the order is not present.
-    pub fn remove_order(
-        &mut self,
-        label: impl ScheduleLabel,
-        before: SystemId,
-        after: SystemId,
-    ) -> bool {
-        self.entry(label).remove_order(before, after)
-    }
-
-    /// Removes a run-condition edge: `condition -> runnable`.
-    ///
-    /// Returns `false` if either system name is not present or the edge does
-    /// not exist.
-    pub fn remove_run_if(
-        &mut self,
-        label: impl ScheduleLabel,
-        runnable: SystemId,
-        condition: SystemId,
-    ) -> bool {
-        self.entry(label).remove_run_if(runnable, condition)
-    }
-
-    /// Adds one action system to the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::add_system`].
-    pub fn add_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        self.entry(label).add_system(system);
-        self
-    }
-
-    /// Removes one action system from the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::del_system`].
-    pub fn del_system<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), (), M>,
-    {
-        self.entry(label).del_system(system);
-        self
-    }
-
-    /// Adds one condition system to the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::add_condition`].
-    pub fn add_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        self.entry(label).add_condition(system);
-        self
-    }
-
-    /// Removes one condition system from the schedule identified by `label`.
-    ///
-    /// This is a chainable helper around [`Schedule::del_condition`].
-    pub fn del_condition<S, M>(&mut self, label: impl ScheduleLabel, system: S) -> &mut Self
-    where
-        S: IntoSystem<(), bool, M>,
-    {
-        self.entry(label).del_condition(system);
-        self
-    }
-
-    /// Adds one or many systems/configurations to the schedule identified by
-    /// `label`.
-    ///
-    /// This is equivalent to calling [`Schedules::config`].
+    /// All systems in `config` have their [`SystemId`] updated to include `set`
+    /// membership. Equivalent to calling [`Schedule::add_systems`].
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_systems<M>(
         &mut self,
         label: impl ScheduleLabel,
+        set: impl SystemSet,
         systems: impl IntoSystemConfig<M>,
     ) -> &mut Self {
-        self.entry(label).config(systems);
+        self.entry(label).add_systems(set, systems);
         self
     }
 
-    /// Applies a full [`IntoSystemConfig`] to the schedule identified by
-    /// `label`.
-    ///
-    /// This can insert systems and update dependency/run-condition edges.
-    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
-    pub fn config<M>(
+    /// Add one system.
+    pub fn add_system<M>(
         &mut self,
         label: impl ScheduleLabel,
-        systems: impl IntoSystemConfig<M>,
+        set: impl SystemSet,
+        system: impl IntoSystem<(), (), M>,
     ) -> &mut Self {
-        self.entry(label).config(systems);
+        self.entry(label).add_system(set, system);
         self
     }
 }

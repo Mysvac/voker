@@ -1,7 +1,6 @@
 use serde_core::{Serialize, Serializer, ser::SerializeMap};
 
 use super::{SerializeDriver, SerializeProcessor};
-
 use crate::ops::Map;
 use crate::registry::TypeRegistry;
 

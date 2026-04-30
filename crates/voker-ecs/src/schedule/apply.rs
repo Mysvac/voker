@@ -1,6 +1,13 @@
+//! Deferred-mutation synchronization barrier for schedules.
+//!
+//! [`ApplyDeferred`] is a no-op marker system inserted into a schedule graph
+//! to signal a point where pending deferred buffers must be flushed before
+//! subsequent systems execute. The free function [`apply_deferred`] provides
+//! the most common single-type variant.
+
 use core::marker::PhantomData;
 
-use crate::system::{AccessTable, System, SystemError};
+use crate::system::{AccessTable, InternedSystemSet, System, SystemError};
 use crate::system::{SystemFlags, SystemId, SystemInput};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
@@ -14,9 +21,9 @@ use crate::world::{DeferredWorld, UnsafeWorld, World};
 ///
 /// `ApplyDeferred<S>` is generic so callers can create distinct marker types.
 /// Different `S` values produce different system type identities.
-#[repr(transparent)]
 pub struct ApplyDeferred<S> {
-    tick: Tick,
+    id: SystemId,
+    last_run: Tick,
     _marker: PhantomData<S>,
 }
 
@@ -41,7 +48,8 @@ impl<S> Clone for ApplyDeferred<S> {
 #[inline(always)]
 pub fn apply_deferred<S: 'static>() -> ApplyDeferred<S> {
     ApplyDeferred {
-        tick: Tick::new(0),
+        id: SystemId::of::<ApplyDeferred<S>>(),
+        last_run: Tick::new(0),
         _marker: PhantomData,
     }
 }
@@ -49,7 +57,8 @@ pub fn apply_deferred<S: 'static>() -> ApplyDeferred<S> {
 #[inline(always)]
 pub fn apply_deferred_of_val<S: 'static>(_: S) -> ApplyDeferred<S> {
     ApplyDeferred {
-        tick: Tick::new(0),
+        id: SystemId::of::<ApplyDeferred<S>>(),
+        last_run: Tick::new(0),
         _marker: PhantomData,
     }
 }
@@ -59,7 +68,7 @@ impl<S: 'static> System for ApplyDeferred<S> {
     type Output = ();
 
     fn id(&self) -> SystemId {
-        SystemId::of::<Self>()
+        self.id
     }
 
     fn flags(&self) -> SystemFlags {
@@ -69,15 +78,27 @@ impl<S: 'static> System for ApplyDeferred<S> {
     }
 
     fn last_run(&self) -> Tick {
-        self.tick
+        self.last_run
     }
 
     fn set_last_run(&mut self, last_run: Tick) {
-        self.tick = last_run;
+        self.last_run = last_run;
+    }
+
+    fn check_ticks(&mut self, now: Tick) {
+        self.last_run.check_tick(now);
     }
 
     fn initialize(&mut self, _world: &mut World) -> AccessTable {
         AccessTable::new()
+    }
+
+    fn system_set(&self) -> InternedSystemSet {
+        self.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.id = self.id.with_system_set(set);
     }
 
     unsafe fn run_raw(

@@ -1,14 +1,14 @@
 //! Time abstractions.
 //!
 //! This module provides a cross-platform alternative to the standard library's `time` module.
-//! - In `web` environments, it re-exports `web_time` crate's implementation.
-//! - In `std` environments, it directly re-exports the standard library's contents.
+//! - In `wasm`, it directly re-exports the `web_time` crate.
+//! - In `std` environments, it directly re-exports the standard library.
 //! - In `no_std` environments, fallback implementations are used as needed
 //!   (see the `fallback` module for details).
 //!
 //! We strive to ensure that fallback implementations maintain the same API as the standard library
 //! (only stable APIs). Some newer APIs may not be immediately available;
-//! please submit an Issue in the [repository](https://github.com/voker-Engine/vc-core) for such cases.
+//! please submit an Issue in the [repository](https://github.com/voker-engine/voker) for such cases.
 //!
 //! See the [standard library](https://doc.rust-lang.org/std/time) for further details.
 
@@ -16,11 +16,14 @@ pub use core::time::{Duration, TryFromFloatSecsError};
 pub use time_impl::{Instant, SystemTime, SystemTimeError};
 
 crate::cfg::switch! {
-    crate::cfg::web => {
-        use ::web_time as time_impl;
+    crate::cfg::wasm => {
+        use web_time as time;
     }
     crate::cfg::std => {
         use ::std::time as time_impl;
+
+        #[cfg(doc)]
+        pub mod __fallback;
     }
     _ => {
         mod __fallback;

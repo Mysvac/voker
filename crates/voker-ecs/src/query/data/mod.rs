@@ -1,3 +1,9 @@
+//! [`QueryData`] implementations — the fetch half of a query.
+//!
+//! `QueryData` controls what data is retrieved from matching entities:
+//! component references (`&T`, `&mut T`), entity identity, and tuple
+//! compositions that combine multiple fetch items in one query.
+
 mod comp;
 mod entity;
 mod tuples;
@@ -97,6 +103,18 @@ use crate::world::{UnsafeWorld, World};
     note = "Consider annotating `{Self}` with `#[derive(QueryData)]`."
 )]
 pub unsafe trait QueryData {
+    /// The read-only form of this query data.
+    ///
+    /// Mutable accessors are downgraded to their read-only counterparts:
+    /// - `&mut T` and `Mut<T>` become `Ref<T>` (preserving change-tick metadata).
+    /// - `EntityMut` becomes `EntityRef`.
+    /// - Already-read-only types keep `ReadOnly = Self`.
+    ///
+    /// The constraint `ReadOnly::State = Self::State` guarantees that
+    /// `QueryState<D, F>` can be reinterpreted as `QueryState<D::ReadOnly, F>`
+    /// via a pointer cast, because every stored field has the same type.
+    type ReadOnly: ReadOnlyQueryData<State = Self::State>;
+
     /// Static data shared across all query instances.
     ///
     /// This is typically built once during query construction and contains
@@ -129,7 +147,7 @@ pub unsafe trait QueryData {
     fn build_state(world: &mut World) -> Self::State;
 
     /// Try get the static state from given world without mutable reference.
-    fn fetch_state(world: &World) -> Option<Self::State>;
+    fn try_build_state(world: &World) -> Option<Self::State>;
 
     /// Builds a per-execution cache for this query data.
     ///
@@ -232,11 +250,21 @@ pub unsafe trait QueryData {
     ) -> Option<Self::Item<'w>>;
 }
 
-/// A trait that ensures the query is read-only.
+/// Marker for [`QueryData`] types that perform only shared (read-only) component access.
 ///
-/// Then the `Query` implemented `Copy`,
-/// and the `QueryState` can be used with immutable world reference.
+/// Implementing this trait unlocks two capabilities:
+/// - [`Query<D, F>`](crate::query::Query) becomes [`Copy`] and [`Clone`], so it can be passed
+///   around freely without consuming the original.
+/// - [`QueryState`](crate::query::QueryState) accepts a shared `&World` in its `iter` / `get` /
+///   `single` methods, avoiding the need for an exclusive borrow.
+///
+/// The supertrait bound `QueryData<ReadOnly = Self>` enforces the invariant that the read-only
+/// form of a read-only type is itself — i.e., applying `as_readonly()` to an already-read-only
+/// query is a no-op.
 ///
 /// # Safety
-/// The implementer ensures it's read only.
-pub unsafe trait ReadOnlyQueryData: QueryData {}
+///
+/// The implementer must guarantee that no mutable component access occurs during
+/// [`QueryData::fetch`]. Violating this causes undefined behavior due to aliasing with
+/// other concurrent shared borrows.
+pub unsafe trait ReadOnlyQueryData: QueryData<ReadOnly = Self> {}

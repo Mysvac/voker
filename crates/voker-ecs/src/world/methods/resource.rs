@@ -1,13 +1,14 @@
-use core::alloc::Layout;
 use core::any::TypeId;
+use core::ptr::NonNull;
 
 use voker_ptr::{OwningPtr, PtrMut};
+use voker_utils::debug::DebugName;
 
 use crate::borrow::{NonSendMut, NonSendRef, ResMut, ResRef, UntypedMut};
 use crate::resource::{Resource, ResourceId};
-use crate::tick::TicksMut;
-use crate::utils::{DebugCheckedUnwrap, DebugName};
-use crate::world::{FromWorld, World};
+use crate::tick::{Tick, TicksMut};
+use crate::utils::DebugCheckedUnwrap;
+use crate::world::{FromWorld, UnsafeWorld, World};
 
 #[inline(never)]
 fn insert_internal<'a, 'b>(
@@ -18,13 +19,14 @@ fn insert_internal<'a, 'b>(
     unsafe {
         this.prepare_resource(id);
         let tick = this.this_run_fast(); // we have `full_mut` world
-        let data = this.storages.res_set.get_unchecked_mut(id);
+        let data = this.storages.resources.get_unchecked_mut(id);
         data.insert_untyped(value, tick);
         data.get_data_mut().debug_checked_unwrap()
     }
 }
 
 #[cold]
+#[track_caller]
 #[inline(never)]
 fn uninitialized_resource(name: DebugName) -> ! {
     panic!(
@@ -36,6 +38,69 @@ fn uninitialized_resource(name: DebugName) -> ! {
 }
 
 impl World {
+    /// Returns whether a resource of type `T` is present and active.
+    ///
+    /// This only checks registration + active storage state. It does not create
+    /// the resource and does not borrow it.
+    ///
+    /// Unlike methods such as `get_resource`, this function does not require
+    /// `T: Send` / `T: Sync`, because it never returns a typed reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::resource::Resource;
+    /// # use voker_ecs::world::World;
+    /// # let mut world = World::alloc();
+    /// #[derive(Resource)]
+    /// struct Counter(u32);
+    ///
+    /// assert!(!world.contains_resource::<Counter>());
+    /// world.insert_resource(Counter(1));
+    /// assert!(world.contains_resource::<Counter>());
+    /// ```
+    pub fn contains_resource<T: Resource>(&self) -> bool {
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.resources.get(id)
+        {
+            data.is_active()
+        } else {
+            false
+        }
+    }
+
+    /// Returns whether a main-thread resource of type `T` is present and active.
+    ///
+    /// This check is metadata-only and does not enforce the main-thread access
+    /// assertion used by `get_non_send`/`non_send`.
+    ///
+    /// In this storage model, `contains_resource` and `contains_non_send`
+    /// inspect the same underlying resource slot and therefore currently report
+    /// the same presence result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use voker_ecs::resource::Resource;
+    /// # use voker_ecs::world::World;
+    /// # let mut world = World::alloc();
+    /// #[derive(Resource)]
+    /// struct LocalOnly;
+    ///
+    /// assert!(!world.contains_non_send::<LocalOnly>());
+    /// world.insert_non_send(LocalOnly);
+    /// assert!(world.contains_non_send::<LocalOnly>());
+    /// ```
+    pub fn contains_non_send<T: Resource>(&self) -> bool {
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.resources.get(id)
+        {
+            data.is_active()
+        } else {
+            false
+        }
+    }
+
     /// Inserts or replaces a `Send` resource and returns a mutable reference to it.
     ///
     /// The resource is registered by type on first use. Once inserted, it can be
@@ -81,7 +146,7 @@ impl World {
     /// ```
     pub fn remove_resource<T: Resource + Send>(&mut self) -> Option<T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -108,7 +173,7 @@ impl World {
     /// ```
     pub fn drop_resource<T: Resource + Send>(&mut self) {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe {
                 data.clear();
@@ -134,7 +199,7 @@ impl World {
     /// ```
     pub fn get_resource<T: Resource + Sync>(&self) -> Option<&T> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -178,7 +243,7 @@ impl World {
     /// ```
     pub fn get_resource_ref<T: Resource + Sync>(&self) -> Option<ResRef<'_, T>> {
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -227,7 +292,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_resource::<T>() })
@@ -265,18 +330,14 @@ impl World {
     /// assert_eq!(world.resource::<Bar>().0,  false);
     /// ```
     pub fn init_resource<T: Resource + Send + FromWorld>(&mut self) {
-        let id = self.register_resource::<T>();
-        self.prepare_resource(id);
-
-        let unsafe_world = self.unsafe_world();
-        unsafe {
-            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
-            if !data.is_active() {
-                let world = unsafe_world.read_only();
-                let this_run = world.this_run();
-                data.insert(T::from_world(world), this_run);
-            }
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.resources.get(id)
+            && data.is_active()
+        {
+            return;
         }
+        let value = T::from_world(self);
+        self.insert_resource::<T>(value);
     }
 
     /// Returns an exclusive resource borrow with change detection.
@@ -308,7 +369,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.res_set.get_unchecked_mut(id);
+                let data = this.storages.resources.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run)
                     .debug_checked_unwrap()
@@ -322,7 +383,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.res_set.get_mut(id)
+            && let Some(data) = world_mut.storages.resources.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_resource::<T>() }
@@ -390,7 +451,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.remove() }
         } else {
@@ -425,7 +486,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             unsafe { data.clear() }
         }
@@ -455,7 +516,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
             && let Some(ptr) = data.get_data()
         {
             ptr.debug_assert_aligned::<T>();
@@ -507,7 +568,7 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get(id)
+            && let Some(data) = self.storages.resources.get(id)
         {
             let last_run = self.last_run();
             let this_run = self.this_run();
@@ -563,7 +624,7 @@ impl World {
         let last_run = self.last_run();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
         {
             let ptr = data.get_mut(last_run, this_run)?;
             Some(unsafe { ptr.into_non_send::<T>() })
@@ -590,23 +651,15 @@ impl World {
     /// # Panics
     /// - Panics if called from a thread other than the world's main thread.
     pub fn init_non_send<T: Resource + FromWorld>(&mut self) {
-        assert! {
-            self.thread_hash() == voker_os::thread::thread_hash(),
-            "!Send Resource can only be accessed mut on the main thread.",
+        if let Some(id) = self.resources.get_id(TypeId::of::<T>())
+            && let Some(data) = self.storages.resources.get(id)
+            && data.is_active()
+        {
+            return;
         }
 
-        let id = self.register_resource::<T>();
-        self.prepare_resource(id);
-
-        let unsafe_world = self.unsafe_world();
-        unsafe {
-            let data = unsafe_world.data_mut().storages.res_set.get_unchecked_mut(id);
-            if !data.is_active() {
-                let world = unsafe_world.read_only();
-                let this_run = world.this_run();
-                data.insert(T::from_world(world), this_run);
-            }
-        }
+        let value = T::from_world(self);
+        self.insert_non_send::<T>(value);
     }
 
     /// Returns an exclusive resource borrow with change detection.
@@ -640,7 +693,7 @@ impl World {
             let value = T::from_world(this);
 
             unsafe {
-                let data = this.storages.res_set.get_unchecked_mut(id);
+                let data = this.storages.resources.get_unchecked_mut(id);
                 data.insert(value, this_run);
                 data.get_mut(last_run, this_run)
                     .debug_checked_unwrap()
@@ -659,7 +712,7 @@ impl World {
         let world_mut = unsafe { unsafe_world.data_mut() };
 
         if let Some(id) = world_mut.get_resource_id::<T>()
-            && let Some(data) = world_mut.storages.res_set.get_mut(id)
+            && let Some(data) = world_mut.storages.resources.get_mut(id)
             && let Some(ptr) = data.get_mut(last_run, this_run)
         {
             unsafe { ptr.into_non_send::<T>() }
@@ -676,7 +729,7 @@ impl World {
     /// resource and the world simultaneously.
     ///
     /// If the resource is not exist, return `None` directly.
-    pub fn resource_scope<T: Resource + Send, R>(
+    pub fn try_resource_scope<T: Resource + Send, R>(
         &mut self,
         func: impl FnOnce(&mut World, ResMut<T>) -> R,
     ) -> Option<R> {
@@ -684,9 +737,21 @@ impl World {
         let this_run = self.this_run_fast();
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
+            let unsafed = self.unsafe_world();
+            let mutable = unsafe { unsafed.full_mut() };
+
+            let _guard = ReinsertGuard {
+                world: unsafed,
+                resource_id: id,
+                debug_name: DebugName::type_name::<T>(),
+                ptr,
+                added,
+                changed,
+            };
+
             unsafe {
                 let res_mut = UntypedMut {
                     value: PtrMut::new(ptr),
@@ -699,15 +764,7 @@ impl World {
                 }
                 .into_resource();
 
-                let ret = func(self, res_mut);
-
-                if let Some(data) = self.storages.res_set.get_mut(id) {
-                    data.from_raw(ptr, added, changed);
-                } else {
-                    core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);
-                    let layout = Layout::new::<T>();
-                    alloc::alloc::dealloc(ptr.as_ptr(), layout);
-                }
+                let ret = func(mutable, res_mut);
                 Some(ret)
             }
         } else {
@@ -721,11 +778,28 @@ impl World {
     /// Rust's borrowing rules, allowing the closure to mutably borrow both the
     /// resource and the world simultaneously.
     ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    pub fn resource_scope<T: Resource + Send, R>(
+        &mut self,
+        func: impl FnOnce(&mut World, ResMut<T>) -> R,
+    ) -> R {
+        self.try_resource_scope(func)
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+
+    /// Executes a closure with exclusive access to a resource and the world.
+    ///
+    /// This method temporarily removes the resource from the world to satisfy
+    /// Rust's borrowing rules, allowing the closure to mutably borrow both the
+    /// resource and the world simultaneously.
+    ///
     /// If the resource is not exist, return `None` directly.
     ///
     /// # Panics
     /// Panics if called from a thread other than the world's main thread.
-    pub fn non_send_scope<T: Resource, R>(
+    pub fn try_non_send_scope<T: Resource, R>(
         &mut self,
         func: impl FnOnce(&mut World, NonSendMut<T>) -> R,
     ) -> Option<R> {
@@ -735,11 +809,24 @@ impl World {
         }
 
         if let Some(id) = self.resources.get_id(TypeId::of::<T>())
-            && let Some(data) = self.storages.res_set.get_mut(id)
+            && let Some(data) = self.storages.resources.get_mut(id)
             && let Some((ptr, mut added, mut changed)) = unsafe { data.leak() }
         {
             let last_run = self.last_run();
             let this_run = self.this_run_fast();
+
+            let unsafed = self.unsafe_world();
+            let mutable = unsafe { unsafed.full_mut() };
+
+            let _guard = ReinsertGuard {
+                world: unsafed,
+                resource_id: id,
+                debug_name: DebugName::type_name::<T>(),
+                ptr,
+                added,
+                changed,
+            };
+
             unsafe {
                 let res_mut = UntypedMut {
                     value: PtrMut::new(ptr),
@@ -752,19 +839,78 @@ impl World {
                 }
                 .into_non_send();
 
-                let ret = func(self, res_mut);
-
-                if let Some(data) = self.storages.res_set.get_mut(id) {
-                    data.from_raw(ptr, added, changed);
-                } else {
-                    core::ptr::drop_in_place::<T>(ptr.as_ptr() as *mut T);
-                    let layout = Layout::new::<T>();
-                    alloc::alloc::dealloc(ptr.as_ptr(), layout);
-                }
+                let ret = func(mutable, res_mut);
                 Some(ret)
             }
         } else {
             None
+        }
+    }
+
+    /// Executes a closure with exclusive access to a resource and the world.
+    ///
+    /// This method temporarily removes the resource from the world to satisfy
+    /// Rust's borrowing rules, allowing the closure to mutably borrow both the
+    /// resource and the world simultaneously.
+    ///
+    /// # Panics
+    /// Panics if the resource does not exist or called from a thread other than
+    /// the world's main thread.
+    pub fn non_send_scope<T: Resource, R>(
+        &mut self,
+        func: impl FnOnce(&mut World, NonSendMut<T>) -> R,
+    ) -> R {
+        self.try_non_send_scope(func)
+            .unwrap_or_else(|| uninitialized_resource(DebugName::type_name::<T>()))
+    }
+}
+
+struct ReinsertGuard<'a> {
+    world: UnsafeWorld<'a>,
+    resource_id: ResourceId,
+    debug_name: DebugName,
+    ptr: NonNull<u8>,
+    added: Tick,
+    changed: Tick,
+}
+
+impl Drop for ReinsertGuard<'_> {
+    fn drop(&mut self) {
+        let world = unsafe { self.world.data_mut() };
+        // The allocated slots should not be destroyed.
+        let data = world.storages.resources.get_mut(self.resource_id).unwrap();
+
+        if data.is_active() {
+            #[cfg(all(debug_assertions, feature = "std"))]
+            if std::thread::panicking() {
+                tracing::error!(
+                    "Resource `{}` was inserted during a call to World::resource_scope, \
+                    which may result in unexpected behavior.\n In release builds, the value \
+                    inserted will be overwritten at the end of the scope.",
+                    self.debug_name,
+                );
+                // return early to maintain consistent behavior with non-panicking calls in debug builds
+                return;
+            }
+
+            #[cold]
+            #[inline(never)]
+            fn warn_reinsert(resource_name: DebugName) {
+                tracing::warn!(
+                    "Resource `{resource_name}` was inserted during a call to World::resource_scope: \
+                    the inserted value will be overwritten.",
+                );
+            }
+
+            warn_reinsert(self.debug_name);
+
+            unsafe {
+                data.clear();
+            }
+        }
+
+        unsafe {
+            data.from_raw(self.ptr, self.added, self.changed);
         }
     }
 }
@@ -772,7 +918,7 @@ impl World {
 #[cfg(test)]
 mod tests {
     use core::sync::atomic::Ordering;
-    use voker_os::sync::atomic::AtomicUsize;
+    use voker_os::atomic::AtomicUsize;
 
     use crate::resource::Resource;
     use crate::tick::DetectChanges;

@@ -65,7 +65,7 @@ unsafe impl<T: Component> QueryFilter for Changed<T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -109,7 +109,13 @@ unsafe impl<T: Component> QueryFilter for Changed<T> {
     }
 
     fn build_access(state: &Self::State, out: &mut AccessParam) {
+        // We need to access tick data. But since the filter
+        // occurs before the visitor, there will be no conflict.
         out.force_reading(*state);
+    }
+
+    fn edit_access_table(_state: &Self::State, _table: &mut crate::system::AccessTable) -> bool {
+        true // We don't need to access resources
     }
 
     unsafe fn set_for_arche<'w>(

@@ -1,8 +1,9 @@
 use core::any::TypeId;
 
+use voker_utils::debug::DebugName;
+
 use crate::message::{Message, MessageId, MessageKey};
 use crate::message::{MessageKeyIter, MessageQueue, Messages};
-use crate::utils::DebugName;
 use crate::world::World;
 
 impl World {
@@ -50,6 +51,15 @@ impl World {
         Some(msgs.write_batch(messages))
     }
 
+    /// Updates all registered message queues.
+    ///
+    /// This runs the per-queue maintenance pass used by the message subsystem,
+    /// including internal buffer rotation and cleanup of expired message data.
+    ///
+    /// In normal app flow, this is invoked automatically by `App`'s
+    /// `MainSchedulePlugin`. Users should generally not call this manually.
+    /// Calling it at the wrong time can advance/clear queue state early and may
+    /// cause readers to miss messages.
     pub fn update_messages(this: &mut Self) {
         Messages::run_updates(this);
     }
@@ -58,7 +68,7 @@ impl World {
 #[cold]
 #[inline(never)]
 fn unregistered_message(name: DebugName) {
-    log::error!(
+    tracing::error!(
         "Unable to write message `{name}`, call `World::register_message` before write it."
     );
 }

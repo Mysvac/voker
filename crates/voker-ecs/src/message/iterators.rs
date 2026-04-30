@@ -82,7 +82,7 @@ pub struct MessageCursor<M: Message> {
 }
 
 impl<M: Message> FromWorld for MessageCursor<M> {
-    fn from_world(world: &World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let last_index = world
             .get_resource::<MessageQueue<M>>()
             .map(MessageQueue::<M>::oldest_message_index)
@@ -110,6 +110,7 @@ impl<M: Message> Clone for MessageCursor<M> {
 }
 
 impl<M: Message> MessageCursor<M> {
+    // Create a `MessageCursor` that pointee oldest message.
     pub fn new(messages: &MessageQueue<M>) -> Self {
         let last_index = messages.oldest_message_index();
         Self {

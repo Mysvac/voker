@@ -37,13 +37,6 @@ pub(crate) fn reflect_default_(voker_reflect_path: &syn::Path) -> TokenStream {
 }
 
 #[inline]
-pub(crate) fn reflect_from_ptr_(voker_reflect_path: &syn::Path) -> TokenStream {
-    quote! {
-        #voker_reflect_path::registry::ReflectFromPtr
-    }
-}
-
-#[inline]
 pub(crate) fn reflect_from_reflect_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectFromReflect
@@ -61,5 +54,12 @@ pub(crate) fn reflect_serialize_(voker_reflect_path: &syn::Path) -> TokenStream 
 pub(crate) fn reflect_deserialize_(voker_reflect_path: &syn::Path) -> TokenStream {
     quote! {
         #voker_reflect_path::registry::ReflectDeserialize
+    }
+}
+
+#[inline]
+pub(crate) fn reflect_convert_(voker_reflect_path: &syn::Path) -> TokenStream {
+    quote! {
+        #voker_reflect_path::registry::ReflectConvert
     }
 }

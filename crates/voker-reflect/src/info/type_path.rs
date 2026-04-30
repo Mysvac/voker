@@ -39,19 +39,19 @@ use core::any::{Any, TypeId};
 ///
 /// // This type path will never change, even if the definition is moved.
 /// #[derive(TypePath)]
-/// #[reflect(type_path = "my_crate::foo::StableTypePath")]
+/// #[type_path = "my_crate::foo::StableTypePath"]
 /// struct StableTypePath;
 ///
 /// // Type paths can have any number of path segments.
 /// // the last segment will be considered as type_name/type_ident.
 /// #[derive(TypePath)]
-/// #[reflect(type_path = "my_crate::foo::bar::baz::DeeplyNestedTypePath")]
+/// #[type_path = "my_crate::foo::bar::baz::DeeplyNestedTypePath"]
 /// struct DeeplyNestedTypePath;
 ///
 /// // Generics are also supported, will be recognized by macro automatically.
 /// // Should not not manually mark it.
 /// #[derive(TypePath)]
-/// #[reflect(type_path = "my_crate::foo::StableGenericTypePath")]
+/// #[type_path = "my_crate::foo::StableGenericTypePath"]
 /// struct StableGenericTypePath<T, const N: usize>([T; N]);
 /// ```
 ///
@@ -65,7 +65,7 @@ use core::any::{Any, TypeId};
 /// struct DefaultImpl;
 ///
 /// #[derive(Reflect)]
-/// #[reflect(type_path = "my_crate::foo::CustomImpl")]
+/// #[type_path = "my_crate::foo::CustomImpl"]
 /// struct CustomImpl;
 ///
 /// // All other trait can be disabled, only implementing TypePath.

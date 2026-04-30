@@ -62,7 +62,7 @@ impl Bundles {
             self.explicit.insert(type_id, id);
             id
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let index = self.infos.len();
             let id = BundleId::new(index as u32);
 
@@ -92,7 +92,7 @@ impl Bundles {
             self.required.insert(type_id, id);
             id
         } else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let index = self.infos.len();
             let id = BundleId::new(index as u32);
 

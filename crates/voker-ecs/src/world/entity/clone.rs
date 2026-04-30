@@ -3,18 +3,22 @@ use crate::utils::DebugLocation;
 use crate::world::EntityOwned;
 
 impl EntityOwned<'_> {
-    /// Despawns the current entity.
+    /// Clone the current entity and return the spawned entity handle.
     ///
-    /// If `self.location` is none, this function is no-op.
+    /// # Panics
+    ///
+    /// Panics if the current entity is despawned.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clone(&mut self, linked_clone: bool) -> Entity {
         self.clone_with_caller(linked_clone, DebugLocation::caller())
     }
 
-    /// Despawns the current entity.
+    /// Clone the current entity and return the spawned entity handle.
     ///
-    /// If `self.location` is none, this function is no-op.
+    /// # Panics
+    ///
+    /// Panics if the current entity is despawned.
     pub(crate) fn clone_with_caller(
         &mut self,
         linked_clone: bool,

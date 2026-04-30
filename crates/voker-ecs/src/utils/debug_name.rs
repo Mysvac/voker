@@ -130,8 +130,8 @@ impl DebugName {
     /// let name_string = name.parse();
     /// ```
     #[inline]
-    pub fn parse(&self) -> String {
-        ToString::to_string(self)
+    pub fn parse(self) -> String {
+        ToString::to_string(&self)
     }
 }
 

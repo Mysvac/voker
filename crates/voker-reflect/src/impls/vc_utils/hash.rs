@@ -6,7 +6,7 @@ use crate::impls::{impl_reflect_for_hashmap, impl_reflect_for_hashset};
 // HashState Hasher
 
 impl_type_path!(::voker_utils::hash::FixedHashState);
-impl_type_path!(::voker_utils::hash::NoOpHashState);
+impl_type_path!(::voker_utils::hash::NoopHashState);
 impl_type_path!(::voker_utils::hash::SparseHashState);
 
 impl_type_path!(
@@ -51,15 +51,15 @@ impl_reflect_for_hashmap!(
 );
 
 // -----------------------------------------------------------------------------
-// NoOp HashSet and HashMap
+// Noop HashSet and HashMap
 
-impl_type_path!(::voker_utils::hash::NoOpHashSet<T>);
-impl_type_path!(::voker_utils::hash::NoOpHashMap<K, V>);
+impl_type_path!(::voker_utils::hash::NoopHashSet<T>);
+impl_type_path!(::voker_utils::hash::NoopHashMap<K, V>);
 
-impl_reflect_for_fixedhashset!(::voker_utils::hash::NoOpHashSet<T>);
+impl_reflect_for_fixedhashset!(::voker_utils::hash::NoopHashSet<T>);
 
 impl_reflect_for_fixedhashmap!(
-    ::voker_utils::hash::NoOpHashMap<K, V>
+    ::voker_utils::hash::NoopHashMap<K, V>
 );
 
 // -----------------------------------------------------------------------------

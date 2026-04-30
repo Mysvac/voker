@@ -16,7 +16,6 @@ use crate::info::{DynamicTypePath, TypePath};
 ///
 /// We provided some `TypeData`s with `Reflect` prefix, such as:
 /// - [`ReflectDefault`](crate::registry::ReflectDefault)
-/// - [`ReflectFromPtr`](crate::registry::ReflectFromPtr)
 /// - [`ReflectFromReflect`](crate::registry::ReflectFromReflect)
 /// - [`ReflectSerialize`](crate::registry::ReflectSerialize)
 /// - [`ReflectDeserialize`](crate::registry::ReflectDeserialize)

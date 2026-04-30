@@ -30,11 +30,15 @@ use alloc::vec::Vec;
 use core::ops::Deref;
 use core::slice;
 
+use serde::{Deserialize, Serialize};
+use voker_reflect::Reflect;
+
 use crate::bundle::Bundle;
 use crate::clone::{CloneContext, CloneSource, CloneTarget};
 use crate::command::EntityCommands;
 use crate::component::Component;
 use crate::entity::Entity;
+use crate::reflect::{ReflectComponent, ReflectFromWorld};
 use crate::relationship::{RelatedSpawner, RelatedSpawnerCommands};
 use crate::world::{EntityOwned, FromWorld, World};
 
@@ -46,7 +50,10 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// When removed, the child is detached from the previous parent.
 ///
 /// With `linked_lifecycle = true`, despawning a parent recursively despawns children.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Reflect, Component, Serialize, Deserialize)]
+#[reflect(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[type_data(ReflectComponent, ReflectFromWorld)]
 #[relationship(relationship_target = Children)]
 pub struct ChildOf(#[related] pub Entity);
 
@@ -59,7 +66,7 @@ impl ChildOf {
 }
 
 impl FromWorld for ChildOf {
-    fn from_world(_: &World) -> Self {
+    fn from_world(_: &mut World) -> Self {
         Self(Entity::PLACEHOLDER)
     }
 }
@@ -71,8 +78,10 @@ impl FromWorld for ChildOf {
 ///
 /// Avoid mutating this component directly. Update `ChildOf` on child entities
 /// instead so both sides of the relationship remain synchronized.
-#[derive(Component, Default, Debug, PartialEq, Eq)]
+#[derive(Reflect, Component, Default, Debug, PartialEq, Eq)]
 #[component(cloner = Children::cloner)]
+#[reflect(Default, Debug, PartialEq)]
+#[type_data(ReflectComponent, ReflectFromWorld)]
 #[relationship_target(relationship = ChildOf, linked_lifecycle)]
 pub struct Children(#[related] Vec<Entity>);
 
@@ -87,7 +96,7 @@ impl Children {
     fn cloner(src: CloneSource, mut dst: CloneTarget, ctx: &mut CloneContext) {
         if ctx.linked_clone() {
             dst.write::<Self>(Self(src.read::<Self>().0.clone()));
-            ctx.defer_remap::<Self>();
+            ctx.defer_map_entities::<Self>();
         } else {
             dst.write::<Self>(Self(Vec::new()));
         }
@@ -146,7 +155,7 @@ impl<'w> EntityOwned<'w> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
-        self.insert_related::<ChildOf>(children)
+        self.add_relateds::<ChildOf>(children)
     }
 
     /// Removes one child relationship from this entity.
@@ -209,7 +218,7 @@ impl<'a> EntityCommands<'a> {
     /// Adds many children to this entity via [`ChildOf`].
     #[inline]
     pub fn add_children(&mut self, children: &[Entity]) -> &mut Self {
-        self.insert_related::<ChildOf>(children)
+        self.add_relateds::<ChildOf>(children)
     }
 
     /// Removes specific child relationships from this entity.
@@ -342,7 +351,7 @@ mod tests {
 
         world
             .commands()
-            .with_entity(root)
+            .entity(root)
             .add_child(a)
             .add_children(&[b])
             .with_child(())
@@ -356,7 +365,7 @@ mod tests {
         assert!(children.contains(&b));
         assert!(children.len() >= 4);
 
-        world.commands().with_entity(root).remove_children(&[a]);
+        world.commands().entity(root).remove_children(&[a]);
         world.flush();
         assert!(!world.get::<Children>(root).unwrap().contains(&a));
     }

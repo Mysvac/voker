@@ -16,21 +16,21 @@ pub(crate) fn impl_enum(info: &ReflectEnum) -> TokenStream {
     let type_path_trait_tokens = if meta.attrs().impl_switchs.impl_type_path {
         impl_trait_type_path(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Typed
     let typed_trait_tokens = if meta.attrs().impl_switchs.impl_typed {
         impl_trait_typed(meta, info.type_info_tokens(), false, true)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Enum
     let enum_trait_tokens = if meta.attrs().impl_switchs.impl_enum {
         impl_trait_enum(info)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Reflect
@@ -56,21 +56,21 @@ pub(crate) fn impl_enum(info: &ReflectEnum) -> TokenStream {
             true,
         )
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
         impl_trait_get_type_meta(meta, get_registry_dependencies(info))
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: FromReflect
     let from_reflect_trait_tokens = if meta.attrs().impl_switchs.impl_from_reflect {
         impl_enum_from_reflect(info)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // featuer: auto_resiter
@@ -145,12 +145,13 @@ fn impl_trait_enum(info: &ReflectEnum) -> TokenStream {
 
         fn process_fields(
             fields: &[StructField],
-            mut f: impl FnMut(&StructField) + Sized,
+            mut f: impl FnMut(&StructField) -> bool + Sized,
         ) -> usize {
             let mut field_len = 0;
             for field in fields.iter() {
-                f(field);
-                field_len += 1;
+                if f(field) {
+                    field_len += 1;
+                }
             }
             field_len
         }
@@ -163,16 +164,22 @@ fn impl_trait_enum(info: &ReflectEnum) -> TokenStream {
             }
             EnumVariantFields::Unnamed(fields) => {
                 let field_len = process_fields(fields, |field: &StructField| {
-                    let field_index = field.field_index;
+                    if field.is_ignore() {
+                        return false;
+                    }
 
-                    let declare_field = syn::Index::from(field_index);
+                    let reflect_index = field.reflect_index;
+                    let field_index = field.to_member();
 
                     enum_field_at.push(quote! {
-                        #variant_path_ { #declare_field : __value, .. } if #ref_index == #field_index => #OptionFP::Some(__value)
+                        #variant_path_ { #field_index : __value__, .. } if #ref_index == #reflect_index => #OptionFP::Some(__value__)
                     });
+
                     enum_field_at_mut.push(quote! {
-                        #variant_path_ { #declare_field : __value, .. } if #ref_index == #field_index => #OptionFP::Some(__value)
+                        #variant_path_ { #field_index : __value__, .. } if #ref_index == #reflect_index => #OptionFP::Some(__value__)
                     });
+
+                    true
                 });
 
                 enum_field_len.push(quote! {
@@ -181,6 +188,10 @@ fn impl_trait_enum(info: &ReflectEnum) -> TokenStream {
             }
             EnumVariantFields::Named(fields) => {
                 let field_len = process_fields(fields, |field: &StructField| {
+                    if field.is_ignore() {
+                        return false;
+                    }
+
                     let field_ident = field.data.ident.as_ref().unwrap();
                     let field_name = field_ident.to_string();
                     let field_index = field.field_index;
@@ -200,6 +211,8 @@ fn impl_trait_enum(info: &ReflectEnum) -> TokenStream {
                     enum_name_at.push(quote! {
                         #variant_path_{ .. } if #ref_index == #field_index => #OptionFP::Some(#field_name)
                     });
+
+                    true
                 });
 
                 enum_field_len.push(quote! {
@@ -240,14 +253,14 @@ fn impl_trait_enum(info: &ReflectEnum) -> TokenStream {
             }
 
             // fn index_of(&self, #ref_name: &str) -> #OptionFP<usize> {
-            //         match self {
+            //     match self {
             //         #(#enum_index_of,)*
             //         _ => #OptionFP::None,
             //     }
             // }
 
             fn name_at(&self, #ref_index: usize) -> #OptionFP<&str> {
-                    match self {
+                match self {
                     #(#enum_name_at,)*
                     _ => #OptionFP::None,
                 }
@@ -319,7 +332,7 @@ fn get_enum_apply_impl(info: &ReflectEnum) -> TokenStream {
             }
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     quote! {
@@ -358,13 +371,25 @@ fn get_enum_to_dynamic_impl(meta: &ReflectMeta) -> TokenStream {
 
 /// Generate `Reflect::reflect_clone` implementation tokens.
 fn get_enum_clone_impl(info: &ReflectEnum) -> TokenStream {
-    use crate::path::fp::{CloneFP, ResultFP};
+    use crate::path::fp::{CloneFP, OptionFP, ResultFP};
 
     let meta = info.meta();
     let voker_reflect_path = meta.voker_reflect_path();
     let macro_utils_ = crate::path::macro_utils_(voker_reflect_path);
     let reflect_ = crate::path::reflect_(voker_reflect_path);
     let reflect_clone_error_ = crate::path::reflect_clone_error_(voker_reflect_path);
+    let type_path_ = crate::path::type_path_(voker_reflect_path);
+
+    if meta.attrs().avail_traits.not_cloneable.is_some() {
+        return quote! {
+            #[inline]
+            fn reflect_clone(&self) -> #ResultFP<#macro_utils_::Box<dyn #reflect_>, #reflect_clone_error_> {
+                #ResultFP::Err(#reflect_clone_error_::NotSupport {
+                    type_path: <Self as #type_path_>::type_path(),
+                })
+            }
+        };
+    }
 
     if let Some(span) = meta.attrs().avail_traits.clone {
         let reflect_clone = Ident::new("reflect_clone", span);
@@ -392,7 +417,19 @@ fn get_enum_clone_impl(info: &ReflectEnum) -> TokenStream {
                 syn::Fields::Named(..) | syn::Fields::Unnamed(..) => {
                     let mut member_tokens = TokenStream::new();
                     let mut clone_tokens = TokenStream::new();
+
+                    let mut unsupported: bool = false;
+                    let mut err_info: String = String::new();
+
                     for (index, field) in variant.fields().iter().enumerate() {
+                        if field.is_ignore() && !field.cloneable() {
+                            unsupported = true;
+                            let field_id = field.data.ident.as_ref();
+                            err_info = field_id
+                                .map(|id| id.to_string())
+                                .unwrap_or_else(|| index.to_string());
+                        }
+
                         let field_ty = &field.data.ty;
                         let member = field.to_member();
                         let accessor = Ident::new(&format!("__mem_{index}"), Span::call_site());
@@ -400,15 +437,36 @@ fn get_enum_clone_impl(info: &ReflectEnum) -> TokenStream {
                         member_tokens.extend(quote! {
                             #member: #accessor,
                         });
-                        clone_tokens.extend(quote! {
-                            #member: #macro_utils_::reflect_clone_field::<#field_ty>(#accessor)?,
+
+                        if field.is_ignore() {
+                            clone_tokens.extend(quote! {
+                                #member: <#field_ty as #CloneFP>::clone(#accessor),
+                            });
+                        } else {
+                            clone_tokens.extend(quote! {
+                                #member: #macro_utils_::reflect_clone_field::<#field_ty>(#accessor)?,
+                            });
+                        }
+                    }
+
+                    if unsupported {
+                        let variant_ident = ident.to_string();
+                        match_tokens.extend(quote! {
+                            #variant_path_{ .. } => #ResultFP::Err(
+                                #reflect_clone_error_::FieldNotCloneable {
+                                    type_path: <Self as #type_path_>::type_path(),
+                                    field: #err_info,
+                                    variant: #OptionFP::Some(#variant_ident),
+                                }
+                            ),
+                        });
+                    } else {
+                        match_tokens.extend(quote! {
+                            #variant_path_{ #member_tokens } => #ResultFP::Ok(
+                                #macro_utils_::Box::new(#variant_path_ { #clone_tokens }) as #macro_utils_::Box<dyn #reflect_>
+                            ),
                         });
                     }
-                    match_tokens.extend(quote! {
-                        #variant_path_{ #member_tokens } => #ResultFP::Ok(
-                            #macro_utils_::Box::new(#variant_path_ { #clone_tokens }) as #macro_utils_::Box<dyn #reflect_>
-                        ),
-                    });
                 }
             }
         }
@@ -430,7 +488,7 @@ fn get_enum_eq_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.eq {
+    if let Some(span) = meta.attrs().avail_traits.partial_eq {
         let reflect_eq = Ident::new("reflect_eq", span);
 
         quote! {
@@ -459,7 +517,7 @@ fn get_enum_cmp_impl(meta: &ReflectMeta) -> TokenStream {
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.cmp {
+    if let Some(span) = meta.attrs().avail_traits.partial_ord {
         let reflect_cmp = Ident::new("reflect_cmp", span);
 
         quote! {
@@ -550,7 +608,7 @@ fn get_registry_dependencies(info: &ReflectEnum) -> TokenStream {
 
 /// Generate `FromReflect` trait implementation tokens.
 fn impl_enum_from_reflect(info: &ReflectEnum) -> TokenStream {
-    use crate::path::fp::OptionFP;
+    use crate::path::fp::{DefaultFP, OptionFP};
     let meta = info.meta();
 
     let voker_reflect_path = meta.voker_reflect_path();
@@ -580,32 +638,47 @@ fn impl_enum_from_reflect(info: &ReflectEnum) -> TokenStream {
             syn::Fields::Named(..) | syn::Fields::Unnamed(..) => {
                 let mut clone_tokens = TokenStream::new();
 
+                let mut unsupported = false;
+
                 for field in variant.fields().iter() {
+                    if field.is_ignore() && !field.defaultable() {
+                        unsupported = true;
+                        break;
+                    }
+
                     let field_ty = &field.data.ty;
                     let member = field.to_member();
 
-                    let getter = match &field.data.ident {
-                        Some(id) => {
-                            let name = id.to_string();
-                            quote! { #enum_::field(#input_, #name)? }
-                        }
-                        None => {
-                            let index = field.field_index;
-                            quote! { #enum_::field_at(#input_, #index)? }
-                        }
-                    };
+                    if !field.is_ignore() {
+                        let getter = match &field.data.ident {
+                            Some(id) => {
+                                let name = id.to_string();
+                                quote! { #enum_::field(#input_, #name)? }
+                            }
+                            None => {
+                                let index = field.field_index;
+                                quote! { #enum_::field_at(#input_, #index)? }
+                            }
+                        };
 
-                    clone_tokens.extend(quote! {
-                        #member: <#field_ty as #from_reflect_>::from_reflect(#getter)?,
-                    });
+                        clone_tokens.extend(quote! {
+                            #member: <#field_ty as #from_reflect_>::from_reflect(#getter)?,
+                        });
+                    } else {
+                        clone_tokens.extend(quote! {
+                            #member: <#field_ty as #DefaultFP>::default(),
+                        });
+                    }
                 }
 
-                match_tokens.extend(quote! {
-                    #variant_name_ => {
-                        let __result__ = #variant_path_{ #clone_tokens };
-                        return #OptionFP::Some(__result__);
-                    },
-                });
+                if !unsupported {
+                    match_tokens.extend(quote! {
+                        #variant_name_ => {
+                            let __result__ = #variant_path_{ #clone_tokens };
+                            return #OptionFP::Some(__result__);
+                        },
+                    });
+                }
             }
         }
     }

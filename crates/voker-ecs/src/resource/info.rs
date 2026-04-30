@@ -2,8 +2,10 @@ use core::alloc::Layout;
 use core::any::TypeId;
 use core::fmt::Debug;
 
+use voker_utils::debug::DebugName;
+
 use super::{Resource, ResourceId};
-use crate::utils::{DebugName, Dropper};
+use crate::utils::Dropper;
 
 // -----------------------------------------------------------------------------
 // ResourceDescriptor

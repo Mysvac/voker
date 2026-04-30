@@ -10,20 +10,13 @@ repository.workspace = true
 default = ["std"]
 
 std = [
-  "wasm-bindgen-futures?/std",
-  "js-sys?/std",
-  "wasm-bindgen?/std",
   "portable-atomic/std",
   "dep:thread_local",
 ]
 
-web = [
-  "std",
-  "dep:web-time",
-  "dep:wasm-bindgen-futures",
-  "dep:wasm-bindgen",
-  "dep:js-sys",
-]
+web = ["std"]
+
+android = ["std"]
 
 [dependencies]
 voker-cfg = { path = "../voker-cfg" }
@@ -32,17 +25,27 @@ voker-cfg = { path = "../voker-cfg" }
 
 thread_local = { version = "1.0", optional = true }
 
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-web-time = { version = "1.1", default-features = false, optional = true }
-wasm-bindgen-futures = { version = "0.4", default-features = false, optional = true }
-js-sys = { version = "0.3", default-features = false, optional = true }
-wasm-bindgen = { version = "0.2", default-features = false, optional = true }
-
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64")))'.dependencies]
-portable-atomic = { version = "1", default-features = false, features = [ "fallback" ] }
+portable-atomic = { version = "1", default-features = false, features = ["fallback"] }
 
 # We currently do not support platforms without atomic pointers.
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3", default-features = false, optional = true, features = ["std"] }
+web-time = { version = "1.1", default-features = false, optional = true, features = ["serde"] }
+wasm-bindgen = { version = "0.2", default-features = false, optional = true, features = ["std"] }
+wasm-bindgen-futures = { version = "0.4.46", default-features = false, optional = true, features = ["std"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = ">= 0.59.0", features = [
+  "Win32_UI_Shell",
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_System_Com",
+] }
 
 [lints]
 workspace = true

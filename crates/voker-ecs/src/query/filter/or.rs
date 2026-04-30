@@ -4,7 +4,7 @@ use super::QueryFilter;
 use crate::archetype::Archetype;
 use crate::entity::Entity;
 use crate::storage::{Table, TableRow};
-use crate::system::{AccessParam, FilterParamBuilder};
+use crate::system::{AccessParam, AccessTable, FilterParamBuilder};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -46,8 +46,8 @@ macro_rules! impl_tuple {
                 <$name>::build_state(world)
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
-                <$name>::fetch_state(world)
+            fn try_build_state(world: &World) -> Option<Self::State> {
+                <$name>::try_build_state(world)
             }
 
             unsafe fn build_cache<'w>(
@@ -68,7 +68,13 @@ macro_rules! impl_tuple {
                 <$name>::build_filter(state, outer);
             }
 
-            fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+            fn build_access(state: &Self::State, out: &mut AccessParam) {
+                <$name>::build_access(state, out);
+            }
+
+            fn edit_access_table(state: &Self::State, table: &mut AccessTable) -> bool {
+                <$name>::edit_access_table(state, table)
+            }
 
             unsafe fn set_for_arche<'w>(
                 state: &Self::State,
@@ -119,8 +125,8 @@ macro_rules! impl_tuple {
                 ( $( <$name>::build_state(world), )* )
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
-                Some(( $( <$name>::fetch_state(world)?, )* ))
+            fn try_build_state(world: &World) -> Option<Self::State> {
+                Some(( $( <$name>::try_build_state(world)?, )* ))
             }
 
             unsafe fn build_cache<'w>(
@@ -143,7 +149,15 @@ macro_rules! impl_tuple {
                 outer.append(&mut ret);
             }
 
-            fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+            fn build_access(state: &Self::State, out: &mut AccessParam) {
+                $( <$name>::build_access(&state.$index, out); )*
+            }
+
+            fn edit_access_table(state: &Self::State, table: &mut AccessTable) -> bool {
+                let valid = true;
+                $( let valid = valid && <$name>::edit_access_table(&state.$index, table); )*
+                valid
+            }
 
             unsafe fn set_for_arche<'w>(
                 state: &Self::State,

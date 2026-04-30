@@ -17,10 +17,6 @@ mod rwlock;
 mod lazylock;
 mod once;
 
-// mod condvar;
-// mod barrier;
-// mod channel;
-
 // -----------------------------------------------------------------------------
 // Exports
 
@@ -29,7 +25,3 @@ pub use mutex::{Mutex, MutexGuard};
 pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use once::{Once, OnceLock, OnceState};
 pub use lazylock::LazyLock;
-
-// pub use channel::mpsc;
-// pub use condvar::{Condvar, WaitTimeoutResult};
-// pub use barrier::{Barrier, BarrierWaitResult};

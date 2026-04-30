@@ -1,3 +1,15 @@
+//! Event types, storage, lifecycle hooks, and trigger infrastructure.
+//!
+//! Events are transient data packets broadcast to observers and event readers.
+//! This module provides:
+//! - the [`Event`] and [`EntityEvent`] traits and their derive re-exports,
+//! - built-in lifecycle events (`Add`, `Insert`, `Remove`, `Discard`, `Despawn`, `Clone`),
+//! - [`EventId`] for stable event-type identification,
+//! - trigger primitives used by the observer dispatch path.
+//!
+//! Normal usage goes through observers (`On<E>`) or system parameters
+//! (`EventReader<E>`, `EventWriter<E>`).
+
 mod event;
 mod events;
 mod ident;

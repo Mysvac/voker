@@ -1,3 +1,10 @@
+//! Restricted world access for hooks and observers.
+//!
+//! [`DeferredWorld`] is a view of the world that permits deferred structural
+//! mutations (via commands and observer triggering) without allowing immediate
+//! archetype transitions. It is the view presented to component hooks and
+//! observer systems to prevent re-entrancy during structural changes.
+
 use core::ops::Deref;
 
 use crate::borrow::{NonSendMut, ResMut};
@@ -217,8 +224,22 @@ impl<'w> DeferredWorld<'w> {
     /// Note that events will be pushed to the command queue and will
     /// **not** be executed immediately.
     #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn trigger<'a>(&mut self, event: impl Event<Trigger<'a>: Default>) {
         self.commands().trigger(event);
+    }
+
+    /// Delay-triggered specified implementation.
+    ///
+    /// Note that events will be pushed to the command queue and will
+    /// **not** be executed immediately.
+    #[inline]
+    #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
+    pub fn trigger_with<E>(&mut self, event: E, trigger: E::Trigger<'static>)
+    where
+        E: Event<Trigger<'static>: Send + Sync>,
+    {
+        self.commands().trigger_with(event, trigger);
     }
 
     /// Mutates component `T` on `entity` while preserving hook semantics.

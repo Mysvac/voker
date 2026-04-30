@@ -1,0 +1,36 @@
+[package]
+name = "voker-time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["std"]
+
+std = [
+    "serde/std",
+    "voker-os/std",
+    "voker-ecs/std",
+    "voker-app/std",
+    "voker-reflect/std",
+]
+
+[dependencies]
+voker-cfg = { path = "../voker-cfg" }
+voker-utils = { path = "../voker-utils", default-features = false }
+voker-os = { path = "../voker-os", default-features = false }
+voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-app = { path = "../voker-app", default-features = false }
+voker-reflect = { path = "../voker-reflect", default-features = false }
+
+serde = { version = "1", default-features = false, features = ["derive"] }
+tracing = { version = "0.1", default-features = false }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+all-features = true

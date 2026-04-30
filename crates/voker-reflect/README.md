@@ -1,4 +1,4 @@
-# Runtime reflection system for Rust.
+# Runtime reflection system
 
 This library implements a dynamic reflection system in Rust, designed to provide
 comprehensive runtime type information and data manipulation capabilities.
@@ -101,7 +101,7 @@ use voker_reflect::prelude::*;
 use voker_reflect::ops::Struct;
 
 #[derive(Reflect, Default)]
-#[reflect(default)]
+#[reflect(Default)]
 struct Enemy {
     species: String,
     hp: u32,
@@ -134,11 +134,13 @@ use core::marker::PhantomData;
 use voker_reflect::prelude::*;
 
 #[derive(Reflect, PartialEq, Debug)]
-#[reflect(type_path = "example::MyStruct")]
+#[type_path = "example::MyStruct"]
 struct MyStruct {
     value: i32,
     #[reflect(skip_serde)]
     _marker: PhantomData<i32>,
+    // or use `#[reflect(ignore, clone, default)]`
+    // for non-reflective.
 }
 
 let mut registry = TypeRegistry::new();
@@ -165,18 +167,13 @@ assert_eq!(dynamic.take::<MyStruct>().unwrap(), value);
 
 ### `default`
 
-Includes `std` , `debug` and `auto_register`.
+Includes `std` .
 
 ### `std`
 
 Enabled by default.
 
-Provide reflection implementations for standard library containers like `HashMap`.
-
-### `debug`
-
-Enabled by default, when turned on, we will record type information
-stack during serialization and deserialization.
+Provide reflection implementations for standard library containers like `HashMap` and `PathBuf` .
 
 ### `reflect_docs`
 
@@ -187,6 +184,10 @@ When disabled, documentation functions remain available but always return empty 
 
 See [`TypeInfo::docs`](crate::info::TypeInfo::docs) for details.
 
-[`Struct`]: ops::Struct
-[`Enum`]: ops::Enum
-[`Tuple`]: ops::Tuple
+### `uuid`
+
+Reflect `uuid` crate's `Uuid` type. Auto enabled when you imported `voker-asset` crate.
+
+### `glam`
+
+Reflect `glam` crate's types. Auto enabled when you imported `voker-math` crate.

@@ -26,11 +26,10 @@ impl Drop for AbortOnPanic {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
-        log::error!("Aborting due to allocator error.");
+        tracing::error!("Aborting due to allocator error.");
 
         crate::cfg::std! {
             if {
-                ::std::eprintln!("Aborting due to allocator error.");
                 ::std::process::abort();
             } else {
                 panic!("Aborting due to allocator error.");

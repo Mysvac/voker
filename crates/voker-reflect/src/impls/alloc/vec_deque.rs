@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::info::{GenericInfo, Generics, ListInfo, TypeInfo, TypeParamInfo, Typed};
 use crate::ops::{List, ListItemIter};
-use crate::registry::{FromType, GetTypeMeta, ReflectFromPtr, TypeMeta};
+use crate::registry::{FromType, GetTypeMeta, TypeMeta};
 use crate::registry::{ReflectDefault, ReflectFromReflect};
 use crate::{FromReflect, Reflect, impls};
 
@@ -111,9 +111,8 @@ impl<T: Typed + FromReflect> List for VecDeque<T> {
 
 impl<T: Typed + FromReflect + GetTypeMeta> GetTypeMeta for VecDeque<T> {
     fn get_type_meta() -> TypeMeta {
-        let mut meta = TypeMeta::with_capacity::<Self>(3);
+        let mut meta = TypeMeta::with_capacity::<Self>(2);
         meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }

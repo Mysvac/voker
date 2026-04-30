@@ -2,11 +2,13 @@ use core::alloc::Layout;
 use core::any::TypeId;
 use core::fmt::Debug;
 
+use voker_utils::debug::DebugName;
+
 use super::hook::{ComponentHook, ComponentHooks};
 use super::{Component, ComponentId, Required, StorageMode};
 use crate::clone::ComponentCloner;
 use crate::relationship::RelationshipAccessor;
-use crate::utils::{DebugName, Dropper};
+use crate::utils::Dropper;
 
 // -----------------------------------------------------------------------------
 // ComponentDescriptor
@@ -63,7 +65,7 @@ impl ComponentDescriptor {
 pub struct ComponentInfo {
     id: ComponentId,
     descriptor: ComponentDescriptor,
-    link_accessor: Option<RelationshipAccessor>,
+    relationship_accessor: Option<RelationshipAccessor>,
 }
 
 impl Debug for ComponentInfo {
@@ -84,7 +86,7 @@ impl ComponentInfo {
         Self {
             id,
             descriptor,
-            link_accessor: None,
+            relationship_accessor: None,
         }
     }
 
@@ -186,8 +188,8 @@ impl ComponentInfo {
 
     /// Returns the component's `RelationshipAccessor` if exists.
     #[inline(always)]
-    pub fn link_accessor(&self) -> Option<RelationshipAccessor> {
-        self.link_accessor
+    pub fn relationship_accessor(&self) -> Option<RelationshipAccessor> {
+        self.relationship_accessor
     }
 
     /// Returns a mutable reference to component's hook list.
@@ -203,7 +205,7 @@ impl ComponentInfo {
     ///
     /// It is currently private that only be used by component registration.
     #[inline(always)]
-    pub(crate) fn set_link_accessor(&mut self, accessor: RelationshipAccessor) {
-        self.link_accessor = Some(accessor);
+    pub(crate) fn set_relationship_accessor(&mut self, accessor: RelationshipAccessor) {
+        self.relationship_accessor = Some(accessor);
     }
 }

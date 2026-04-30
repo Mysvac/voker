@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use core::{error, fmt};
 
-use voker_os::sync::Arc;
+use alloc::sync::Arc;
 
 use crate::info::{CustomAttributes, NamedField, UnnamedField, impl_docs_fn};
 use crate::info::{impl_custom_attributes_fn, impl_with_custom_attributes};

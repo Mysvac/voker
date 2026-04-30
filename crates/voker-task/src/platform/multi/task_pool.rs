@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use voker_os::thread::available_parallelism;
 use voker_os::utils::SegQueue;
-use voker_os::sync::Arc;
+use alloc::sync::Arc;
 use futures_lite::FutureExt;
 use async_task::FallibleTask;
 
@@ -428,8 +428,7 @@ impl TaskPool {
             let ex: &ThreadExecutor = ex; // From Arc to Inner
             #[expect(unsafe_code, reason = "need to transmute lifetime.")]
             let ex: &'static ThreadExecutor = unsafe { mem::transmute(ex) };
-            #[expect(unsafe_code, reason = "thread local executor")]
-            unsafe { ex.ticker_unchecked() }
+            ex.ticker_unchecked()
         })
     }
 
@@ -652,9 +651,7 @@ impl TaskPool {
         let tick_global = tick_global || self.threads.is_empty();
 
         // we get this from a thread local so we should always be on the scope executors thread.
-        let local_ticker = unsafe {
-            scope_executor.ticker_unchecked()
-        };
+        let local_ticker = scope_executor.ticker_unchecked();
 
         // If `local_executor` and `remote_executor` are the same,
         // we should only tick one of them to avoid deadlock.
@@ -671,7 +668,7 @@ impl TaskPool {
                         Err(payload) => std::panic::resume_unwind(payload),
                     }
                 } else {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     panic!("Failed to catch panic!");
                 }
             }

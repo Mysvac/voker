@@ -253,7 +253,7 @@ impl core::fmt::Debug for TypeMeta {
 /// impl MyDisplay for A{}
 ///
 /// #[derive(Reflect)]
-/// #[reflect(type_data = MyDisplayFromReflect)]
+/// #[type_data(MyDisplayFromReflect)]
 /// struct A;
 ///
 /// let meta = A::get_type_meta();

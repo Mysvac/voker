@@ -1,8 +1,13 @@
-//! Compilation control macros for conditional code inclusion.
+//! Compile control macros
 //!
 //! This crate provides macros to manage conditional compilation in
 //! a more flexible and readable way, similar to [`cfg`] attributes
 //! but with macro-based syntax.
+//!
+//! # Note
+//!
+//! Starting from **Rust 1.95**, the standard library provides [`cfg_select!`]
+//! macro which offers similar functionality. Consider using it instead of this crate.
 //!
 //! # Examples
 //!
@@ -84,11 +89,6 @@
 /// // A -> empty (do nothing)
 /// cfg::disabled!{ x += 100; }
 ///
-/// // else { A } -> A
-/// cfg::disabled!{
-///     else { x += 10; }
-/// }
-///
 /// // if { A } else { B } -> B
 /// cfg::disabled!{
 ///     if {
@@ -103,7 +103,6 @@
 #[macro_export]
 macro_rules! disabled {
     () => { false };
-    (else { $($p:tt)* }) => { $($p)* };
     (if { $($p:tt)* } else { $($n:tt)* }) => { $($n)* };
     ($($p:tt)*) => {};
 }
@@ -126,11 +125,6 @@ macro_rules! disabled {
 /// // A -> A
 /// cfg::enabled!{ x += 100; }
 ///
-/// // else { A } -> do nothing
-/// cfg::enabled!{
-///     else { x += 10; }
-/// }
-///
 /// // if { A } else { B } -> A
 /// cfg::enabled!{
 ///     if {
@@ -145,7 +139,6 @@ macro_rules! disabled {
 #[macro_export]
 macro_rules! enabled {
     () => { true };
-    (else { $($p:tt)* }) => {};
     (if { $($p:tt)* } else { $($n:tt)* }) => { $($p)* };
     ($($p:tt)*) => { $($p)* };
 }

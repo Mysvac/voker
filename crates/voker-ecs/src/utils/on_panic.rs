@@ -18,8 +18,8 @@ impl Drop for ForgetEntityOnPanic<'_> {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
-        let world = unsafe { self.world.full_mut() };
         unsafe {
+            let world = self.world.full_mut();
             world.forget_with_caller(self.entity, self.caller);
         }
     }

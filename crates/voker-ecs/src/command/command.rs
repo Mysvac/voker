@@ -1,6 +1,8 @@
 #![expect(clippy::module_inception, reason = "For better structure.")]
 
-use crate::bundle::Bundle;
+use voker_utils::debug::DebugName;
+
+use crate::bundle::{Bundle, DataBundle};
 use crate::entity::{Entity, FetchError};
 use crate::error::{ErrorContext, ErrorHandler, GameError, IntoGameError, Severity};
 use crate::event::Event;
@@ -9,7 +11,7 @@ use crate::observer::{IntoEntityObserver, IntoObserver};
 use crate::prelude::ScheduleLabel;
 use crate::resource::Resource;
 use crate::system::{IntoSystem, SystemId, SystemInput};
-use crate::utils::{DebugLocation, DebugName};
+use crate::utils::DebugLocation;
 use crate::world::{EntityOwned, FromWorld, World};
 
 // -----------------------------------------------------------------------------
@@ -17,7 +19,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 
 /// A [`World`] mutation.
 ///
-/// Should be used with [`Commands::push`](super::Commands::push).
+/// Should be used with [`Commands::queue`](super::Commands::queue).
 ///
 /// The `Output` associated type is the returned "output" of the command.
 ///
@@ -43,7 +45,7 @@ use crate::world::{EntityOwned, FromWorld, World};
 /// }
 ///
 /// fn some_system(mut commands: Commands) {
-///     commands.push(AddToCounter(123));
+///     commands.queue(AddToCounter(123));
 /// }
 /// ```
 pub trait Command: Send + Sized + 'static {
@@ -127,7 +129,7 @@ pub trait Command: Send + Sized + 'static {
 
 /// A command which gets executed for a given [`Entity`].
 ///
-/// Should be used with [`EntityCommands::push`](super::EntityCommands::push).
+/// Should be used with [`EntityCommands::queue`](super::EntityCommands::queue).
 ///
 /// The `Output` associated type is the returned "output" of the command.
 ///
@@ -142,7 +144,7 @@ pub trait Command: Send + Sized + 'static {
 ///
 /// fn setup(mut commands: Commands) {
 ///     let mut entity_cmd = commands.spawn(());
-///     entity_cmd.push(insert_name);
+///     entity_cmd.queue(insert_name);
 /// }
 /// ```
 pub trait EntityCommand: Send + Sized + 'static {
@@ -172,6 +174,7 @@ where
 {
     type Output = O;
 
+    #[inline]
     fn apply(self, world: &mut World) -> O {
         self(world)
     }
@@ -184,6 +187,7 @@ where
 {
     type Output = O;
 
+    #[inline]
     fn apply(self, entity: EntityOwned) -> Self::Output {
         self(entity)
     }
@@ -230,7 +234,7 @@ pub fn spawn_at<B: Bundle>(bundle: B, entity: Entity) -> impl Command {
     move |world: &mut World| world.spawn_at_with_caller(bundle, entity, caller).err()
 }
 
-/// A [`Command`] that consumes an iterator of [`Bundle`]s to spawn a series of entities.
+/// A [`Command`] that consumes an iterator of [`DataBundle`]s to spawn a series of entities.
 ///
 /// This is more efficient than spawning the entities individually.
 #[inline]
@@ -238,7 +242,7 @@ pub fn spawn_at<B: Bundle>(bundle: B, entity: Entity) -> impl Command {
 pub fn spawn_batch<I>(bundles_iter: I) -> impl Command
 where
     I: IntoIterator + Send + Sync + 'static,
-    I::Item: Bundle,
+    I::Item: DataBundle,
 {
     let caller = DebugLocation::caller();
     move |world: &mut World| {
@@ -294,6 +298,8 @@ pub fn init_resource<R: Resource + Send + FromWorld>() -> impl Command {
 }
 
 /// A [`Command`] that initializes a non-send [`Resource`] if it does not exist.
+///
+/// The command will be sent to the main thread for execution to ensure safety.
 #[inline]
 pub fn init_non_send<R: Resource + FromWorld>() -> impl Command {
     move |world: &mut World| {
@@ -376,6 +382,8 @@ pub fn run_schedule(label: impl ScheduleLabel) -> impl Command {
 }
 
 /// A [`Command`] that writes an arbitrary [`Message`].
+///
+/// Panic if the message is not registered.
 #[inline]
 pub fn write_message<M: Message>(message: M) -> impl Command {
     move |world: &mut World| {
@@ -448,6 +456,8 @@ pub fn insert_if_new<T: Bundle>(bundle: impl FnOnce() -> T + Send + 'static) -> 
 }
 
 /// An [`EntityCommand`] that removes a bundle's explicit components from an entity.
+///
+/// Only delete the parts that exist and are not depended on by the remaining content.
 #[inline]
 #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove<T: Bundle>() -> impl EntityCommand {
@@ -458,6 +468,8 @@ pub fn remove<T: Bundle>() -> impl EntityCommand {
 }
 
 /// An [`EntityCommand`] that removes a bundle's explicit components from an entity.
+///
+/// Only delete the parts that exist and are not depended on by the remaining content.
 #[inline]
 #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove_explicit<T: Bundle>() -> impl EntityCommand {
@@ -468,6 +480,8 @@ pub fn remove_explicit<T: Bundle>() -> impl EntityCommand {
 }
 
 /// An [`EntityCommand`] that removes a bundle's required components from an entity.
+///
+/// Only delete the parts that exist and are not depended on by the remaining content.
 #[inline]
 #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
 pub fn remove_required<T: Bundle>() -> impl EntityCommand {

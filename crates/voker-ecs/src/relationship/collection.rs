@@ -370,8 +370,7 @@ impl OrderedRelationshipSourceSet for Vec<Entity> {
     }
 
     fn pop_front(&mut self) -> Option<Entity> {
-        let contains = Vec::is_empty(self);
-        contains.then(|| Vec::remove(self, 0))
+        (!Vec::is_empty(self)).then(|| Vec::remove(self, 0))
     }
 
     fn pop_back(&mut self) -> Option<Entity> {
@@ -594,8 +593,7 @@ impl<const N: usize> OrderedRelationshipSourceSet for SmallVec<Entity, N> {
     }
 
     fn pop_front(&mut self) -> Option<Entity> {
-        let contains = SmallVec::is_empty(self);
-        contains.then(|| SmallVec::remove(self, 0))
+        (!SmallVec::is_empty(self)).then(|| SmallVec::remove(self, 0))
     }
 
     fn pop_back(&mut self) -> Option<Entity> {

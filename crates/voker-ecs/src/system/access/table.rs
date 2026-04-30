@@ -1,10 +1,11 @@
-use core::fmt::Debug;
+use alloc::string::String;
+use core::fmt::{Debug, Display};
 
 use fixedbitset::FixedBitSet;
-use voker_utils::hash::NoOpHashMap;
+use voker_utils::hash::NoopHashMap;
 
 use super::{AccessParam, FilterParam};
-use crate::resource::ResourceId;
+use crate::{component::ComponentId, resource::ResourceId, world::World};
 
 /// Full per-system access declaration used by scheduler conflict checks.
 ///
@@ -35,7 +36,7 @@ pub struct AccessTable {
     world_ref: bool,          // holding `&world`
     res_reading: FixedBitSet, // resource reading
     res_writing: FixedBitSet, // resource writing
-    filter: NoOpHashMap<FilterParam, AccessParam>,
+    filter: NoopHashMap<FilterParam, AccessParam>,
 }
 
 // `#[derive(Clone)]` does not generate optimized `clone_from`.
@@ -85,15 +86,14 @@ impl AccessTable {
             world_ref: false,
             res_reading: FixedBitSet::new(),
             res_writing: FixedBitSet::new(),
-            filter: NoOpHashMap::new(),
+            filter: NoopHashMap::new(),
         }
     }
 
     /// Returns whether exclusive world access can be declared.
     ///
-    /// Exclusive world access requires no previously declared world/resource/
-    /// query access.
-    pub fn can_world_mut(&self) -> bool {
+    /// Can only be used for table building, invalid for merged table.
+    fn can_world_mut(&self) -> bool {
         !self.world_mut
             && !self.world_ref
             && self.res_reading.is_clear()
@@ -103,28 +103,31 @@ impl AccessTable {
 
     /// Returns whether shared world access can be declared.
     ///
-    /// Shared world access is read-only over the world and therefore conflicts
-    /// with any write-capable resource or query access.
-    pub fn can_world_ref(&self) -> bool {
-        self.world_ref
-            || (!self.world_mut
-                && self.res_writing.is_clear()
-                && self.filter.values().all(AccessParam::is_read_only))
+    /// Can only be used for table building, invalid for merged table.
+    fn can_world_ref(&self) -> bool {
+        !self.world_mut
+            && self.res_writing.is_clear()
+            && self.filter.values().all(AccessParam::is_read_only)
     }
 
     /// Declares exclusive world access.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_world_mut(&mut self) -> bool {
         if self.can_world_mut() {
             *self = const { Self::new() };
             self.world_mut = true;
             true
         } else {
-            voker_utils::cold_path();
-            false
+            core::hint::cold_path();
+            self.world_mut = true;
+            false // ↑ for error display
         }
     }
 
     /// Declares shared world access.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_world_ref(&mut self) -> bool {
         if self.can_world_ref() {
             if !self.world_ref {
@@ -133,22 +136,29 @@ impl AccessTable {
             }
             true
         } else {
-            voker_utils::cold_path();
-            false
+            core::hint::cold_path();
+            self.world_ref = true;
+            false // ↑ for error display
         }
     }
 
     /// Returns whether read access to a resource id can be declared.
-    pub fn can_reading_res(&self, id: ResourceId) -> bool {
+    ///
+    /// Can only be used for table building, invalid for merged table.
+    fn can_reading_res(&self, id: ResourceId) -> bool {
         self.world_ref || (!self.world_mut && !self.res_writing.contains(id.index()))
     }
 
     /// Returns whether write access to a resource id can be declared.
-    pub fn can_writing_res(&self, id: ResourceId) -> bool {
+    ///
+    /// Can only be used for table building, invalid for merged table.
+    fn can_writing_res(&self, id: ResourceId) -> bool {
         !self.world_ref && !self.world_mut && !self.res_reading.contains(id.index())
     }
 
     /// Declares read access to a resource id.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_reading_res(&mut self, id: ResourceId) -> bool {
         if self.can_reading_res(id) {
             if !self.world_ref {
@@ -156,21 +166,26 @@ impl AccessTable {
             }
             true
         } else {
-            voker_utils::cold_path();
-            false
+            core::hint::cold_path();
+            self.res_reading.grow_and_insert(id.index());
+            false // ↑ for error display
         }
     }
 
     /// Declares write access to a resource id.
+    ///
+    /// Can only be used for table building, invalid for merged table.
     pub fn set_writing_res(&mut self, id: ResourceId) -> bool {
+        let index = id.index();
         if self.can_writing_res(id) {
-            let index = id.index();
             self.res_reading.grow_and_insert(index);
             self.res_writing.grow_and_insert(index);
             true
         } else {
-            voker_utils::cold_path();
-            false
+            core::hint::cold_path();
+            self.res_reading.grow_and_insert(index);
+            self.res_writing.grow_and_insert(index);
+            false // ↑ for error display
         }
     }
 
@@ -178,7 +193,7 @@ impl AccessTable {
     ///
     /// Query conflicts are checked per filter bucket. If two filters are
     /// disjoint, the corresponding access sets do not need to be compared.
-    pub fn can_query(&self, data: &AccessParam, params: &[FilterParam]) -> bool {
+    fn can_query(&self, data: &AccessParam, params: &[FilterParam]) -> bool {
         if self.world_mut {
             return false;
         }
@@ -213,7 +228,15 @@ impl AccessTable {
             }
             true
         } else {
-            false
+            core::hint::cold_path();
+            params.iter().for_each(|param| {
+                if let Some(item) = self.filter.get_mut(param) {
+                    item.merge_with(data);
+                } else {
+                    self.filter.insert(param.clone(), data.clone());
+                }
+            });
+            false // ↑ for error display
         }
     }
 
@@ -224,9 +247,6 @@ impl AccessTable {
     pub fn parallelizable(&self, other: &Self) -> bool {
         if self.world_mut || other.world_mut {
             return false;
-        }
-        if self.world_ref && other.world_ref {
-            return true;
         }
         if !self.res_writing.is_disjoint(&other.res_reading)
             || !other.res_writing.is_disjoint(&self.res_reading)
@@ -246,15 +266,15 @@ impl AccessTable {
 
     /// Merges two access tables conservatively.
     ///
-    /// Used when composing systems (for example pipe/map combinators) into one
+    /// Used when composing systems (for example `pipe` combinators) into one
     /// executable unit with a single access declaration.
     pub fn merge(mut self, other: Self) -> Self {
         self.world_mut |= other.world_mut;
-        self.world_ref &= other.world_ref;
-        if self.world_mut || self.world_ref {
+        self.world_ref |= other.world_ref;
+        if self.world_mut {
             self.res_reading = FixedBitSet::new();
             self.res_writing = FixedBitSet::new();
-            self.filter = NoOpHashMap::new();
+            self.filter = NoopHashMap::new();
         } else {
             self.res_reading.union_with(&other.res_reading);
             self.res_writing.union_with(&other.res_writing);
@@ -267,5 +287,74 @@ impl AccessTable {
             });
         }
         self
+    }
+
+    /// Create a display object for all resource name and component name.
+    #[rustfmt::skip]
+    pub fn display(&self, world: &World) -> impl Display {
+        fn format_resource(world: &World, iter: impl Iterator<Item = usize>) -> String {
+            let mut msg = String::new();
+            let mut is_first = true;
+            for index in iter {
+                let id = ResourceId::without_provenance(index);
+                let name = world.resources.get_name(id).unwrap();
+                if is_first {
+                    msg.push_str(&alloc::format!("{}({})", name, id));
+                    is_first = false;
+                } else {
+                    msg.push_str(&alloc::format!(", {}({})", name, id));
+                }
+            }
+            msg
+        }
+
+        fn format_component<'a>(world: &'a World, iter: impl Iterator<Item = &'a ComponentId>) -> String {
+            let mut msg = String::new();
+            let mut is_first = true;
+            for &id in iter {
+                let name = world.components.get_name(id).unwrap();
+                if is_first {
+                    msg.push_str(&alloc::format!("{}({})", name, id));
+                    is_first = false;
+                } else {
+                    msg.push_str(&alloc::format!(", {}({})", name, id));
+                }
+            }
+            msg
+        }
+
+        let mut msg = String::new();
+
+        msg.push_str("AccessTable {\n");
+
+        msg.push_str(&alloc::format!("\tworld_mut: {},\n", self.world_mut));
+        msg.push_str(&alloc::format!("\tworld_ref: {},\n", self.world_ref));
+
+        msg.push_str(&alloc::format!("\treading_resource: [{}],\n", &format_resource(world, self.res_reading.ones())));
+        msg.push_str(&alloc::format!("\twriting_resource: [{}],\n", &format_resource(world, self.res_writing.ones())));
+
+        msg.push_str("\tquery: {",);
+
+        for (f, d) in self.filter.iter() {
+            msg.push_str("\n\t\tFilter {{,");
+            msg.push_str(&alloc::format!("\n\t\t\tWith: [{}],", &format_component(world, f.with().iter())));
+            msg.push_str(&alloc::format!("\n\t\t\tWithout: [{}],", &format_component(world, f.without().iter())));
+            msg.push_str("\n\t\t}}: AccessData: {{");
+            msg.push_str(&alloc::format!("\n\t\t\tentity_mut: {},", d.entity_mut));
+            msg.push_str(&alloc::format!("\n\t\t\tentity_ref: {},", d.entity_ref));
+            msg.push_str(&alloc::format!("\n\t\t\treading_components: {},", &format_component(world, d.reading.iter())));
+            msg.push_str(&alloc::format!("\n\t\t\twriting_components: {},", &format_component(world, d.writing.iter())));
+            msg.push_str("\n\t\t}},\n");
+        }
+
+        if self.filter.is_empty() {
+            msg.push_str("},\n",);
+        } else {
+            msg.push_str("\n\t},\n",);
+        }
+
+        msg.push('}');
+
+        msg
     }
 }

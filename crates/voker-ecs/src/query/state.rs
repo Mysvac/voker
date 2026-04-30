@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use voker_utils::hash::NoOpHashSet;
+use voker_utils::debug::DebugName;
+use voker_utils::hash::NoopHashSet;
 
 use super::error::{QueryEntityError, QuerySingleError};
 use super::{QueryData, QueryFilter, QueryIter};
@@ -13,7 +14,6 @@ use crate::query::{Query, ReadOnlyQueryData, Single};
 use crate::resource::Resource;
 use crate::storage::{TableId, Tables};
 use crate::system::{AccessParam, AccessTable, FilterParam, FilterParamBuilder};
-use crate::utils::DebugName;
 use crate::world::{World, WorldId};
 
 // -----------------------------------------------------------------------------
@@ -54,6 +54,7 @@ use crate::world::{World, WorldId};
 ///
 /// A `QueryState` is bound to the world it was built from.
 /// Reusing it with another world is invalid and guarded by runtime checks.
+#[repr(C)] // required for the pointer cast in `as_readonly`.
 pub struct QueryState<D: QueryData, F: QueryFilter = ()> {
     pub(super) world_id: WorldId,
     pub(super) version: u32,
@@ -101,6 +102,16 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// components, so table-based caching can be used.
     pub const IS_DENSE: bool = D::COMPONENTS_ARE_DENSE && F::COMPONENTS_ARE_DENSE;
 
+    /// Returns a reference to this state reinterpreted as a read-only version.
+    ///
+    /// The cast is valid because `QueryState<D, F>` and `QueryState<D::ReadOnly, F>`
+    /// have identical memory layouts: every field is the same type, in particular
+    /// `d_state: D::State = D::ReadOnly::State` (enforced by the
+    /// `ReadOnly: ReadOnlyQueryData<State = Self::State>` bound).
+    pub fn as_readonly(&self) -> &QueryState<D::ReadOnly, F> {
+        unsafe { &*(self as *const QueryState<D, F> as *const QueryState<D::ReadOnly, F>) }
+    }
+
     /// Returns the world ID this query state belongs to.
     pub fn world_id(&self) -> WorldId {
         self.world_id
@@ -108,9 +119,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
     #[cold]
     #[inline(never)]
-    fn invalid_query_data() -> ! {
+    fn invalid_query_data(param: &AccessParam, world: &World) -> ! {
+        let info = param.display(world);
         panic! {
-            "invalid query data `{}` in query `{}`",
+            "invalid query data `{}` in query `{}`: `{info}`",
             DebugName::type_name::<D>(),
             DebugName::type_name::<Self>(),
         }
@@ -129,8 +141,8 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
     /// Try builds a new query state from the given world.
     pub fn try_build(world: &World) -> Option<Self> {
-        let d_state = D::fetch_state(world)?;
-        let f_state = F::fetch_state(world)?;
+        let d_state = D::try_build_state(world)?;
+        let f_state = F::try_build_state(world)?;
 
         Some(Self::build_internal(world, d_state, f_state))
     }
@@ -140,12 +152,18 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
         let mut filter_data = AccessParam::new();
         if !D::build_access(&d_state, &mut filter_data) {
-            Self::invalid_query_data();
-        } // `F::build_access` function must be called after `D::build_access`.
+            Self::invalid_query_data(&filter_data, world);
+        }
+        // `F::build_access` function must be called after `D::build_access`.
+        // Because the filter is read-only and does not conflict with data
+        // access simultaneously. At this point, the filter is forced to read.
         F::build_access(&f_state, &mut filter_data);
 
         let mut builders = Vec::<FilterParamBuilder>::new();
         // `F::build_filter` function must be called before `D::build_filter`.
+        // Filters are responsible for constructing filtering parameters, while
+        // visitors make modifications only, will not create new `FilterParamBuilder`.
+        // If the visitor advances, it will be `no-op` because `builders` is empty now.
         F::build_filter(&f_state, &mut builders);
         D::build_filter(&d_state, &mut builders);
         let filter_params: Box<[FilterParam]> = collect_param(builders);
@@ -155,12 +173,12 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
         if Self::IS_DENSE {
             let tables = &world.storages.tables;
-            let size_hint = (tables.len() >> 2).next_power_of_two() >> 1;
+            let size_hint = (tables.len() >> 3).next_power_of_two() >> 1;
             storages.reserve(size_hint);
             updata_table_state(&mut version, &mut storages, &filter_params, tables);
         } else {
             let arches = &world.archetypes;
-            let size_hint = (arches.len() >> 2).next_power_of_two() >> 1;
+            let size_hint = (arches.len() >> 3).next_power_of_two() >> 1;
             storages.reserve(size_hint);
             updata_arche_state(&mut version, &mut storages, &filter_params, arches);
         };
@@ -212,14 +230,17 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub fn mark_assess(&self, access_table: &mut AccessTable) -> bool {
         let data: &AccessParam = &self.filter_data;
         let params: &[FilterParam] = &self.filter_params;
-        access_table.set_query(data, params)
+        // Not return in advance(if error), we hope to provide complete information.
+        let valid = access_table.set_query(data, params);
+        valid && F::edit_access_table(&self.f_state, access_table)
     }
 }
 
+// not_inline: accelerate compilation.
 #[inline(never)]
 fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
-    // We use NoOpHash because FilterParam is pre-hased.
-    let mut params: NoOpHashSet<FilterParam> = NoOpHashSet::with_capacity(builders.len());
+    // We use NoopHash because FilterParam is pre-hased.
+    let mut params: NoopHashSet<FilterParam> = NoopHashSet::with_capacity(builders.len());
     builders.into_iter().for_each(|builder| {
         if let Some(param) = builder.build() {
             params.insert(param);
@@ -229,6 +250,7 @@ fn collect_param(builders: Vec<FilterParamBuilder>) -> Box<[FilterParam]> {
     params.into_iter().collect()
 }
 
+// not_inline: accelerate compilation.
 #[inline(never)]
 fn updata_table_state(
     version: &mut u32,
@@ -256,6 +278,7 @@ fn updata_table_state(
     *version = new_version;
 }
 
+// not_inline: accelerate compilation.
 #[inline(never)]
 fn updata_arche_state(
     version: &mut u32,
@@ -492,6 +515,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         unsafe { Query::new(world, self, last_run, this_run).is_empty() }
     }
 
+    /// Return `true` if this query contains given entity.
     pub fn contains(&self, world: &World, entity: Entity) -> bool {
         let last_run = world.last_run();
         let this_run = world.this_run();

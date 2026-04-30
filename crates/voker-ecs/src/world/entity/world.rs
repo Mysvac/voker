@@ -10,7 +10,7 @@ macro_rules! once_warning_for_owned {
     () => {
         #[cfg(debug_assertions)]
         voker_os::once_expr!{
-            log::warn!{
+            tracing::warn!{
                 "Calling `entity_owned` for multiple entities, consider replace to `entity_mut`: {}.",
                 core::panic::Location::caller()
             }

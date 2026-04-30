@@ -1,16 +1,13 @@
 use crate::{App, Plugin};
 
+use alloc::sync::Arc;
 use core::fmt::Debug;
-use log::trace;
 use voker_ecs::system::NonSendMarker;
-use voker_os::sync::Arc;
-use voker_task::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPool, TaskPoolBuilder};
+use voker_task::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool};
+use voker_task::{TaskPool, TaskPoolBuilder};
 
-#[cfg(not(all(target_arch = "wasm32", feature = "web")))]
-fn tick_global_task_pools(_: NonSendMarker) {
-    let ticker = TaskPool::local_ticker();
-    while ticker.try_tick() {}
-}
+// -----------------------------------------------------------------------------
+// TerminalCtrlCHandlerPlugin
 
 /// Setup of default task pools: [`AsyncComputeTaskPool`], [`ComputeTaskPool`], [`IoTaskPool`].
 #[derive(Default)]
@@ -20,13 +17,38 @@ pub struct TaskPoolPlugin {
 }
 
 impl Plugin for TaskPoolPlugin {
-    fn build(&self, _app: &mut App) {
+    fn build(&self, app: &mut App) {
         // Setup the default voker task pools
         self.task_pool_options.create_default_pools();
 
-        #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
-        _app.add_systems(crate::Last, tick_global_task_pools);
+        fn tick_global_task_pools(_: NonSendMarker) {
+            let ticker = TaskPool::local_ticker();
+            while ticker.try_tick() {}
+        }
+
+        app.add_system(crate::Last, (), tick_global_task_pools);
     }
+}
+
+// -----------------------------------------------------------------------------
+// TaskPoolThreadAssignmentPolicy
+
+/// Helper for configuring and creating the default task pools. For end-users who want full control,
+/// set up [`TaskPoolPlugin`]
+#[derive(Clone, Debug)]
+pub struct TaskPoolOptions {
+    /// If the number of physical cores is less than `min_total_threads`, force using
+    /// `min_total_threads`
+    pub min_total_threads: usize,
+    /// If the number of physical cores is greater than `max_total_threads`, force using
+    /// `max_total_threads`
+    pub max_total_threads: usize,
+    /// Used to determine number of IO threads to allocate
+    pub io: TaskPoolThreadAssignmentPolicy,
+    /// Used to determine number of async compute threads to allocate
+    pub async_compute: TaskPoolThreadAssignmentPolicy,
+    /// Used to determine number of compute threads to allocate
+    pub compute: TaskPoolThreadAssignmentPolicy,
 }
 
 /// Defines a simple way to determine how many threads to use given the number of remaining cores
@@ -58,47 +80,8 @@ impl Debug for TaskPoolThreadAssignmentPolicy {
     }
 }
 
-impl TaskPoolThreadAssignmentPolicy {
-    /// Determine the number of threads to use for this task pool
-    fn get_number_of_threads(&self, remaining_threads: usize, total_threads: usize) -> usize {
-        assert!(self.percent >= 0.0);
-        let proportion = total_threads as f32 * self.percent;
-        let mut desired = proportion as usize;
-
-        // Equivalent to round() for positive floats without libm requirement for
-        // no_std compatibility
-        if proportion - desired as f32 >= 0.5 {
-            desired += 1;
-        }
-
-        // Limit ourselves to the number of cores available
-        desired = desired.min(remaining_threads);
-
-        // Clamp by min_threads, max_threads. (This may result in us using more threads than are
-        // available, this is intended. An example case where this might happen is a device with
-        // <= 2 threads.
-        desired.clamp(self.min_threads, self.max_threads)
-    }
-}
-
-/// Helper for configuring and creating the default task pools. For end-users who want full control,
-/// set up [`TaskPoolPlugin`]
-#[derive(Clone, Debug)]
-pub struct TaskPoolOptions {
-    /// If the number of physical cores is less than `min_total_threads`, force using
-    /// `min_total_threads`
-    pub min_total_threads: usize,
-    /// If the number of physical cores is greater than `max_total_threads`, force using
-    /// `max_total_threads`
-    pub max_total_threads: usize,
-
-    /// Used to determine number of IO threads to allocate
-    pub io: TaskPoolThreadAssignmentPolicy,
-    /// Used to determine number of async compute threads to allocate
-    pub async_compute: TaskPoolThreadAssignmentPolicy,
-    /// Used to determine number of compute threads to allocate
-    pub compute: TaskPoolThreadAssignmentPolicy,
-}
+// -----------------------------------------------------------------------------
+// Policy Implementation
 
 impl Default for TaskPoolOptions {
     fn default() -> Self {
@@ -137,9 +120,32 @@ impl Default for TaskPoolOptions {
     }
 }
 
+impl TaskPoolThreadAssignmentPolicy {
+    /// Determine the number of threads to use for this task pool
+    fn get_thread_num(&self, remaining_threads: usize, total_threads: usize) -> usize {
+        assert!(self.percent >= 0.0);
+        let proportion = total_threads as f32 * self.percent;
+        let mut desired = proportion as usize;
+
+        // Equivalent to round() for positive floats without libm requirement for
+        // no_std compatibility
+        if proportion - desired as f32 >= 0.5 {
+            desired += 1;
+        }
+
+        // Limit ourselves to the number of cores available
+        desired = desired.min(remaining_threads);
+
+        // Clamp by min_threads, max_threads. (This may result in us using more threads than are
+        // available, this is intended. An example case where this might happen is a device with
+        // <= 2 threads.
+        desired.clamp(self.min_threads, self.max_threads)
+    }
+}
+
 impl TaskPoolOptions {
     /// Create a configuration that forces using the given number of threads.
-    pub fn with_num_threads(thread_count: usize) -> Self {
+    pub fn with_thread_num(thread_count: usize) -> Self {
         TaskPoolOptions {
             min_total_threads: thread_count,
             max_total_threads: thread_count,
@@ -153,33 +159,29 @@ impl TaskPoolOptions {
             .get()
             .clamp(self.min_total_threads, self.max_total_threads);
 
-        log::trace!("Assigning {total_threads} cores to default task pools");
+        tracing::debug!("Assigning {total_threads} cores to default task pools");
 
         let mut remaining_threads = total_threads;
 
         {
             // Determine the number of IO threads we will use
-            let io_threads = self.io.get_number_of_threads(remaining_threads, total_threads);
+            let io_threads = self.io.get_thread_num(remaining_threads, total_threads);
 
-            trace!("IO Threads: {io_threads}");
+            tracing::debug!("IO Threads: {io_threads}");
             remaining_threads = remaining_threads.saturating_sub(io_threads);
 
             IoTaskPool::get_or_init(|| {
-                let builder = TaskPoolBuilder::default()
+                let mut builder = TaskPoolBuilder::new()
                     .thread_num(io_threads)
                     .thread_name("IO Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
-                let builder = {
-                    let mut builder = builder;
-                    if let Some(f) = self.io.on_thread_spawn.clone() {
-                        builder = builder.on_thread_spawn(move || f());
-                    }
-                    if let Some(f) = self.io.on_thread_destroy.clone() {
-                        builder = builder.on_thread_destroy(move || f());
-                    }
-                    builder
-                };
+                if let Some(f) = self.io.on_thread_spawn.clone() {
+                    builder = builder.on_thread_spawn(move || f());
+                }
+
+                if let Some(f) = self.io.on_thread_destroy.clone() {
+                    builder = builder.on_thread_destroy(move || f());
+                }
 
                 builder.build()
             });
@@ -187,29 +189,24 @@ impl TaskPoolOptions {
 
         {
             // Determine the number of async compute threads we will use
-            let async_compute_threads = self
-                .async_compute
-                .get_number_of_threads(remaining_threads, total_threads);
+            let async_compute_threads =
+                self.async_compute.get_thread_num(remaining_threads, total_threads);
 
-            trace!("Async Compute Threads: {async_compute_threads}");
+            tracing::debug!("Async Compute Threads: {async_compute_threads}");
             remaining_threads = remaining_threads.saturating_sub(async_compute_threads);
 
             AsyncComputeTaskPool::get_or_init(|| {
-                let builder = TaskPoolBuilder::default()
+                let mut builder = TaskPoolBuilder::new()
                     .thread_num(async_compute_threads)
                     .thread_name("Async Compute Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
-                let builder = {
-                    let mut builder = builder;
-                    if let Some(f) = self.async_compute.on_thread_spawn.clone() {
-                        builder = builder.on_thread_spawn(move || f());
-                    }
-                    if let Some(f) = self.async_compute.on_thread_destroy.clone() {
-                        builder = builder.on_thread_destroy(move || f());
-                    }
-                    builder
-                };
+                if let Some(f) = self.async_compute.on_thread_spawn.clone() {
+                    builder = builder.on_thread_spawn(move || f());
+                }
+
+                if let Some(f) = self.async_compute.on_thread_destroy.clone() {
+                    builder = builder.on_thread_destroy(move || f());
+                }
 
                 builder.build()
             });
@@ -218,27 +215,22 @@ impl TaskPoolOptions {
         {
             // Determine the number of compute threads we will use
             // This is intentionally last so that an end user can specify 1.0 as the percent
-            let compute_threads =
-                self.compute.get_number_of_threads(remaining_threads, total_threads);
+            let compute_threads = self.compute.get_thread_num(remaining_threads, total_threads);
 
-            trace!("Compute Threads: {compute_threads}");
+            tracing::debug!("Compute Threads: {compute_threads}");
 
             ComputeTaskPool::get_or_init(|| {
-                let builder = TaskPoolBuilder::default()
+                let mut builder = TaskPoolBuilder::new()
                     .thread_num(compute_threads)
                     .thread_name("Compute Task Pool");
 
-                #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
-                let builder = {
-                    let mut builder = builder;
-                    if let Some(f) = self.compute.on_thread_spawn.clone() {
-                        builder = builder.on_thread_spawn(move || f());
-                    }
-                    if let Some(f) = self.compute.on_thread_destroy.clone() {
-                        builder = builder.on_thread_destroy(move || f());
-                    }
-                    builder
-                };
+                if let Some(f) = self.compute.on_thread_spawn.clone() {
+                    builder = builder.on_thread_spawn(move || f());
+                }
+
+                if let Some(f) = self.compute.on_thread_destroy.clone() {
+                    builder = builder.on_thread_destroy(move || f());
+                }
 
                 builder.build()
             });

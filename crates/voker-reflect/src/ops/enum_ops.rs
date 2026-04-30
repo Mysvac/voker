@@ -535,7 +535,7 @@ pub trait Enum: Reflect {
     /// # use voker_reflect::{Reflect, ops::Enum};
     ///
     /// #[derive(Reflect)]
-    /// #[reflect(type_path = "hello::Foo")]
+    /// #[type_path = "hello::Foo"]
     /// enum Foo {
     ///     Data{ id: u32, data: u64 },
     ///     None,

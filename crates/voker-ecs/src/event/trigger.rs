@@ -78,6 +78,7 @@ unsafe impl<E: for<'a> Event<Trigger<'a> = Self>> Trigger<E> for GlobalTrigger {
 }
 
 impl GlobalTrigger {
+    // Not Inline: Accelerate compilation
     #[inline(never)]
     unsafe fn trigger_internal(
         mut world: DeferredWorld,
@@ -134,6 +135,7 @@ unsafe impl<E: EntityEvent + for<'a> Event<Trigger<'a> = Self>> Trigger<E> for E
 }
 
 impl EntityTrigger {
+    // Not Inline: Accelerate compilation
     #[inline(never)]
     unsafe fn trigger_internal(
         mut world: DeferredWorld,
@@ -223,6 +225,7 @@ where
 }
 
 impl<'a> EntityComponentsTrigger<'a> {
+    // Not Inline: Accelerate compilation
     #[inline(never)]
     unsafe fn trigger_internal(
         &mut self,
@@ -308,7 +311,7 @@ where
         Self {
             original_event_target: Entity::PLACEHOLDER,
             propagate: AUTO_PROPAGATE,
-            _marker: Default::default(),
+            _marker: PhantomData,
         }
     }
 }

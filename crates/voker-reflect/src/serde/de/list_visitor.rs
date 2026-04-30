@@ -5,7 +5,6 @@ use serde_core::de::{SeqAccess, Visitor};
 
 use super::error_utils::make_custom_error;
 use super::{DeserializeDriver, DeserializeProcessor};
-
 use crate::info::ListInfo;
 use crate::ops::DynamicList;
 use crate::registry::TypeRegistry;

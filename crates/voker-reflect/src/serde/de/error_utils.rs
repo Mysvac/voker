@@ -1,7 +1,7 @@
 use core::fmt::Display;
 use serde_core::de::Error;
 
-crate::cfg::debug! {
+crate::cfg::backtrace! {
     std::thread_local! {
         pub(super) static TYPE_INFO_STACK: core::cell::RefCell<crate::serde::TypeInfoStack> =
             const { core::cell::RefCell::new(crate::serde::TypeInfoStack::new()) };
@@ -16,7 +16,7 @@ crate::cfg::debug! {
 /// [type info stack]: crate::type_info_stack::TypeInfoStack
 #[cold]
 pub(super) fn make_custom_error<E: Error>(msg: impl Display) -> E {
-    crate::cfg::debug! {
+    crate::cfg::backtrace! {
         if {
             TYPE_INFO_STACK.with_borrow(|stack|
                 E::custom(format_args!("{msg} (stack:\n{stack:?})"))

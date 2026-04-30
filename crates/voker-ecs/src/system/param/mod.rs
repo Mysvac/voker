@@ -14,6 +14,7 @@
 mod local;
 mod marker;
 mod resource;
+mod tick;
 mod tuples;
 mod world;
 
@@ -22,6 +23,7 @@ mod world;
 
 pub use local::Local;
 pub use marker::NonSendMarker;
+pub use tick::SystemTick;
 
 // -----------------------------------------------------------------------------
 // SystemParam

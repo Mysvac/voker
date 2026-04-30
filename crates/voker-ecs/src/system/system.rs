@@ -3,7 +3,7 @@
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use crate::system::{AccessTable, SystemError, SystemFlags, SystemId};
+use crate::system::{AccessTable, InternedSystemSet, SystemError, SystemFlags, SystemId};
 use crate::tick::Tick;
 use crate::world::{DeferredWorld, UnsafeWorld, World};
 
@@ -127,6 +127,15 @@ pub trait System: Send + Sync + 'static {
     /// Sets the tick when this system last completed execution.
     fn set_last_run(&mut self, last_run: Tick);
 
+    /// Constrain one's own last_run.
+    fn check_ticks(&mut self, now: Tick);
+
+    /// Gets the system set which it belongs..
+    fn system_set(&self) -> InternedSystemSet;
+
+    /// Sets the system set to which it belongs.
+    fn set_system_set(&mut self, set: InternedSystemSet);
+
     /// Initializes the system, registering any required components or resources.
     ///
     /// The implementer must allow for repeated initialization.
@@ -149,6 +158,7 @@ pub trait System: Send + Sync + 'static {
         world: UnsafeWorld<'_>,
     ) -> Result<Self::Output, SystemError>;
 
+    /// Executes the system's logic against the provided world, with apply_deferred.
     fn run(
         &mut self,
         input: <Self::Input as SystemInput>::Data<'_>,
@@ -349,6 +359,18 @@ where
         self.s.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
+    }
+
+    fn system_set(&self) -> InternedSystemSet {
+        self.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.id = self.id.with_system_set(set);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.s.initialize(world)
     }
@@ -440,8 +462,21 @@ where
         self.b.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.a.check_ticks(now);
+        self.b.check_ticks(now);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.a.initialize(world).merge(self.b.initialize(world))
+    }
+
+    fn system_set(&self) -> InternedSystemSet {
+        self.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.id = self.id.with_system_set(set);
     }
 
     unsafe fn run_raw(
@@ -531,8 +566,20 @@ where
         self.s.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.s.initialize(world)
+    }
+
+    fn system_set(&self) -> InternedSystemSet {
+        self.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.id = self.id.with_system_set(set);
     }
 
     unsafe fn run_raw(
@@ -635,8 +682,20 @@ where
         self.s.set_last_run(last_run);
     }
 
+    fn check_ticks(&mut self, now: Tick) {
+        self.s.check_ticks(now);
+    }
+
     fn initialize(&mut self, world: &mut World) -> AccessTable {
         self.s.initialize(world)
+    }
+
+    fn system_set(&self) -> InternedSystemSet {
+        self.id.system_set()
+    }
+
+    fn set_system_set(&mut self, set: InternedSystemSet) {
+        self.id = self.id.with_system_set(set);
     }
 
     unsafe fn run_raw(

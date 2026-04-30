@@ -20,7 +20,7 @@ use crate::impls::{GenericTypeInfoCell, GenericTypePathCell, NonGenericTypeInfoC
 use crate::info::{TupleInfo, TypeInfo, TypePath, Typed, UnnamedField};
 use crate::ops::{ApplyError, ReflectCloneError, Tuple, TupleFieldIter};
 use crate::registry::{FromType, GetTypeMeta, TypeMeta, TypeRegistry};
-use crate::registry::{ReflectDefault, ReflectFromPtr, ReflectFromReflect};
+use crate::registry::{ReflectDefault, ReflectFromReflect};
 use crate::registry::{ReflectDeserialize, ReflectSerialize};
 use crate::{FromReflect, Reflect};
 
@@ -184,9 +184,8 @@ macro_rules! impl_reflect_tuple {
 
         impl GetTypeMeta for () {
             fn get_type_meta() -> TypeMeta {
-                let mut type_meta = TypeMeta::with_capacity::<Self>(5);
+                let mut type_meta = TypeMeta::with_capacity::<Self>(4);
                 type_meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-                type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
                 type_meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
                 type_meta.insert_data::<ReflectSerialize>(FromType::<Self>::from_type());
                 type_meta.insert_data::<ReflectDeserialize>(FromType::<Self>::from_type());
@@ -299,9 +298,7 @@ macro_rules! impl_reflect_tuple {
         #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
         impl<$name: Reflect + Typed + GetTypeMeta> GetTypeMeta for ($name,) {
             fn get_type_meta() -> TypeMeta {
-                let mut type_meta =  TypeMeta::with_capacity::<($name,)>(1);
-                type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
-                type_meta
+                TypeMeta::new::<($name,)>()
             }
 
             fn register_dependencies(registry: &mut TypeRegistry) {
@@ -417,9 +414,7 @@ macro_rules! impl_reflect_tuple {
         #[cfg_attr(docsrs, doc(hidden))]
         impl<$($name: Reflect + Typed + GetTypeMeta),*> GetTypeMeta for ($($name,)*) {
             fn get_type_meta() -> TypeMeta {
-                let mut type_meta =  TypeMeta::with_capacity::<($($name,)*)>(1);
-                type_meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
-                type_meta
+                TypeMeta::new::<($($name,)*)>()
             }
 
             fn register_dependencies(_registry: &mut TypeRegistry) {

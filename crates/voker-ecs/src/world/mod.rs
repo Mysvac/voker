@@ -1,7 +1,16 @@
 //! World runtime and entry-point APIs.
 //!
-//! This module defines the central [`World`] type, world identifiers, low-level
-//! access wrappers, and high-level mutation/query methods.
+//! The [`World`] is the root container of all ECS state: entities, components,
+//! resources, schedules, and observers. It is the primary interface for both
+//! game logic and engine internals.
+//!
+//! Key types:
+//! - [`World`] — owns all ECS state; spawn, insert, remove, query
+//! - [`DeferredWorld`] — a restricted view allowing structural mutations to be
+//!   queued but not immediately applied (used inside hooks and observers)
+//! - [`UnsafeWorld`] — raw pointer access used by the executor and low-level internals
+//! - [`EntityRef`] / [`EntityMut`] / [`EntityOwned`] — scoped entity handles
+//! - [`WorldId`] — a unique identifier for distinguishing worlds
 
 // -----------------------------------------------------------------------------
 // Modules

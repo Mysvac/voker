@@ -1,3 +1,8 @@
+//! A single-thread Task Pool for no_std env.
+//!
+//! **Important**: Can only be used in main thread,
+//! because this is a single-thread task pool.
+
 // -----------------------------------------------------------------------------
 // Modules
 
@@ -16,7 +21,25 @@ pub use task_pool::{Scope, TaskPool, TaskPoolBuilder};
 // -----------------------------------------------------------------------------
 // block_on
 
-pub use futures_lite::future::block_on;
+/// Blocks on the supplied `future`.
+/// This implementation will busy-wait until it is completed.
+/// Consider enabling the `async-io` or `futures-lite` features.
+pub fn block_on<T>(future: impl Future<Output = T>) -> T {
+    use core::task::{Context, Poll};
+
+    // Pin the future on the stack.
+    let mut future = core::pin::pin!(future);
+    // We don't care about the waker as we're just going to poll as fast as possible.
+    let cx = &mut Context::from_waker(core::task::Waker::noop());
+
+    // Keep polling until the future is ready.
+    loop {
+        match future.as_mut().poll(cx) {
+            Poll::Ready(output) => return output,
+            Poll::Pending => core::hint::spin_loop(),
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // task_pools

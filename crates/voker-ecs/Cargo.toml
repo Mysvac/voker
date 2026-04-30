@@ -15,18 +15,23 @@ std = [
     "voker-reflect/std",
 ]
 
-debug = []
+debug = [
+    "voker-utils/debug"
+]
+
+trace = []
 
 backtrace = ["std"]
 
 [dependencies]
-voker-ptr = { path = "../voker-ptr" }
-voker-cfg = { path = "../voker-cfg" }
-voker-utils = { path = "../voker-utils" }
-voker-inventory = { path = "../voker-inventory" }
 
 voker-ecs-derive = { path = "derive" }
 
+voker-ptr = { path = "../voker-ptr" }
+voker-cfg = { path = "../voker-cfg" }
+voker-inventory = { path = "../voker-inventory" }
+
+voker-utils = { path = "../voker-utils", default-features = false }
 voker-os = { path = "../voker-os", default-features = false }
 voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
@@ -34,10 +39,10 @@ voker-reflect = { path = "../voker-reflect", default-features = false }
 # -------------------- External  --------------------
 
 thiserror = { version = "2", default-features = false }
-serde = { version = "1", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+tracing = { version = "0.1", default-features = false, features = ["log"] }
 bitflags = { version = "2.10", default-features = false }
 fixedbitset = { version = "0.5", default-features = false }
-log = { version = "0.4", default-features = false }
 slotmap = { version = "1.1", default-features = false }
 
 [lints]

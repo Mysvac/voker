@@ -60,7 +60,7 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// struct Logger;
 ///
 /// #[derive(Component, Clone, Default)]
-/// #[component(required = (A, B))]
+/// #[require(A, B)]
 /// struct NeedsDeps;
 ///
 /// #[derive(Component, Clone, Copy)]
@@ -86,6 +86,7 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 ///
 /// This derive supports three attribute groups:
 /// - `#[component(...)]`
+/// - `#[require(...)]`
 /// - `#[relationship(...)]`
 /// - `#[relationship_target(...)]`
 ///
@@ -103,11 +104,6 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 ///   Controls `Component::NO_ENTITY`.
 ///   If omitted, derive may still set `NO_ENTITY = true` automatically when no
 ///   mappable entity fields are detected.
-///
-/// - `required = T`
-///   Sets `Component::REQUIRED` to `Required::from::<T>()`.
-///   `T` can be a single type or tuple. Required component types should support
-///   default construction for insertion paths.
 ///
 /// - `on_add` or `on_add = path`
 /// - `on_clone` or `on_clone = path`
@@ -133,6 +129,13 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// - For special types that cannot be safely cloned, use `cloner = path` and
 ///   handle clone-time cleanup in `on_clone` (for example, removing the cloned
 ///   component immediately after clone).
+///
+/// ## `#[require(...)]`
+///
+/// Sets `Component::REQUIRED` to `Required::from::<(...)>()`.
+///
+/// Can be a single type or multi types that does not exceed 15.
+/// Required component types should support `Default`.
 ///
 /// ## `#[relationship(...)]`
 ///
@@ -172,7 +175,7 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
 /// - `#[related]` on one struct field: marks the relationship payload field.
 #[proc_macro_derive(
     Component,
-    attributes(component, relationship, relationship_target, related)
+    attributes(component, require, relationship, relationship_target, related,)
 )]
 pub fn derive_component(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -182,15 +185,31 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
 /// Derives the `Bundle` trait implementation.
 ///
 /// This macro automatically implements the `Bundle` trait for your struct,
-/// allowing it to be used as a bundle when spawning entities. All fields must
-/// implement `Bundle` (or `Component`, which automatically implements `Bundle`).
+/// allowing it to be used as a bundle when spawning entities.
 ///
-/// # Behavior
+/// # Default Behavior
 ///
-/// - Each field in the struct represents a sub-bundle that will be combined
-/// - Components from all fields are merged when spawning entities
-/// - If duplicate components exist across fields, later fields override earlier ones
-/// - The `()` (unit) type can be used for empty bundles
+/// By default, all fields must implement `DataBundle` (i.e., pure data with no
+/// post-spawn side effects). The generated impl sets `NEED_APPLY_EFFECT = false`
+/// and also implements the `DataBundle` marker supertrait.
+///
+/// - Each field in the struct represents a sub-bundle that will be combined.
+/// - Components from all fields are merged when spawning entities.
+/// - If duplicate components exist across fields, later fields override earlier ones.
+///
+/// # Effect Bundles
+///
+/// Adding `#[bundle(effect)]` relaxes the field constraint to `Bundle` (instead
+/// of `DataBundle`) and sets `NEED_APPLY_EFFECT = true`. This causes
+/// [`Bundle::apply_effect`] to be called after all components have been written
+/// to storage, forwarding to each field in declaration order.
+///
+/// Effect bundles **cannot** be used with `spawn_batch` — doing so is a
+/// compile-time error.
+///
+/// # Attribute
+///
+/// - `#[bundle(effect)]` — opt into effect processing for this bundle type.
 ///
 /// # Examples
 ///
@@ -204,27 +223,23 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
 /// #[derive(Component, Clone)]
 /// struct Baz(String);
 ///
-/// // Empty bundle - spawns an entity with no components
-/// #[derive(Bundle)]
-/// struct EmptyBundle {}
-///
-/// // Regular bundle - equivalent to `(Foo, Bar)` when spawning
+/// // Regular bundle — all fields are DataBundle; also implements DataBundle.
 /// #[derive(Bundle)]
 /// struct MyBundle {
 ///     a: Foo,
 ///     b: Bar,
 /// }
 ///
-/// // Bundle with duplicate components
-/// // Later fields override earlier ones when spawning
-/// // No memory leaks occur
+/// // Effect bundle — fields only need Bundle; NEED_APPLY_EFFECT = true.
 /// #[derive(Bundle)]
-/// struct OverrideBundle {
-///     first: Baz,
-///     second: Baz,  // This value will override `first` for the same component type
+/// #[bundle(effect)]
+/// struct SpawnBundle {
+///     a: Foo,
+///     // The field below can use a type whose apply_effect does real work.
+///     b: SomeEffectField,
 /// }
 /// ```
-#[proc_macro_derive(Bundle)]
+#[proc_macro_derive(Bundle, attributes(bundle))]
 pub fn derive_bundle(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     bundle::impl_derive_bundle(ast)
@@ -329,6 +344,43 @@ pub fn derive_game_error(input: TokenStream) -> TokenStream {
 pub fn derive_schedule_label(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     schedule::impl_derive_schedule_label(ast)
+}
+
+/// Derives the `SystemSet` trait implementation.
+///
+/// Supported input forms:
+/// - structs (unit, tuple, or named fields)
+/// - enums (any variant shape)
+///
+/// The generated `begin` and `end` boundary marker systems use
+/// `self.intern()` for identity, so different enum variants naturally
+/// produce distinct begin/end pairs without any attributes.
+///
+/// # Required Traits
+///
+/// The target type must implement:
+/// - `Clone`
+/// - `Debug`
+/// - `Hash`
+/// - `Eq`
+///
+/// # Examples
+///
+/// ```ignore
+/// #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+/// enum PhysicsSet {
+///     BroadPhase,
+///     NarrowPhase,
+///     Solve,
+/// }
+///
+/// #[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+/// struct RenderSet;
+/// ```
+#[proc_macro_derive(SystemSet)]
+pub fn derive_system_set(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    schedule::impl_derive_system_set(ast)
 }
 
 /// Derives the `Message` trait implementation.

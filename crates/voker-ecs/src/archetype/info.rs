@@ -255,7 +255,6 @@ impl Archetype {
     ///   and `s` is the number of sparse components.
     #[inline]
     pub fn contains_component(&self, id: ComponentId) -> bool {
-        #[cold]
         #[inline(never)]
         fn large_contains(this: &Archetype, id: ComponentId) -> bool {
             this.dense_components().binary_search(&id).is_ok()
@@ -267,6 +266,7 @@ impl Archetype {
         if self.components.len() < 200 {
             crate::utils::contains_component(id, self.components)
         } else {
+            core::hint::cold_path();
             large_contains(self, id)
         }
     }
@@ -277,7 +277,6 @@ impl Archetype {
     /// - Time: O(log n) where n is the number of dense components
     #[inline]
     pub fn contains_dense_component(&self, id: ComponentId) -> bool {
-        #[cold]
         #[inline(never)]
         fn large_contains(this: &Archetype, id: ComponentId) -> bool {
             this.dense_components().binary_search(&id).is_ok()
@@ -288,6 +287,7 @@ impl Archetype {
         if self.components.len() < 200 {
             crate::utils::contains_component(id, self.dense_components())
         } else {
+            core::hint::cold_path();
             large_contains(self, id)
         }
     }
@@ -298,7 +298,6 @@ impl Archetype {
     /// - Time: O(log n) where n is the number of sparse components
     #[inline]
     pub fn contains_sparse_component(&self, id: ComponentId) -> bool {
-        #[cold]
         #[inline(never)]
         fn large_contains(this: &Archetype, id: ComponentId) -> bool {
             this.sparse_components().binary_search(&id).is_ok()
@@ -309,6 +308,7 @@ impl Archetype {
         if self.components.len() < 200 {
             crate::utils::contains_component(id, self.sparse_components())
         } else {
+            core::hint::cold_path();
             large_contains(self, id)
         }
     }
@@ -328,10 +328,9 @@ impl Archetype {
     /// O(n) where n is the number of entities
     #[must_use]
     pub fn get_arche_row(&self, entity: Entity) -> Option<ArcheRow> {
-        self.entities
-            .iter()
-            .position(|e| *e == entity)
-            .map(|idx| ArcheRow(idx as u32))
+        use crate::utils::position_entity;
+        let index = position_entity(entity, &self.entities)?;
+        Some(ArcheRow(index as u32))
     }
 
     /// Inserts a new entity into this archetype, reserving space at the end.
@@ -342,7 +341,6 @@ impl Archetype {
     ///   prepared for this entity before or immediately after insertion.
     #[must_use]
     pub unsafe fn alloc_row(&mut self, entity: Entity) -> ArcheRow {
-        debug_assert!(!crate::utils::contains_entity(entity, &self.entities));
         // 0 < EntityId < u32::MAX
         let row = ArcheRow(self.entities.len() as u32);
         self.entities.push(entity);
@@ -459,17 +457,14 @@ impl Archetype {
         });
 
         if self.has_on_add_observer() {
+            let mut event = Add { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: None,
+                new_archetype: Some(self),
+            };
             unsafe {
-                world.trigger_raw(
-                    ADD,
-                    &mut Add { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: None,
-                        new_archetype: Some(self),
-                    },
-                    caller,
-                );
+                world.trigger_raw(ADD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -489,17 +484,14 @@ impl Archetype {
         });
 
         if self.has_on_clone_observer() {
+            let mut event = Clone { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: None,
+                new_archetype: Some(self),
+            };
             unsafe {
-                world.trigger_raw(
-                    CLONE,
-                    &mut Clone { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: None,
-                        new_archetype: Some(self),
-                    },
-                    caller,
-                );
+                world.trigger_raw(CLONE, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -519,17 +511,14 @@ impl Archetype {
         });
 
         if self.has_on_insert_observer() {
+            let mut event = Insert { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: None,
+                new_archetype: Some(self),
+            };
             unsafe {
-                world.trigger_raw(
-                    INSERT,
-                    &mut Insert { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: None,
-                        new_archetype: Some(self),
-                    },
-                    caller,
-                );
+                world.trigger_raw(INSERT, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -549,17 +538,14 @@ impl Archetype {
         });
 
         if self.has_on_remove_observer() {
+            let mut event = Remove { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: Some(self),
+                new_archetype: None,
+            };
             unsafe {
-                world.trigger_raw(
-                    REMOVE,
-                    &mut Remove { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: Some(self),
-                        new_archetype: None,
-                    },
-                    caller,
-                );
+                world.trigger_raw(REMOVE, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -579,17 +565,14 @@ impl Archetype {
         });
 
         if self.has_on_discard_observer() {
+            let mut event = Discard { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: Some(self),
+                new_archetype: None,
+            };
             unsafe {
-                world.trigger_raw(
-                    DISCARD,
-                    &mut Discard { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: Some(self),
-                        new_archetype: None,
-                    },
-                    caller,
-                );
+                world.trigger_raw(DISCARD, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -609,17 +592,14 @@ impl Archetype {
         });
 
         if self.has_on_despawn_observer() {
+            let mut event = Despawn { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: self.components,
+                old_archetype: Some(self),
+                new_archetype: None,
+            };
             unsafe {
-                world.trigger_raw(
-                    DESPAWN,
-                    &mut Despawn { entity },
-                    &mut EntityComponentsTrigger {
-                        components: self.components,
-                        old_archetype: Some(self),
-                        new_archetype: None,
-                    },
-                    caller,
-                );
+                world.trigger_raw(DESPAWN, &mut event, &mut trigger, caller);
             }
         }
     }
@@ -633,36 +613,43 @@ impl Archetype {
     ///
     /// This is used when registering observers so trigger paths can skip
     /// expensive event dispatch for event kinds with no listeners.
+    #[inline(always)]
     pub(crate) fn merge_observer_flags(&mut self, flags: ObserverFlags) {
         self.observers = self.observers.union(flags);
     }
 
     /// Returns `true` if there is any `Add` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_add_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::ADD)
     }
 
     /// Returns `true` if there is any `Clone` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_clone_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::CLONE)
     }
 
     /// Returns `true` if there is any `Insert` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_insert_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::INSERT)
     }
 
     /// Returns `true` if there is any `Remove` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_remove_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::REMOVE)
     }
 
     /// Returns `true` if there is any `Discard` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_discard_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DISCARD)
     }
 
     /// Returns `true` if there is any `Despawn` observer for this archetype.
+    #[inline(always)]
     pub fn has_on_despawn_observer(&self) -> bool {
         self.observers.intersects(ObserverFlags::DESPAWN)
     }

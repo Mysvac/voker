@@ -11,7 +11,13 @@ pub mod cfg {
 
     voker_cfg::define_alias! {
         #[cfg(feature = "std")] => std,
-        #[cfg(all(target_arch = "wasm32", feature = "web"))] => web,
+        #[cfg(not(feature = "std"))] => no_std,
+        #[cfg(windows)] => windows,
+        #[cfg(target_arch = "wasm32")] => wasm,
+        #[cfg(target_os = "android")] => android,
+        #[cfg(not(windows))] => not_windows,
+        #[cfg(not(target_arch = "wasm32"))] => not_wasm,
+        #[cfg(not(target_os = "android"))] => not_android,
     }
 }
 
@@ -25,6 +31,8 @@ extern crate alloc;
 // -----------------------------------------------------------------------------
 // Modules
 
+pub mod atomic;
+pub mod cell;
 pub mod sync;
 pub mod thread;
 pub mod time;
@@ -35,7 +43,17 @@ pub mod utils;
 
 #[doc(hidden)]
 pub mod exports {
-    crate::cfg::web! {
+    use crate::cfg;
+
+    cfg::windows! {
+        pub use windows_sys;
+    }
+
+    cfg::android! {
+        pub use android_activity;
+    }
+
+    cfg::wasm! {
         pub use js_sys;
         pub use wasm_bindgen;
         pub use wasm_bindgen_futures;

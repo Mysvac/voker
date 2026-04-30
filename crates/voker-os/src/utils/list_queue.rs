@@ -8,8 +8,8 @@ use core::ops::BitOrAssign;
 use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::{fmt, ptr};
 
-use crate::sync::atomic::AtomicU64;
-use crate::sync::atomic::Ordering::{Acquire, Release};
+use crate::atomic::AtomicU64;
+use crate::atomic::Ordering::{Acquire, Release};
 use crate::utils::{CachePadded, SpinLock, SpinLockGuard};
 
 // -----------------------------------------------------------------------------
@@ -207,7 +207,7 @@ impl<T> IdleQueue<T> {
 /// # Examples
 ///
 /// ```
-/// use voker_os::sync::atomic::{Ordering, AtomicUsize};
+/// use voker_os::atomic::{Ordering, AtomicUsize};
 /// use voker_os::utils::ListQueue;
 /// use std::thread;
 ///

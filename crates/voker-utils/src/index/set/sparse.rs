@@ -1,6 +1,6 @@
 //! Provide [`SparseIndexSet`] based on [indexmap]'s implementation.
 //!
-//! Unlike [`indexmap::SparseIndexSet`], [`SparseIndexSet`] defaults to [`FixedHashState`]
+//! Unlike [`indexmap::IndexSet`], [`SparseIndexSet`] defaults to [`SparseHashState`]
 //! instead of `RandomState`.
 //!
 //! This provides determinism by default with an acceptable compromise to denial
@@ -100,25 +100,6 @@ impl<T> SparseIndexSet<T> {
         ))
     }
 }
-
-// -----------------------------------------------------------------------------
-// Transmute
-
-// impl<T> Deref for SparseIndexSet<T> {
-//     type Target = InternalSet<T>;
-//
-//     #[inline(always)]
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
-// impl<T> DerefMut for SparseIndexSet<T> {
-//     #[inline(always)]
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.0
-//     }
-// }
 
 // -----------------------------------------------------------------------------
 // Re-export the underlying method

@@ -18,11 +18,10 @@ impl Drop for AbortOnDropFail {
     #[cold]
     #[inline(never)]
     fn drop(&mut self) {
-        log::error!("Aborting due to drop component panicked.");
+        tracing::error!("Aborting due to drop component panicked.");
 
         crate::cfg::std! {
             if {
-                ::std::eprintln!("Aborting due to drop component panicked.");
                 ::std::process::abort();
             } else {
                 panic!("Aborting due to drop component panicked.");

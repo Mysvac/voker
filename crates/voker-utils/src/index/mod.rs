@@ -5,6 +5,8 @@
 
 pub use indexmap::{Equivalent, GetDisjointMutError, TryReserveError};
 
+pub use indexmap;
+
 pub mod map;
 pub mod set;
 

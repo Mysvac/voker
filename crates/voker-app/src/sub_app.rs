@@ -1,15 +1,18 @@
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::fmt::Debug;
 use voker_ecs::prelude::{IntoObserver, Message};
+use voker_ecs::reflect::AppTypeRegistry;
+use voker_reflect::info::Typed;
 
 use voker_ecs::resource::Resource;
 use voker_ecs::schedule::{InternedScheduleLabel, IntoSystemConfig};
 use voker_ecs::schedule::{Schedule, ScheduleLabel};
-use voker_ecs::system::{IntoSystem, SystemInput};
+use voker_ecs::system::{IntoSystem, SystemSet};
 use voker_ecs::world::{FromWorld, World};
+use voker_reflect::registry::{FromType, GetTypeMeta, TypeData};
+use voker_reflect::{Reflect, info::TypePath};
 use voker_utils::hash::HashSet;
 
 use crate::plugin::PlaceholderPlugin;
@@ -20,13 +23,17 @@ type ExtractFn = Box<dyn FnMut(&mut World, &mut World) + Send>;
 // -----------------------------------------------------------------------------
 // SubApp
 
+/// A secondary app container with an isolated [`World`].
+///
+/// Sub-apps are typically used for specialized pipelines that need their own
+/// schedules and resources, while still being orchestrated by the main [`App`].
 pub struct SubApp {
-    pub(crate) world: Box<World>,
+    pub(crate) world: Option<Box<World>>,
     pub(crate) plugins: Vec<Box<dyn Plugin>>,
-    pub(crate) plugin_names: HashSet<String>,
+    pub(crate) plugin_names: HashSet<&'static str>,
     pub(crate) plugin_build_depth: usize,
     pub(crate) plugins_state: PluginsState,
-    pub(crate) update_schedule: Option<InternedScheduleLabel>,
+    pub(crate) main_schedule: Option<InternedScheduleLabel>,
     pub(crate) extract: Option<ExtractFn>,
 }
 
@@ -38,67 +45,98 @@ impl Debug for SubApp {
 
 impl Default for SubApp {
     fn default() -> Self {
-        Self {
-            world: World::alloc(),
-            plugins: Vec::default(),
-            plugin_names: HashSet::default(),
-            plugin_build_depth: 0,
-            plugins_state: PluginsState::Adding,
-            update_schedule: None,
-            extract: None,
-        }
+        Self::new()
     }
 }
 
 impl SubApp {
-    /// Creates a new sub-app with default state.
+    /// Creates an empty sub-app without allocating a world.
+    ///
+    /// This is primarily used internally as a placeholder for temporary swaps.
+    pub const fn empty() -> Self {
+        Self {
+            world: None,
+            plugins: Vec::new(),
+            plugin_names: HashSet::new(),
+            plugin_build_depth: 0,
+            plugins_state: PluginsState::Adding,
+            main_schedule: None,
+            extract: None,
+        }
+    }
+
+    /// Creates a sub-app with a newly allocated world.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            world: Some(World::alloc()),
+            plugins: Vec::default(),
+            plugin_names: HashSet::default(),
+            plugin_build_depth: 0,
+            plugins_state: PluginsState::Adding,
+            main_schedule: None,
+            extract: None,
+        }
     }
 
     /// Returns an immutable reference to this sub-app world.
     pub fn world(&self) -> &World {
-        &self.world
+        self.world.as_ref().unwrap()
     }
 
     /// Returns a mutable reference to this sub-app world.
     pub fn world_mut(&mut self) -> &mut World {
-        &mut self.world
+        self.world.as_mut().unwrap()
     }
 
-    fn run_as_app<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut App),
-    {
-        let mut app = App::empty();
-        core::mem::swap(self, &mut app.sub_apps.main);
-        f(&mut app);
-        core::mem::swap(self, &mut app.sub_apps.main);
+    /// Returns the schedule label executed by [`Self::run_main_schedule`], if any.
+    pub fn main_schedule(&mut self) -> Option<InternedScheduleLabel> {
+        self.main_schedule // copyable
     }
 
-    /// Runs this sub-app's configured default schedule, if present.
-    pub fn run_default_schedule(&mut self) {
+    /// Runs this sub-app's configured main schedule.
+    ///
+    /// If no main schedule is configured, this is a no-op.
+    pub fn run_main_schedule(&mut self) {
         if self.plugin_build_depth != 0 {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("SubApp::update() was called while a plugin was building.");
         }
 
-        if let Some(label) = self.update_schedule {
-            self.world.run_schedule(label);
+        let world = self.world.as_mut().unwrap();
+
+        if let Some(label) = self.main_schedule {
+            world.run_schedule(label);
         }
     }
 
-    /// Runs the default schedule and updates internal component trackers.
+    /// Runs the configured main schedule and clears world trackers.
     pub fn update(&mut self) {
-        self.run_default_schedule();
-        self.world.clear_trackers();
+        self.run_main_schedule();
+        self.world_mut().clear_trackers();
     }
 
-    /// Runs the configured extract callback, if any.
+    /// Runs the configured extract function, if present.
+    ///
+    /// The first argument to the extract callback is usually the main world,
+    /// and the second argument is this sub-app world.
     pub fn extract(&mut self, world: &mut World) {
+        let this = self.world.as_mut().unwrap();
         if let Some(f) = self.extract.as_mut() {
-            f(world, &mut self.world);
+            f(world, this);
         }
+    }
+
+    fn run_as_app(&mut self, f: impl FnOnce(&mut App)) {
+        let mut app = App::empty();
+        core::mem::swap(&mut app.main, self);
+        f(&mut app);
+        core::mem::swap(&mut app.main, self);
+    }
+
+    /// Sets the schedule run by [`Self::run_main_schedule`].
+    pub fn set_main_schedule(&mut self, label: impl ScheduleLabel) -> &mut Self {
+        self.main_schedule = Some(label.intern());
+        self
     }
 
     /// Sets the extract callback used before sub-app updates.
@@ -110,82 +148,101 @@ impl SubApp {
         self
     }
 
-    /// Removes and returns the current extract callback.
-    pub fn take_extract(&mut self) -> Option<ExtractFn> {
-        self.extract.take()
+    /// Registers reflected type metadata for `T` in [`AppTypeRegistry`].
+    pub fn register_type<T: GetTypeMeta>(&mut self) -> &mut Self {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register::<T>();
+        self
+    }
+
+    /// Registers type data `D` for reflected type `T` in [`AppTypeRegistry`].
+    pub fn register_type_data<T: Typed, D: TypeData + FromType<T>>(&mut self) -> &mut Self {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register_type_data::<T, D>();
+        self
+    }
+
+    /// Registers a fallible conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    ///
+    /// This function will register `X -> Y` in X's `ReflectConvert`
+    /// and `Y <- X` in Y's `ReflectConvert`.
+    pub fn register_type_conversion<X, Y, F>(&mut self, function: F) -> &mut Self
+    where
+        X: Reflect + TypePath,
+        Y: Reflect + TypePath,
+        F: Fn(X) -> Result<Y, X> + Clone + Send + Sync + 'static,
+    {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register_type_conversion::<X, Y, F>(function);
+        self
+    }
+
+    /// Registers an infallible `Into` conversion route from `X` to `Y` in [`AppTypeRegistry`].
+    pub fn register_type_into<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + Into<Y>,
+        Y: Reflect + TypePath,
+    {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register_type_into::<X, Y>();
+        self
+    }
+
+    /// Registers an infallible `From` conversion route obtain `X` from `Y` in [`AppTypeRegistry`].
+    pub fn register_type_from<X, Y>(&mut self) -> &mut Self
+    where
+        X: Reflect + TypePath + From<Y>,
+        Y: Reflect + TypePath,
+    {
+        let registry = self.world().resource::<AppTypeRegistry>();
+        registry.write().register_type_from::<X, Y>();
+        self
     }
 
     /// Initializes a send resource if missing in this sub-app world.
     pub fn init_resource<R: Resource + Send + FromWorld>(&mut self) -> &mut Self {
-        self.world.init_resource::<R>();
+        self.world_mut().init_resource::<R>();
         self
     }
 
     /// Initializes a non-send resource if missing in this sub-app world.
     pub fn init_non_send<R: Resource + FromWorld>(&mut self) -> &mut Self {
-        self.world.init_non_send::<R>();
+        self.world_mut().init_non_send::<R>();
         self
     }
 
     /// Inserts or replaces a send resource in this sub-app world.
     pub fn insert_resource<R: Resource + Send>(&mut self, resource: R) -> &mut Self {
-        self.world.insert_resource(resource);
+        self.world_mut().insert_resource(resource);
         self
     }
 
     /// Inserts or replaces a non-send resource in this sub-app world.
     pub fn insert_non_send<R: Resource>(&mut self, resource: R) -> &mut Self {
-        self.world.insert_non_send(resource);
-        self
-    }
-
-    /// Adds systems/configuration to the given schedule label.
-    pub fn add_systems<M>(
-        &mut self,
-        schedule: impl ScheduleLabel,
-        systems: impl IntoSystemConfig<M>,
-    ) -> &mut Self {
-        self.world.add_systems(schedule, systems);
-        self
-    }
-
-    /// Registers a system in this sub-app world.
-    pub fn register_system<I, O, M>(
-        &mut self,
-        system: impl IntoSystem<I, O, M> + 'static,
-    ) -> &mut Self
-    where
-        I: SystemInput + 'static,
-        O: 'static,
-    {
-        self.world.register_system(system);
+        self.world_mut().insert_non_send(resource);
         self
     }
 
     /// Ensures a schedule with the given label exists.
     pub fn init_schedule(&mut self, label: impl ScheduleLabel) -> &mut Self {
-        let label = label.intern();
-        let schedules = &mut self.world.schedules;
-        schedules.entry(label);
+        self.world_mut().schedule_entry(label.intern());
         self
     }
 
     /// Inserts or replaces a schedule in this sub-app world.
     pub fn insert_schedule(&mut self, schedule: Schedule) -> &mut Self {
-        self.world.insert_schedule(schedule);
+        self.world_mut().insert_schedule(schedule);
         self
     }
 
-    /// Returns an immutable schedule by label.
+    /// Returns a reference to the schedule associated with label, if it exists.
     pub fn get_schedule(&self, label: impl ScheduleLabel) -> Option<&Schedule> {
-        let schedules = &self.world.schedules;
-        schedules.get(label)
+        self.world().schedules.get(label.intern())
     }
 
-    /// Returns a mutable schedule by label.
+    /// Returns a mutable reference to the schedule associated with label, if it exists.
     pub fn get_schedule_mut(&mut self, label: impl ScheduleLabel) -> Option<&mut Schedule> {
-        let schedules = &mut self.world.schedules;
-        schedules.get_mut(label)
+        self.world_mut().schedules.get_mut(label.intern())
     }
 
     /// Edits a schedule in place, creating it if necessary.
@@ -194,34 +251,47 @@ impl SubApp {
         label: impl ScheduleLabel,
         mut f: impl FnMut(&mut Schedule),
     ) -> &mut Self {
-        let label = label.intern();
-        let schedules = &mut self.world.schedules;
+        f(self.world_mut().schedule_entry(label.intern()));
+        self
+    }
 
-        f(schedules.entry(label));
+    /// Adds one system into `set` on the given schedule label.
+    pub fn add_system<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        set: impl SystemSet,
+        system: impl IntoSystem<(), (), M>,
+    ) -> &mut Self {
+        self.world_mut().add_system(label.intern(), set, system);
+        self
+    }
 
+    /// Adds one or many systems into `set` on the given schedule label.
+    pub fn add_systems<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        set: impl SystemSet,
+        systems: impl IntoSystemConfig<M>,
+    ) -> &mut Self {
+        self.world_mut().add_systems(label.intern(), set, systems);
         self
     }
 
     /// Adds a global observer to this sub-app world.
     pub fn add_observer<M>(&mut self, observer: impl IntoObserver<M>) -> &mut Self {
-        self.world.add_observer(observer);
+        self.world_mut().add_observer(observer);
         self
     }
 
     /// Registers a message type in this sub-app world.
-    pub fn add_message<T>(&mut self) -> &mut Self
-    where
-        T: Message,
-    {
-        self.world.register_message::<T>();
+    pub fn add_message<T: Message>(&mut self) -> &mut Self {
+        self.world_mut().register_message::<T>();
         self
     }
 
     /// Adds plugins or plugin groups to this sub-app.
     pub fn add_plugins<M>(&mut self, plugins: impl Plugins<M>) -> &mut Self {
-        self.run_as_app(|app| {
-            plugins.add_to_app(app);
-        });
+        self.run_as_app(|app| plugins.add_to_app(app));
         self
     }
 
@@ -234,36 +304,37 @@ impl SubApp {
     }
 
     /// Returns all added plugin instances matching type `T`.
-    pub fn get_added_plugins<T>(&self) -> Vec<&T>
+    pub fn get_added_plugin<T>(&self) -> Option<&T>
     where
         T: Plugin,
     {
-        self.plugins
-            .iter()
-            .filter_map(|p| (p.as_ref() as &dyn Any).downcast_ref::<T>())
-            .collect()
+        for p in self.plugins.iter() {
+            if let Some(ret) = (p.as_ref() as &dyn Any).downcast_ref::<T>() {
+                return Some(ret);
+            }
+        }
+        None
     }
 
     /// Returns the current plugin lifecycle state for this sub-app.
     pub fn plugins_state(&mut self) -> PluginsState {
-        match self.plugins_state {
-            PluginsState::Adding => {
-                let mut state = PluginsState::Ready;
-                let plugins = core::mem::take(&mut self.plugins);
-                self.run_as_app(|app| {
-                    for plugin in &plugins {
-                        if !plugin.ready(app) {
-                            state = PluginsState::Adding;
-                            break;
-                        }
+        if self.plugins_state == PluginsState::Adding {
+            let plugins = core::mem::take(&mut self.plugins);
+            let mut state = PluginsState::Ready;
+            // Plugins are usually not empty
+            self.run_as_app(|app| {
+                for plugin in &plugins {
+                    if !plugin.ready(app) {
+                        state = PluginsState::Adding;
+                        break;
                     }
-                });
-                self.plugins = plugins;
-                self.plugins_state = state;
-                state
-            }
-            state => state,
+                }
+            });
+            self.plugins = plugins;
+            self.plugins_state = state;
         }
+
+        self.plugins_state
     }
 
     /// Calls [`Plugin::finish`] on all plugins in this sub-app.
@@ -271,6 +342,9 @@ impl SubApp {
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.plugins.len() {
             core::mem::swap(&mut self.plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_finish_span =
+                tracing::info_span!("plugin finish", plugin = placeholder.name()).entered();
             self.run_as_app(|app| {
                 placeholder.finish(app);
             });
@@ -284,6 +358,9 @@ impl SubApp {
         let mut placeholder: Box<dyn Plugin> = Box::new(PlaceholderPlugin);
         for i in 0..self.plugins.len() {
             core::mem::swap(&mut self.plugins[i], &mut placeholder);
+            #[cfg(feature = "trace")]
+            let _plugin_cleanup_span =
+                tracing::info_span!("plugin cleanup", plugin = placeholder.name()).entered();
             self.run_as_app(|app| {
                 placeholder.cleanup(app);
             });
@@ -292,7 +369,8 @@ impl SubApp {
         self.plugins_state = PluginsState::Cleaned;
     }
 
-    pub(crate) fn is_building_plugins(&self) -> bool {
+    /// Returns `true` if this sub-app is currently within plugin build execution.
+    pub fn is_building_plugins(&self) -> bool {
         self.plugin_build_depth != 0
     }
 }

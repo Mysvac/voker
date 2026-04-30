@@ -5,7 +5,7 @@ use crate::archetype::Archetype;
 use crate::component::{Component, ComponentId, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Table, TableRow};
-use crate::system::{AccessParam, FilterParamBuilder};
+use crate::system::{AccessParam, AccessTable, FilterParamBuilder};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -40,7 +40,7 @@ unsafe impl<T: Component> QueryFilter for With<T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -60,6 +60,10 @@ unsafe impl<T: Component> QueryFilter for With<T> {
     }
 
     fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+
+    fn edit_access_table(_state: &Self::State, _table: &mut AccessTable) -> bool {
+        true
+    }
 
     unsafe fn set_for_arche<'w>(
         state: &Self::State,
@@ -129,7 +133,7 @@ macro_rules! impl_tuple {
                 world.register_component::<$name>()
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
+            fn try_build_state(world: &World) -> Option<Self::State> {
                 world.get_component_id::<$name>()
             }
 
@@ -151,7 +155,13 @@ macro_rules! impl_tuple {
                 outer.push(builder);
             }
 
-            fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+            fn build_access(_state: &Self::State, _out: &mut AccessParam) {
+                // We only need archetype information, not component data
+            }
+
+            fn edit_access_table(_state: &Self::State, _table: &mut AccessTable) -> bool {
+                true // We don't need to access resources
+            }
 
             unsafe fn set_for_arche<'w>(
                 state: &Self::State,
@@ -210,7 +220,7 @@ macro_rules! impl_tuple {
                 ( $( world.register_component::<$name>(), )* )
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
+            fn try_build_state(world: &World) -> Option<Self::State> {
                 Some(( $( world.get_component_id::<$name>()?, )* ))
             }
 
@@ -232,7 +242,13 @@ macro_rules! impl_tuple {
                 outer.push(builder);
             }
 
-            fn build_access(_state: &Self::State, _out: &mut AccessParam) {}
+            fn build_access(_state: &Self::State, _out: &mut AccessParam) {
+                // We only need archetype information, not component data
+            }
+
+            fn edit_access_table(_state: &Self::State, _table: &mut AccessTable) -> bool {
+                true // We don't need to access resources
+            }
 
             unsafe fn set_for_arche<'w>(
                 state: &Self::State,

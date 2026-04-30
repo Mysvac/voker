@@ -5,7 +5,7 @@ use core::any::Any;
 use core::panic::AssertUnwindSafe;
 use fixedbitset::FixedBitSet;
 
-use voker_os::sync::{Mutex, PoisonError, SyncUnsafeCell};
+use voker_os::cell::SyncUnsafeCell;
 use voker_os::utils::{SegQueue, SpinLock};
 use voker_task::{ComputeTaskPool, Scope, TaskPool};
 use voker_utils::vec::FastVec;
@@ -56,7 +56,7 @@ struct CompletedSignal {
 /// Non-send systems are dispatched to the external/main-thread executor when
 /// available; sendable systems run on the compute task pool.
 pub struct MultiThreadedExecutor {
-    state: Mutex<ExecutorState>,
+    state: SpinLock<ExecutorState>,
     completed: SegQueue<CompletedSignal>,
     panic_payload: SpinLock<Option<Box<dyn Any + Send>>>,
 }
@@ -141,7 +141,7 @@ impl MultiThreadedExecutor {
     /// Creates a new multi-threaded executor.
     pub const fn new() -> Self {
         Self {
-            state: Mutex::new(ExecutorState::new()),
+            state: SpinLock::new(ExecutorState::new()),
             completed: SegQueue::new(),
             panic_payload: SpinLock::new(None),
         }
@@ -188,10 +188,8 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
         result: Result<bool, Box<dyn Any + Send>>,
     ) {
         let meet = result.unwrap_or_else(|payload| {
-            voker_utils::cold_path();
-            log::error!("Encountered a panic in system `{}`!", ident);
-            #[cfg(feature = "std")]
-            ::std::eprintln!("Encountered a panic in system `{}`!", ident);
+            core::hint::cold_path();
+            tracing::error!("Encountered a panic in system `{}`!", ident);
             *self.executor.panic_payload.lock() = Some(payload);
             deferred = false;
             false
@@ -289,7 +287,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     ) -> Box<dyn FnOnce() + Send + 'scope> {
         let world = self.world;
         let systems = self.systems;
-        let panic_payload = &self.executor.panic_payload;
+        let _panic_payload = &self.executor.panic_payload;
 
         // Drain without reallocating by reusing the existing buffer capacity.
         let mut deferred: Vec<u32> = Vec::new();
@@ -307,8 +305,8 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                 #[cfg(feature = "std")]
                 if let Err(e) = ::std::panic::catch_unwind(func) {
-                    voker_utils::cold_path();
-                    *panic_payload.lock() = Some(e);
+                    core::hint::cold_path();
+                    *_panic_payload.lock() = Some(e);
                 }
 
                 #[cfg(not(feature = "std"))]
@@ -374,7 +372,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                     let func = AssertUnwindSafe(|| unsafe {
                         if let Err(e) = system.run_raw((), context.world) {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -400,7 +398,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 }
 
                 if non_send {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     self.scope.spawn_remote(task);
                 } else {
                     self.scope.spawn(task);
@@ -416,7 +414,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
 
                     let func = AssertUnwindSafe(|| unsafe {
                         system.run_raw((), context.world).unwrap_or_else(|e| {
-                            voker_utils::cold_path();
+                            core::hint::cold_path();
                             let last_run = system.last_run();
                             let name = system.id().name();
                             let ctx = ErrorContext::System { name, last_run };
@@ -441,7 +439,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
                 }
 
                 if non_send {
-                    voker_utils::cold_path();
+                    core::hint::cold_path();
                     self.scope.spawn_remote(task);
                 } else {
                     self.scope.spawn(task);
@@ -469,7 +467,7 @@ impl<'scope, 'env: 'scope, 'sys: 'scope> Context<'scope, 'env, 'sys> {
     /// Progresses scheduling work until no fresh completion event is observed.
     fn tick(&self) {
         loop {
-            let Ok(mut guard) = self.executor.state.try_lock() else {
+            let Some(mut guard) = self.executor.state.try_lock() else {
                 // Another thread is already advancing scheduling state.
                 return;
             };
@@ -500,10 +498,7 @@ impl SystemExecutor for MultiThreadedExecutor {
     ///
     /// This pre-allocates storage for dependency counters and ready queues.
     fn init(&mut self, schedule: &SystemSchedule) {
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .init(schedule);
+        self.state.get_mut().init(schedule);
     }
 
     /// Executes the schedule using task-based parallel dispatch.
@@ -529,13 +524,7 @@ impl SystemExecutor for MultiThreadedExecutor {
             return;
         }
 
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .reset(schedule);
-
-        // The executor handles panics explicitly; clear stale poison state.
-        self.state.clear_poison();
+        self.state.get_mut().reset(schedule);
 
         let main_thread_ex = world.get_resource::<MainThreadExecutor>().map(|e| e.0.clone());
         let remote_ex = main_thread_ex.as_deref();
@@ -546,24 +535,19 @@ impl SystemExecutor for MultiThreadedExecutor {
             context.tick();
         });
 
-        self.state
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-            .deferred_systems
-            .iter()
-            .for_each(|&index| {
-                let func = AssertUnwindSafe(|| {
-                    schedule.systems_mut()[index as usize].apply_deferred(world);
-                });
-
-                #[cfg(feature = "std")]
-                if let Err(e) = ::std::panic::catch_unwind(func) {
-                    *self.panic_payload.get_mut() = Some(e);
-                }
-
-                #[cfg(not(feature = "std"))]
-                (func)();
+        self.state.get_mut().deferred_systems.iter().for_each(|&index| {
+            let func = AssertUnwindSafe(|| {
+                schedule.systems_mut()[index as usize].apply_deferred(world);
             });
+
+            #[cfg(feature = "std")]
+            if let Err(e) = ::std::panic::catch_unwind(func) {
+                *self.panic_payload.get_mut() = Some(e);
+            }
+
+            #[cfg(not(feature = "std"))]
+            (func)();
+        });
 
         // Re-throw captured panic after scheduler cleanup.
         let payload = self.panic_payload.get_mut().take();

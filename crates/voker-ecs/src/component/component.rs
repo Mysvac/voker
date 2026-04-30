@@ -33,7 +33,7 @@ use crate::utils::Dropper;
 ///
 /// // Component with required dependencies
 /// #[derive(Component, Clone)]
-/// #[component(required = Foo)]
+/// #[require(Foo)]
 /// struct Baz;
 ///
 /// // Immutable component with sparse storage
@@ -43,7 +43,8 @@ use crate::utils::Dropper;
 ///
 /// // Combined: copyable, immutable, with multiple required dependencies
 /// #[derive(Component, Clone, Copy)]
-/// #[component(Copy, mutable = false, required = (Foo, Logger))]
+/// #[component(Copy, mutable = false)]
+/// #[require(Foo, Logger)]
 /// struct GameVersion<T: Copy>(T);
 /// ```
 ///
@@ -89,7 +90,7 @@ use crate::utils::Dropper;
 ///
 /// When using derive, these are configured with attributes such as
 /// `#[component(storage = "sparse")]`, `#[component(mutable = false)]`, and
-/// `#[component(required = Foo)]`.
+/// `#[require(Foo)]`.
 ///
 /// ## Required Components
 ///

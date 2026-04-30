@@ -2,6 +2,7 @@ use crate::borrow::Res;
 use crate::message::{Message, MessageCursor, MessageQueue};
 use crate::message::{MessageIterator, MessageWithKeyIter};
 use crate::system::{Local, SystemParam, SystemParamError};
+use crate::world::{UnsafeWorld, World};
 
 /// Read-only system parameter for consuming unread messages of type `M`.
 ///
@@ -41,7 +42,7 @@ impl<'w, 's, M: Message> MessageReader<'w, 's, M> {
         self.cursor.read(&self.messages)
     }
 
-    /// Returns unread messages together with their [`crate::message::MessageKey`].
+    /// Returns unread messages together with their `MessageKey`.
     pub fn read_with_id(&mut self) -> MessageWithKeyIter<'_, M> {
         self.cursor.read_with_id(&self.messages)
     }
@@ -76,7 +77,7 @@ unsafe impl<M: Message> SystemParam for MessageReader<'_, '_, M> {
     const NON_SEND: bool = false;
     const EXCLUSIVE: bool = false;
 
-    fn init_state(world: &mut crate::world::World) -> Self::State {
+    fn init_state(world: &mut World) -> Self::State {
         <InternalParam<M> as SystemParam>::init_state(world)
     }
 
@@ -85,7 +86,7 @@ unsafe impl<M: Message> SystemParam for MessageReader<'_, '_, M> {
     }
 
     unsafe fn build_param<'w, 's>(
-        world: crate::world::UnsafeWorld<'w>,
+        world: UnsafeWorld<'w>,
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,

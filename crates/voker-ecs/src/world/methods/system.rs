@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use voker_utils::hash::NoOpHashMap;
+use voker_utils::hash::NoopHashMap;
 
 use crate::resource::Resource;
 use crate::system::{IntoSystem, System, SystemId, SystemInput};
@@ -16,14 +16,15 @@ type BoxedSystem<I, O> = Box<dyn System<Input = I, Output = O>>;
 ///
 /// The generic parameters (`I`, `O`) partition caches by system input/output
 /// signature so ids do not collide across incompatible system types.
+#[repr(transparent)]
 struct SystemResource<I: SystemInput, O> {
-    mapper: NoOpHashMap<SystemId, Option<BoxedSystem<I, O>>>,
+    mapper: NoopHashMap<SystemId, Option<BoxedSystem<I, O>>>,
 }
 
 impl<I: SystemInput + 'static, O: 'static> Default for SystemResource<I, O> {
     fn default() -> Self {
         Self {
-            mapper: NoOpHashMap::new(),
+            mapper: NoopHashMap::new(),
         }
     }
 }
@@ -45,6 +46,8 @@ impl World {
         I: SystemInput + 'static,
         O: 'static,
     {
+        system.set_last_run(self.last_run());
+
         // SAFETY: the registered system is executed against the current world
         // following the same contracts as schedule-driven execution.
         let ret = system.run(input, self);
@@ -55,7 +58,7 @@ impl World {
         let old = res.mapper.insert(id, Some(system));
 
         if matches!(old, Some(Some(_))) {
-            log::warn!("The same new System `{id}` was inserted during the execution.");
+            tracing::warn!("The same new System `{id}` was inserted during the execution.");
         }
 
         ret
@@ -97,10 +100,9 @@ impl World {
         I: SystemInput + 'static,
         O: 'static,
     {
-        let res = self.resource_mut_or_init::<SystemResource<I, O>>();
-        let res = res.into_inner();
+        let mut res = self.resource_mut_or_init::<SystemResource<I, O>>();
         let id = system.system_id();
-        if matches!(res.mapper.get_mut(&id), Some(Some(_))) {
+        if matches!(res.mapper.get(&id), Some(Some(_))) {
             return;
         }
         res.mapper.insert(id, Some(Box::new(IntoSystem::into_system(system))));

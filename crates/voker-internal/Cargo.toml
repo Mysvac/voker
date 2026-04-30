@@ -8,51 +8,121 @@ repository.workspace = true
 
 [features]
 
-default = ["std"]
+default = [ "std", "debug", "backtrace" ]
 
 std = [
     "voker-os/std",
-    "voker-task/std",
     "voker-reflect/std",
+    "voker-math/std",
+    "voker-task/std",
     "voker-ecs/std",
+    "voker-app/std",
+    "voker-time/std",
+    "voker-diagnostic/std",
 ]
 
-web = [
+# Disable code that is unsupported when Voker is dynamically linked
+dynlib = [
+    "voker-diagnostic/dynlib"
+]
+
+# Output the type name and file location information in the log.
+debug = [
+    "voker-utils/debug",
+    "voker-ecs/debug",
+]
+
+# Enable spanned `tracing` for better debugging and error information.
+trace = [
+    "voker-ecs/trace",
+    "voker-app/trace",
+    "voker-log/trace",
+    "voker-asset/trace",
+]
+
+# Track stack information during reflection serialization and error handling.
+backtrace = [
     "std",
-    "voker-os/web",
-    "voker-task/web",
+    "voker-ecs/backtrace",
+    "voker-reflect/backtrace",
 ]
 
+# Collect document information of reflection types.
+reflect_docs = [
+    "voker-reflect/reflect_docs",
+]
+
+# Enable `sysinfo` diagnostic (e.g. CPU and Memory usage).
+sysinfo_plugin = ["voker-diagnostic/sysinfo_plugin"]
+
+# Use the `block_on` function of `async_io`.
+# Note that `future-lite::block_on` is default impl in STD Mode.
 async_io = [
     "std",
     "voker-task/async_io",
 ]
 
-backtrace = [
-    "std",
-    "voker-ecs/backtrace"
-]
+# Enable `tracy_client` crate and use custom allocator for memory tracing.
+trace_tracy_memory = ["voker-log/trace_tracy_memory",]
 
-debug = [
-    "voker-reflect/debug",
-    "voker-ecs/debug",
-]
+# Uses the `libm` maths library instead of the one provided in `std` and `core`.
+libm = ["voker-math/libm"]
 
-reflect_docs = [
-    "voker-reflect/reflect_docs",
-]
+# Enable libm mathematical functions as a fallback for no_std environments.
+# Can be overridden with std feature.
+nostd-libm = ["voker-math/nostd-libm"]
+
+# Enable assertions to check the validity of parameters passed to glam
+glam_assert = ["voker-math/glam_assert"]
+
+# Enable assertions in debug builds to check the validity of parameters passed to glam
+debug_glam_assert = ["voker-math/debug_glam_assert"]
+
+# Enable HTTP network assets
+http = ["voker-asset/http"]
+
+# Enable HTTPS network assets
+https = ["voker-asset/https"]
+
+# Enable watcher for asset files and embedded asset.
+file_watcher = ["voker-asset/file_watcher"]
+
+# Enable asset processor, only work if `AssetServerMode` is `Processed`.
+asset_processor = ["voker-asset/asset_processor"]
+
+voker-asset = ["std", "dep:voker-asset"]
+
+voker-log = ["std", "dep:voker-log"]
+
+voker-diagnostic = ["dep:voker-diagnostic"]
 
 [dependencies]
 
 voker-cfg = { path = "../voker-cfg", default-features = false }
 voker-ptr = { path = "../voker-ptr", default-features = false }
-voker-utils = { path = "../voker-utils", default-features = false }
 voker-inventory = { path = "../voker-inventory", default-features = false }
 
+voker-utils = { path = "../voker-utils", default-features = false }
 voker-os = { path = "../voker-os", default-features = false }
+
 voker-task = { path = "../voker-task", default-features = false }
 voker-reflect = { path = "../voker-reflect", default-features = false }
+voker-math = { path = "../voker-math", default-features = false, features = ["nostd-libm"] }
+
 voker-ecs = { path = "../voker-ecs", default-features = false }
+voker-app = { path = "../voker-app", default-features = false }
+
+voker-time = { path = "../voker-time", default-features = false }
+voker-state = { path = "../voker-state", default-features = false }
+
+# optional
+voker-diagnostic = { path = "../voker-diagnostic", optional = true, default-features = false }
+
+# std required
+voker-log = { path = "../voker-log", optional = true, default-features = false }
+
+# std required
+voker-asset = { path = "../voker-asset", optional = true, default-features = false }
 
 [lints]
 workspace = true

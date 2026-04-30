@@ -47,7 +47,7 @@ impl EntityId {
     #[inline(always)]
     pub const fn without_provenance(id: usize) -> Self {
         if id == 0 || id > u32::MAX as usize {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             panic!("EntityId must be > 0 and <= u32::MAX");
         }
         unsafe { Self(NonZeroU32::new_unchecked(id as u32)) }
@@ -192,7 +192,8 @@ impl Display for EntityTag {
 /// (8-byte aligned) to enable efficient bitwise operations and serialization.
 /// Endianness-aware field ordering ensures consistent behavior across platforms.
 #[derive(Reflect, Clone, Copy)]
-#[reflect(Opaque, serde, clone, hash, eq, cmp, debug)]
+#[reflect(Opaque, Clone, Debug, Hash)] // Fields order is not fixed, use `Opaque` to ensure logical stability.
+#[reflect(PartialEq, PartialOrd, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct Entity {
     // Field ordering is endianness-dependent to ensure consistent u64 representation
@@ -326,7 +327,7 @@ impl Display for Entity {
         if *self == Self::PLACEHOLDER {
             f.pad("PLACEHOLDER")
         } else {
-            f.pad(&alloc::format!("{}v{}", self.id(), self.tag()))
+            write!(f, "{}v{}", self.id(), self.tag())
         }
     }
 }

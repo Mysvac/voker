@@ -116,17 +116,17 @@ impl Observers {
         let event_id = observer.event_id;
 
         if event_id.index() >= self.runners.len() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             self.runners.resize_with(event_id.index() + 1, CachedObservers::new);
         }
 
         let observers = unsafe { self.runners.get_unchecked_mut(event_id.index()) };
 
-        if observer.observed_entities.is_empty() {
-            if observer.observed_components.is_empty() {
+        if observer.entities.is_empty() {
+            if observer.components.is_empty() {
                 observers.global_observers.insert(id, runner);
             } else {
-                for &cid in observer.observed_components.iter() {
+                for &cid in observer.components.iter() {
                     observers
                         .component_observers
                         .entry(cid)
@@ -136,13 +136,13 @@ impl Observers {
                 }
             }
         } else {
-            if observer.observed_components.is_empty() {
-                for &e in observer.observed_entities.iter() {
+            if observer.components.is_empty() {
+                for &e in observer.entities.iter() {
                     observers.entity_observers.entry(e).or_default().insert(id, runner);
                 }
             } else {
-                for &cid in observer.observed_components.iter() {
-                    for &e in observer.observed_entities.iter() {
+                for &cid in observer.components.iter() {
+                    for &e in observer.entities.iter() {
                         observers
                             .component_observers
                             .entry(cid)

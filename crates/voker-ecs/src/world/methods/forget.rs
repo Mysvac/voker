@@ -20,7 +20,7 @@ impl World {
     pub(crate) unsafe fn forget_with_caller(&mut self, entity: Entity, caller: DebugLocation) {
         let world_id = self.id();
 
-        log::warn!(
+        tracing::warn!(
             "Entity<{entity}>(in World<{world_id}>) was forgotten, may leaking memory: {caller}."
         );
 

@@ -1,6 +1,6 @@
 use core::num::NonZeroU8;
 
-use voker_ecs::prelude::Message;
+use voker_ecs::message::Message;
 
 /// A [`Message`] that indicates the [`App`] should exit.
 ///

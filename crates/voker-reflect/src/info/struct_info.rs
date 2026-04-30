@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 
-use voker_os::sync::Arc;
+use alloc::sync::Arc;
 use voker_utils::hash::HashMap;
 
 use crate::info::{CustomAttributes, Generics, NamedField, Type, TypePath};

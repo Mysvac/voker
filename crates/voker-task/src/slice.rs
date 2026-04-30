@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
 
-use crate::ComputeTaskPool;
-
 /// Parallel helpers for slice-like batch operations.
 ///
 /// When the `multi_threaded` cfg path is enabled and a [`ComputeTaskPool`]
@@ -11,6 +9,8 @@ use crate::ComputeTaskPool;
 ///
 /// All closures are required to implement `Clone + Send` because each worker
 /// receives its own cloned closure instance.
+///
+/// [`ComputeTaskPool`]: crate::ComputeTaskPool
 pub trait ParallelSlice {
     type Item;
 
@@ -130,6 +130,55 @@ pub trait ParallelSlice {
         &mut self,
         f: impl FnMut(&mut Self::Item) -> R + Clone + Send,
     ) -> Vec<R>;
+
+    /// Applies `f` to each chunk (splat) and collects one value per chunk.
+    ///
+    /// Uses parallel chunk execution when possible, otherwise falls back to
+    /// a single call over the full slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_task::ParallelSlice;
+    ///
+    /// let data = [1, 2, 3, 4];
+    /// let chunk_sums = data.par_splat_map(|chunk| chunk.iter().sum::<i32>());
+    ///
+    /// // Number of chunks depends on runtime task-pool setup.
+    /// assert_eq!(chunk_sums.iter().sum::<i32>(), 10);
+    /// ```
+    fn par_splat_map<R: Send + 'static>(
+        &self,
+        f: impl FnMut(&[Self::Item]) -> R + Clone + Send,
+    ) -> Vec<R>;
+
+    /// Applies `f` to each mutable chunk (splat) and collects one value per chunk.
+    ///
+    /// Uses parallel chunk execution when possible, otherwise falls back to
+    /// a single call over the full mutable slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use voker_task::ParallelSlice;
+    ///
+    /// let mut data = [1, 2, 3, 4];
+    /// let old_chunk_sums = data.par_splat_map_mut(|chunk| {
+    ///     let sum = chunk.iter().sum::<i32>();
+    ///     for v in chunk.iter_mut() {
+    ///         *v *= 2;
+    ///     }
+    ///     sum
+    /// });
+    ///
+    /// // Number of chunks depends on runtime task-pool setup.
+    /// assert_eq!(old_chunk_sums.iter().sum::<i32>(), 10);
+    /// assert_eq!(data, [2, 4, 6, 8]);
+    /// ```
+    fn par_splat_map_mut<R: Send + 'static>(
+        &mut self,
+        f: impl FnMut(&mut [Self::Item]) -> R + Clone + Send,
+    ) -> Vec<R>;
 }
 
 impl<T: Send + Sync> ParallelSlice for [T] {
@@ -140,7 +189,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
         Self::Item: PartialEq,
     {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
 
@@ -159,7 +208,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
 
     fn par_position(&self, f: impl FnMut(&Self::Item) -> bool + Clone + Send) -> Option<usize> {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
 
@@ -185,7 +234,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
 
     fn par_each(&self, f: impl FnMut(&Self::Item) + Clone + Send) {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
                 pool.scope(|scope| {
@@ -194,6 +243,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
                         scope.spawn(async move { chunk.iter().for_each(func); });
                     }
                 });
+                return;
             }
         }
         self.iter().for_each(f);
@@ -201,7 +251,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
 
     fn par_each_mut(&mut self, f: impl FnMut(&mut Self::Item) + Clone + Send) {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
                 pool.scope(|scope| {
@@ -210,6 +260,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
                         scope.spawn(async move { chunk.iter_mut().for_each(func); });
                     }
                 });
+                return;
             }
         }
         self.iter_mut().for_each(f);
@@ -217,7 +268,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
 
     fn par_map<R: Send + 'static>(&self, f: impl FnMut(&Self::Item) -> R + Clone + Send) -> Vec<R> {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
                 let mut results = pool.scope(|scope| {
@@ -242,7 +293,7 @@ impl<T: Send + Sync> ParallelSlice for [T] {
         f: impl FnMut(&mut Self::Item) -> R + Clone + Send,
     ) -> Vec<R> {
         crate::cfg::multi_threaded! {
-            if let Some(pool) = ComputeTaskPool::try_get() {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
                 let threads = pool.thread_num().max(1);
                 let chunk_size = (self.len() / threads).max(1);
                 let mut results = pool.scope(|scope| {
@@ -260,5 +311,47 @@ impl<T: Send + Sync> ParallelSlice for [T] {
         }
 
         self.iter_mut().map(f).collect()
+    }
+
+    fn par_splat_map<R: Send + 'static>(
+        &self,
+        mut f: impl FnMut(&[Self::Item]) -> R + Clone + Send,
+    ) -> Vec<R> {
+        crate::cfg::multi_threaded! {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
+                let threads = pool.thread_num().max(1);
+                let chunk_size = (self.len() / threads).max(1);
+
+                return pool.scope(|scope| {
+                    for chunk in self.chunks(chunk_size) {
+                        let mut func = f.clone();
+                        scope.spawn(async move { func(chunk) });
+                    }
+                });
+            }
+        }
+
+        Vec::from([f(self)])
+    }
+
+    fn par_splat_map_mut<R: Send + 'static>(
+        &mut self,
+        mut f: impl FnMut(&mut [Self::Item]) -> R + Clone + Send,
+    ) -> Vec<R> {
+        crate::cfg::multi_threaded! {
+            if let Some(pool) = crate::ComputeTaskPool::try_get() {
+                let threads = pool.thread_num().max(1);
+                let chunk_size = (self.len() / threads).max(1);
+
+                return pool.scope(|scope| {
+                    for chunk in self.chunks_mut(chunk_size) {
+                        let mut func = f.clone();
+                        scope.spawn(async move { func(chunk) });
+                    }
+                });
+            }
+        }
+
+        Vec::from([f(self)])
     }
 }

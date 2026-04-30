@@ -3,7 +3,7 @@ use syn::{DeriveInput, Fields, Variant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 
 use super::{EnumVariant, EnumVariantFields, StructField};
-use super::{FieldAttributes, TypeAttributes, TypeParser};
+use super::{FieldAttributes, TypeAttributes, TypeSignature};
 use super::{ReflectEnum, ReflectMeta, ReflectStruct};
 use crate::ImplSourceKind;
 
@@ -29,14 +29,14 @@ impl<'a> ReflectDerive<'a> {
         {
             return Err(syn::Error::new(
                 input.ident.span(),
-                "#[reflect(type_path = \"...\")] must be specified when auto impl TypePath for Foreign Type.",
+                "#[type_path = \"...\"] must be specified when auto impl TypePath for Foreign Type.",
             ));
         }
 
         // After meeting the above conditions, they can all be considered as local types.
         //
         // There are other algorithms for Foreign TypePath and Primitive TypePath.
-        let type_parser = TypeParser::new_local(
+        let type_parser = TypeSignature::new_local(
             &input.ident,
             type_attributes.type_path.clone(),
             &input.generics,
@@ -50,7 +50,7 @@ impl<'a> ReflectDerive<'a> {
 
         match &input.data {
             syn::Data::Struct(data_struct) => {
-                let fields = Self::colloct_struct_field(&data_struct.fields)?;
+                let fields = Self::collect_struct_field(&data_struct.fields)?;
                 match data_struct.fields {
                     Fields::Named(..) => Ok(Self::Struct(ReflectStruct::new(meta, fields))),
                     Fields::Unnamed(..) => Ok(Self::TupleStruct(ReflectStruct::new(meta, fields))),
@@ -69,7 +69,7 @@ impl<'a> ReflectDerive<'a> {
         }
     }
 
-    fn colloct_struct_field(fields: &'a Fields) -> syn::Result<Vec<StructField<'a>>> {
+    fn collect_struct_field(fields: &'a Fields) -> syn::Result<Vec<StructField<'a>>> {
         if fields.len() > u16::MAX as usize {
             return Err(syn::Error::new(
                 Span::call_site(),
@@ -79,14 +79,31 @@ impl<'a> ReflectDerive<'a> {
 
         let mut res: Vec<StructField<'a>> = Vec::with_capacity(fields.len());
 
+        let mut reflect_index = 0;
+
         for (field_index, field) in fields.iter().enumerate() {
             let attrs = FieldAttributes::parse_attrs(&field.attrs)?;
+
+            let is_ignore = attrs.ignore.is_some();
+
+            if !is_ignore && (attrs.default.is_some() || attrs.clone.is_some()) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[reflect(clone)]` and `#[reflect(default)]` \
+                    can only be used for `#[reflect(ignore)]` field.",
+                ));
+            }
 
             res.push(StructField {
                 data: field,
                 attrs,
                 field_index,
+                reflect_index,
             });
+
+            if !is_ignore {
+                reflect_index += 1;
+            }
         }
 
         Ok(res)
@@ -112,7 +129,7 @@ impl<'a> ReflectDerive<'a> {
         let mut res: Vec<EnumVariant<'a>> = Vec::with_capacity(variants.len());
 
         for variant in variants.iter() {
-            let fields = Self::colloct_struct_field(&variant.fields)?;
+            let fields = Self::collect_struct_field(&variant.fields)?;
             let variant_fields = match variant.fields {
                 Fields::Named(..) => EnumVariantFields::Named(fields),
                 Fields::Unnamed(..) => EnumVariantFields::Unnamed(fields),

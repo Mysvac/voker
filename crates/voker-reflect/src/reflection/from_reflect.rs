@@ -33,14 +33,14 @@ use crate::ops::ReflectRef;
 ///     - Array: If lengths matched, try to construct all items through [`from_reflect`].
 ///     - Tuple: If field lengths matched, try to construct all fields through [`from_reflect`].
 ///     - TupleStruct: If field lengths matched:
-///         1. If Self support default (`reflect(default)` flag), create a default value call [`apply`].
+///         1. If Self support default (`reflect(Default)` flag), create a default value call [`apply`].
 ///         2. Otherwise try to construct all fields through [`from_reflect`].
 ///     - Struct:
-///         1. If Self support default (`reflect(default)` flag), create a default value, call [`apply`].
+///         1. If Self support default (`reflect(Default)` flag), create a default value, call [`apply`].
 ///         2. Try to construct all fields through [`from_reflect`].
 ///
 /// `Struct` is the most special and may allow successful conversion between types
-/// with different numbers of fields(if `reflect(default)` attribute is marked).
+/// with different numbers of fields(if `reflect(Default)` attribute is marked).
 ///
 /// # Examples
 ///

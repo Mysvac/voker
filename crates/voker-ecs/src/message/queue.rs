@@ -3,11 +3,11 @@ use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
+use voker_utils::debug::DebugName;
 
 use crate::message::MessageKeyIter;
 use crate::message::{Message, MessageKey};
 use crate::resource::Resource;
-use crate::utils::DebugName;
 
 // -----------------------------------------------------------------------------
 // MessageQueue

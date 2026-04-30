@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 
 use crate::info::{GenericInfo, Generics, ListInfo, TypeInfo, TypeParamInfo, Typed};
 use crate::ops::{ApplyError, List, ListItemIter, ReflectCloneError};
+use crate::registry::ReflectFromReflect;
 use crate::registry::{FromType, GetTypeMeta, ReflectDefault, TypeMeta};
-use crate::registry::{ReflectFromPtr, ReflectFromReflect};
 use crate::{FromReflect, Reflect, impls};
 
 crate::derive::impl_type_path!(::alloc::vec::Vec<T>);
@@ -125,9 +125,8 @@ impl<T: Typed + FromReflect> FromReflect for Vec<T> {
 
 impl<T: Typed + FromReflect + GetTypeMeta> GetTypeMeta for Vec<T> {
     fn get_type_meta() -> TypeMeta {
-        let mut meta = TypeMeta::with_capacity::<Self>(3);
+        let mut meta = TypeMeta::with_capacity::<Self>(2);
         meta.insert_data::<ReflectDefault>(FromType::<Self>::from_type());
-        meta.insert_data::<ReflectFromPtr>(FromType::<Self>::from_type());
         meta.insert_data::<ReflectFromReflect>(FromType::<Self>::from_type());
         meta
     }

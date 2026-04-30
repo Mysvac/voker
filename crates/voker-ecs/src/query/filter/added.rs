@@ -6,7 +6,7 @@ use crate::archetype::Archetype;
 use crate::component::{Component, ComponentId, StorageMode};
 use crate::entity::Entity;
 use crate::storage::{Map, Table, TableRow};
-use crate::system::{AccessParam, FilterParamBuilder};
+use crate::system::{AccessParam, AccessTable, FilterParamBuilder};
 use crate::tick::Tick;
 use crate::world::{UnsafeWorld, World};
 
@@ -65,7 +65,7 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
         world.register_component::<T>()
     }
 
-    fn fetch_state(world: &World) -> Option<Self::State> {
+    fn try_build_state(world: &World) -> Option<Self::State> {
         world.get_component_id::<T>()
     }
 
@@ -110,6 +110,10 @@ unsafe impl<T: Component> QueryFilter for Added<T> {
 
     fn build_access(state: &Self::State, out: &mut AccessParam) {
         out.force_reading(*state);
+    }
+
+    fn edit_access_table(_state: &Self::State, _table: &mut AccessTable) -> bool {
+        true
     }
 
     unsafe fn set_for_arche<'w>(

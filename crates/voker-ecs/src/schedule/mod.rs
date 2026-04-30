@@ -2,13 +2,30 @@
 //!
 //! This module contains:
 //! - schedule labels and schedule collections,
+//! - system-set labels and set boundary signals,
 //! - dependency graph utilities,
 //! - system ordering/concurrency planning,
 //! - executor backends (single-threaded and multi-threaded).
 //!
+//! # ApplyDeferred
+//!
 //! Deferred world mutations can be synchronized with [`ApplyDeferred`] (or the
 //! [`apply_deferred`] helper), which introduces an explicit point where pending
 //! deferred buffers may be applied before subsequent systems continue.
+//!
+//! # SystemSet
+//!
+//! A [`SystemSet`] is represented by two no-op marker systems:
+//! [`SystemSetBegin`] and [`SystemSetEnd`].
+//! Systems added via [`Schedule::add_systems`] are placed inside a set and
+//! linked by run-condition edges to these markers, forming a stable boundary
+//! inside the schedule graph.
+//!
+//! Sets are configured (ordering, parent/child, conditions) with
+//! [`Schedule::config_set`] and [`IntoSystemSetConfig`].
+//!
+//! This gives set-level ordering anchors without introducing a second executor
+//! or separate runtime pipeline.
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -18,9 +35,10 @@ mod apply;
 mod executor;
 mod graph;
 mod label;
+mod node;
 mod schedule;
 mod schedules;
-mod system;
+mod set_config;
 
 pub mod config;
 
@@ -29,25 +47,27 @@ pub mod config;
 
 use crate::system::System;
 use alloc::boxed::Box;
-use config::SystemNode;
 
 // -----------------------------------------------------------------------------
 // Exports
 
-pub use voker_ecs_derive::ScheduleLabel;
+pub use crate::system::{InternedSystemSet, SystemSet, SystemSetBegin, SystemSetEnd};
+pub use voker_ecs_derive::{ScheduleLabel, SystemSet};
 
 pub use executor::{ExecutorKind, MainThreadExecutor, SystemExecutor};
 pub use executor::{MultiThreadedExecutor, SingleThreadedExecutor};
 pub use graph::{Dag, DiGraph, ToposortError, UnGraph};
 pub use graph::{Direction, Graph, GraphNode, SccIterator, SccNodes};
 pub use label::{AnonymousSchedule, InternedScheduleLabel, ScheduleLabel};
+pub use node::{SystemKey, SystemObject};
 pub use schedule::{Schedule, SystemSchedule};
 pub use schedules::Schedules;
 
-pub use system::{SystemKey, SystemObject};
-
 pub use apply::{ApplyDeferred, apply_deferred, apply_deferred_of_val};
 pub use config::{IntoSystemConfig, SystemConfig};
+pub use set_config::{IntoSystemSetConfig, SystemSetConfig};
 
+/// Boxed condition system used by schedule graphs.
 pub type ConditionSystem = Box<dyn System<Input = (), Output = bool>>;
+/// Boxed action system used by schedule graphs.
 pub type ActionSystem = Box<dyn System<Input = (), Output = ()>>;

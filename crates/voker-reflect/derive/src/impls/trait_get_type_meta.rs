@@ -17,12 +17,10 @@ pub(crate) fn impl_trait_get_type_meta(
     let get_type_meta_ = crate::path::get_type_meta_(voker_reflect_path);
     let type_meta_ = crate::path::type_meta_(voker_reflect_path);
     let from_type_ = crate::path::from_type_(voker_reflect_path);
-    let type_data_from_ptr = crate::path::reflect_from_ptr_(voker_reflect_path);
 
     let outer_ = Ident::new("__ret__", Span::call_site());
 
-    // `1` : ReflectFromPtr
-    let mut data_counter = 1usize;
+    let mut data_counter = 0usize;
 
     // We can only add `ReflectFromReflect` when using the default `FromReflect` implementation.
     // If it is uniformly added, there may be issues with mismatched generic constraints.
@@ -34,7 +32,7 @@ pub(crate) fn impl_trait_get_type_meta(
             #type_meta_::insert_data::<#reflect_from_reflect_>(&mut #outer_, #from_type_::<Self>::from_type());
         }
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     let insert_default = match meta.attrs().avail_traits.default {
@@ -48,7 +46,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_default_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
     };
 
     let insert_serialize = match meta.attrs().avail_traits.serialize {
@@ -61,7 +59,7 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_serialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
     };
 
     let insert_deserialize = match meta.attrs().avail_traits.deserialize {
@@ -74,7 +72,24 @@ pub(crate) fn impl_trait_get_type_meta(
                 #type_meta_::insert_data::<#reflect_deserialize_>(&mut #outer_, #from_type_::<Self>::#from_type_fn());
             }
         }
-        None => crate::utils::empty(),
+        None => TokenStream::new(),
+    };
+
+    let insert_convert = if meta.attrs().into_types.is_empty() && meta.attrs().from_types.is_empty()
+    {
+        TokenStream::new()
+    } else {
+        data_counter += 1;
+        let reflect_convert_ = crate::path::reflect_convert_(voker_reflect_path);
+        let into_types = &meta.attrs().into_types;
+        let from_types = &meta.attrs().from_types;
+
+        quote! {
+            let mut __reflect_converter = #reflect_convert_::new::<Self>();
+            #( __reflect_converter.register_into::<Self, #into_types>(); )*
+            #( __reflect_converter.register_from::<Self, #from_types>(); )*
+            #type_meta_::insert_data::<#reflect_convert_>(&mut #outer_, __reflect_converter);
+        }
     };
 
     data_counter += meta.attrs().extra_type_data.len();
@@ -95,11 +110,11 @@ pub(crate) fn impl_trait_get_type_meta(
         impl #impl_generics #get_type_meta_ for #real_ident #ty_generics #where_clause {
             fn get_type_meta() -> #type_meta_ {
                 let mut #outer_ = #type_meta_::with_capacity::<Self>(#data_counter);
-                #type_meta_::insert_data::<#type_data_from_ptr>(&mut #outer_, #from_type_::<Self>::from_type());
                 #insert_from_reflect
                 #insert_default
                 #insert_serialize
                 #insert_deserialize
+                #insert_convert
                 #(#insert_extra_traits)*
                 #outer_
             }

@@ -1,6 +1,6 @@
 use core::any::{Any, TypeId};
 
-use voker_os::sync::Arc;
+use alloc::sync::Arc;
 
 use crate::info::{CustomAttributes, TypeInfo, Typed, impl_docs_fn};
 use crate::info::{impl_custom_attributes_fn, impl_with_custom_attributes};

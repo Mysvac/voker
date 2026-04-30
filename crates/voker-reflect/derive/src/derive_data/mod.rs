@@ -9,7 +9,7 @@ mod reflect_derive;
 mod reflect_enum;
 mod reflect_meta;
 mod reflect_struct;
-mod reflect_type_parser;
+mod type_signature;
 
 // -----------------------------------------------------------------------------
 // Internal API
@@ -17,7 +17,7 @@ mod reflect_type_parser;
 pub(crate) use attributes::{FieldAttributes, TypeAttributes};
 
 pub(crate) use define_parser::{ReflectOpaqueParser, ReflectTypePathParser};
-pub(crate) use reflect_type_parser::TypeParser;
+pub(crate) use type_signature::TypeSignature;
 
 pub(crate) use reflect_derive::ReflectDerive;
 pub(crate) use reflect_enum::{EnumVariant, EnumVariantFields, ReflectEnum};

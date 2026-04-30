@@ -200,7 +200,7 @@ impl Table {
                 });
                 MovedEntityRow::in_table(Some(swapped), table_row)
             } else {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 self.entities.set_len(last);
                 if DROP {
                     self.columns.iter_mut().for_each(|c| {
@@ -578,7 +578,7 @@ impl Table {
 
                 (MovedEntityRow::in_table(Some(swapped), table_row), new_row)
             } else {
-                voker_utils::cold_path();
+                core::hint::cold_path();
                 let moved = self.entities.remove_last(last);
                 let new_row = other.alloc_row(moved);
                 let dst = new_row.0 as usize;

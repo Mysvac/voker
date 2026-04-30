@@ -14,6 +14,7 @@ use crate::world::{EntityMut, EntityRef, UnsafeWorld, World};
 unsafe impl ReadOnlyQueryData for Entity {}
 
 unsafe impl QueryData for Entity {
+    type ReadOnly = Self;
     type State = ();
     type Cache<'world> = ();
     type Item<'world> = Entity;
@@ -22,7 +23,7 @@ unsafe impl QueryData for Entity {
 
     fn build_state(_world: &mut World) -> Self::State {}
 
-    fn fetch_state(_world: &World) -> Option<Self::State> {
+    fn try_build_state(_world: &World) -> Option<Self::State> {
         Some(())
     }
 
@@ -77,6 +78,7 @@ pub struct EntityView<'w> {
 unsafe impl ReadOnlyQueryData for EntityRef<'_> {}
 
 unsafe impl QueryData for EntityRef<'_> {
+    type ReadOnly = Self;
     type State = ();
     type Cache<'world> = EntityView<'world>;
     type Item<'world> = EntityRef<'world>;
@@ -85,7 +87,7 @@ unsafe impl QueryData for EntityRef<'_> {
 
     fn build_state(_world: &mut World) -> Self::State {}
 
-    fn fetch_state(_world: &World) -> Option<Self::State> {
+    fn try_build_state(_world: &World) -> Option<Self::State> {
         Some(())
     }
 
@@ -142,6 +144,7 @@ unsafe impl QueryData for EntityRef<'_> {
 }
 
 unsafe impl QueryData for EntityMut<'_> {
+    type ReadOnly = EntityRef<'static>;
     type State = ();
     type Cache<'world> = EntityView<'world>;
     type Item<'world> = EntityMut<'world>;
@@ -150,7 +153,7 @@ unsafe impl QueryData for EntityMut<'_> {
 
     fn build_state(_world: &mut World) -> Self::State {}
 
-    fn fetch_state(_world: &World) -> Option<Self::State> {
+    fn try_build_state(_world: &World) -> Option<Self::State> {
         Some(())
     }
 

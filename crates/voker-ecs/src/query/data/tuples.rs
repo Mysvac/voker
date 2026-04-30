@@ -13,6 +13,7 @@ macro_rules! impl_tuple {
         unsafe impl ReadOnlyQueryData for () {}
 
         unsafe impl QueryData for () {
+            type ReadOnly = ();
             type State = ();
             type Cache<'world> = ();
             type Item<'world> = ();
@@ -21,7 +22,7 @@ macro_rules! impl_tuple {
 
             fn build_state(_world: &mut World) -> Self::State {}
 
-            fn fetch_state(_world: &World) -> Option<Self::State> { Some(()) }
+            fn try_build_state(_world: &World) -> Option<Self::State> { Some(()) }
 
             unsafe fn build_cache<'w>(
                 _state: &Self::State,
@@ -64,6 +65,7 @@ macro_rules! impl_tuple {
         #[cfg_attr(docsrs, doc(fake_variadic))]
         #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
         unsafe impl<$name: QueryData> QueryData for ($name,) {
+            type ReadOnly = (<$name as QueryData>::ReadOnly,);
             type State = <$name>::State;
             type Cache<'world> = <$name>::Cache<'world>;
             type Item<'world> = ( <$name>::Item<'world>, );
@@ -74,8 +76,8 @@ macro_rules! impl_tuple {
                 <$name>::build_state(world)
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
-                <$name>::fetch_state(world)
+            fn try_build_state(world: &World) -> Option<Self::State> {
+                <$name>::try_build_state(world)
             }
 
             unsafe fn build_cache<'w>(
@@ -128,6 +130,7 @@ macro_rules! impl_tuple {
 
         #[cfg_attr(docsrs, doc(hidden))]
         unsafe impl<$($name: QueryData),*> QueryData for ($($name),*) {
+            type ReadOnly = ( $(<$name as QueryData>::ReadOnly),* );
             type State = ( $( <$name>::State ),* );
             type Cache<'world> = ( $( <$name>::Cache<'world> ),* );
             type Item<'world> = ( $( <$name>::Item<'world> ),* );
@@ -138,8 +141,8 @@ macro_rules! impl_tuple {
                 ( $( <$name>::build_state(world), )* )
             }
 
-            fn fetch_state(world: &World) -> Option<Self::State> {
-                Some(( $(<$name>::fetch_state(world)?,)* ))
+            fn try_build_state(world: &World) -> Option<Self::State> {
+                Some(( $(<$name>::try_build_state(world)?,)* ))
             }
 
             unsafe fn build_cache<'w>(
@@ -158,7 +161,9 @@ macro_rules! impl_tuple {
             }
 
             fn build_access(state: &Self::State, out: &mut AccessParam) -> bool {
-                true $( && <$name>::build_access(&state.$index, out) )*
+                let valid = true; // We should not return early, in order to output a complete error message.
+                $( let valid = valid && <$name>::build_access(&state.$index, out); )*
+                valid
             }
 
             unsafe fn set_for_arche<'w>(

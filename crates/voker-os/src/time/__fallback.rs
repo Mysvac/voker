@@ -61,7 +61,7 @@ use core::fmt;
 use core::time::Duration;
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use crate::sync::atomic::{AtomicPtr, Ordering};
+use crate::atomic::{AtomicPtr, Ordering};
 
 // -----------------------------------------------------------------------------
 // Elapsed Getter

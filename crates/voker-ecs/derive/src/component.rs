@@ -176,7 +176,7 @@ struct Attributes {
     no_entity: bool,
     cloner: Cloner,
     storage: Storage,
-    required: Option<Type>,
+    required: Vec<syn::Path>,
     on_add: Option<syn::ExprPath>,
     on_clone: Option<syn::ExprPath>,
     on_insert: Option<syn::ExprPath>,
@@ -205,7 +205,7 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
         no_entity: false,
         storage: Storage::Dense,
         cloner: Cloner::Default,
-        required: None,
+        required: Vec::new(),
         on_add: None,
         on_clone: None,
         on_insert: None,
@@ -250,10 +250,6 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                     } else {
                         ret.no_entity = true;
                     }
-                    Ok(())
-                } else if meta.path.is_ident("required") {
-                    let value = meta.value()?;
-                    ret.required = Some(value.parse()?);
                     Ok(())
                 } else if meta.path.is_ident("on_add") {
                     ret.on_add = Some(parse_hook_path(&meta, "Self::on_add")?);
@@ -385,6 +381,14 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> syn::Result<Attributes> {
                 }
                 _ => {}
             }
+        } else if attr.path().is_ident("require") {
+            // -------------------------------------------------------------
+            // #[require(...)]
+            // -------------------------------------------------------------
+            attr.parse_nested_meta(|meta| {
+                ret.required.push(meta.path);
+                Ok(())
+            })?;
         }
     }
 
@@ -616,7 +620,7 @@ fn relationship_target_tokens(
     if related_field.vis != syn::Visibility::Inherited {
         return Err(syn::Error::new(
             related_field.span(),
-            "The SourceSet in RelationshipTarget must be private to\
+            "The SourceSet in RelationshipTarget must be private to \
             prevent users from directly mutating it, which could \
             invalidate the correctness of link.",
         ));
@@ -661,8 +665,6 @@ fn relationship_target_tokens(
             fn raw_sources_mut(this: &mut Self) -> &mut <Self as #relationship_target_>::SourceSet {
                 &mut this.#link_member
             }
-
-
         }
     })
 }
@@ -775,11 +777,31 @@ pub(crate) fn impl_derive_component(mut ast: DeriveInput) -> proc_macro::TokenSt
     });
 
     // required_tokens
-    let required_tokens = attrs.required.map(|ty| {
+    let required_tokens = if attrs.required.is_empty() {
+        TokenStream2::new()
+    } else if attrs.required.len() == 1 {
+        let ty = &attrs.required[0];
         quote! {
             const REQUIRED: #OptionFP<#required_> = #OptionFP::Some(#required_::from::<#ty>());
         }
-    });
+    } else if attrs.required.len() <= 15 {
+        let iter = attrs.required;
+        quote! {
+            const REQUIRED: #OptionFP<#required_> = #OptionFP::Some(
+                #required_::from::<( #(#iter,)* )>()
+            );
+        }
+    } else {
+        return syn::Error::new(
+            Span::call_site(),
+            format!(
+                "too many required components, cannot exceed 15. {:?}",
+                attrs.required
+            ),
+        )
+        .into_compile_error()
+        .into();
+    };
 
     // on_add_tokens
     let on_add_tokens = attrs.on_add.map(|ty| {

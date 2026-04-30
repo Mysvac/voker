@@ -2,33 +2,60 @@
 
 use core::ops::DerefMut;
 
+use voker_utils::debug::DebugName;
+
 use super::RelationshipSourceSet;
 use crate::component::{Component, HookContext};
 use crate::entity::Entity;
-use crate::utils::DebugName;
 use crate::world::{DeferredWorld, EntityOwned};
 
+/// Iterator alias for the source-entity collection of a [`RelationshipTarget`].
+///
+/// `SourceIter<'a, T>` is the concrete iterator type returned by `T::iter()`.
+/// Query traversal methods bound on `SourceIter<'w, S>: DoubleEndedIterator` (e.g.,
+/// [`Query::iter_descendants_depth_first`]) require the backing [`RelationshipSourceSet`]
+/// to support reverse iteration — ordered collections such as `Vec`, `VecDeque`, and
+/// `SmallVec` satisfy this; unordered sets do not.
+///
+/// [`Query::iter_descendants_depth_first`]: crate::query::Query::iter_descendants_depth_first
 pub type SourceIter<'a, T> =
     <<T as RelationshipTarget>::SourceSet as RelationshipSourceSet>::SourceIter<'a>;
 
-/// Source-side relationship component.
+/// Source-side component of a relationship pair.
 ///
-/// Implemented by components that point from one entity to another entity.
-/// The derive macro wires hooks so source insert/remove operations keep the
-/// corresponding [`RelationshipTarget`] cache synchronized.
+/// A `Relationship` component is placed on the **source** entity and stores a pointer to one
+/// **target** entity. The paired [`RelationshipTarget`] component (on the target) caches all
+/// sources pointing to it. Component hooks keep both sides synchronized without any manual
+/// bookkeeping.
 ///
-/// # Macro setup
+/// # Derive setup
 ///
-/// Relationship support is configured through [`derive@Component`] attributes:
-/// - `#[relationship(relationship_target = MyTarget)]`
-/// - `#[relationship(allow_self_referential)]` (optional)
-/// - `#[relationship]` on the field that stores the target [`Entity`]
+/// Use [`derive@Component`] with relationship attributes instead of implementing this trait by
+/// hand:
 ///
-/// For full lifecycle/storage metadata and hook semantics, see
-/// [`trait@Component`].
+/// ```ignore
+/// #[derive(Component, Clone)]
+/// #[relationship(relationship_target = Children)]
+/// pub struct ChildOf {
+///     #[relationship]
+///     parent: Entity,
+/// }
+/// ```
+///
+/// Attribute reference:
+/// - `#[relationship(relationship_target = T)]` — specifies the paired [`RelationshipTarget`] type.
+/// - `#[relationship(allow_self_referential)]` — allows `source == target`; self-links are
+///   removed by default.
+/// - `#[relationship]` on the `Entity` field — marks the target field for offset-based access.
+///
+/// # Hook behavior
+///
+/// - **Insert/update**: validates the target exists, removes any displaced source for
+///   one-to-one collections, then inserts the source into the target cache.
+/// - **Remove/discard**: removes the source from the target cache; if the cache becomes empty,
+///   the target component is lazily removed via commands.
 ///
 /// [`derive@Component`]: crate::derive::Component
-/// [`trait@Component`]: crate::component::Component
 pub trait Relationship: Component + Sized {
     /// Target-side cache component associated with this source type.
     type RelationshipTarget: RelationshipTarget<Relationship = Self>;
@@ -69,15 +96,15 @@ pub trait Relationship: Component + Sized {
         let target_entity = entity_ref.get::<Self>().unwrap().related_target();
 
         if !Self::ALLOW_SELF_REFERENTIAL && target_entity == entity {
-            voker_utils::cold_path();
-            log::warn!(
-                "{}The {}({target_entity:?}) relationship on entity {entity:?} points to itself. This invalid\
-                relationship has been removed.\nIf this is intended behavior self-referential relations can\
+            core::hint::cold_path();
+            tracing::warn!(
+                "{}The {}({target_entity:?}) relationship on entity {entity:?} points to itself. This invalid \
+                relationship has been removed.\nIf this is intended behavior self-referential relations can \
                 be enabled with the allow_self_referential attribute: #[relationship(allow_self_referential)]",
                 context.caller,
                 DebugName::type_name::<Self>(),
             );
-            world.commands().with_entity(entity).remove::<Self>();
+            world.commands().entity(entity).remove::<Self>();
             return;
         }
 
@@ -91,12 +118,12 @@ pub trait Relationship: Component + Sized {
                 .and_then(|target| target.related_sources().remove_before_insert());
 
             if let Some(current_source) = current_source_to_remove {
-                world.commands().with_entity(current_source).try_remove::<Self>();
+                world.commands().entity(current_source).try_remove::<Self>();
             }
         }
 
-        if let Ok(mut entity_commands) = world.commands().try_with_entity(target_entity) {
-            entity_commands.push(move |mut owned: EntityOwned| {
+        if let Ok(mut entity_commands) = world.commands().checked_entity(target_entity) {
+            entity_commands.queue(move |mut owned: EntityOwned| {
                 if let Some(target) = owned.get_mut::<Self::RelationshipTarget>() {
                     RelationshipTarget::raw_sources_mut(target.into_inner()).insert(entity);
                 } else {
@@ -106,14 +133,14 @@ pub trait Relationship: Component + Sized {
                 }
             });
         } else {
-            voker_utils::cold_path();
-            log::warn!(
-                "{}The {}({target_entity:?}) linked on entity {entity:?} relates to an entity\
+            core::hint::cold_path();
+            tracing::warn!(
+                "{}The {}({target_entity:?}) linked on entity {entity:?} relates to an entity \
                 that does not exist. This invalid link has been removed.",
                 context.caller,
                 DebugName::type_name::<Self>(),
             );
-            world.commands().with_entity(entity).try_remove::<Self>();
+            world.commands().entity(entity).try_remove::<Self>();
         }
     }
 
@@ -132,35 +159,61 @@ pub trait Relationship: Component + Sized {
         {
             RelationshipTarget::raw_sources_mut(target.deref_mut()).remove(entity);
             if target.is_empty() {
-                world.commands().with_entity(target_entity).push_silenced(
-                    move |mut e: EntityOwned| {
+                world
+                    .commands()
+                    .entity(target_entity)
+                    .queue_silenced(move |mut e: EntityOwned| {
                         if e.get::<Self::RelationshipTarget>()
                             .is_some_and(RelationshipTarget::is_empty)
                         {
                             e.remove::<Self::RelationshipTarget>();
                         }
-                    },
-                );
+                    });
             }
         }
     }
 }
 
-/// Target-side reverse cache for a [`Relationship`].
+/// Target-side reverse-cache component of a relationship pair.
 ///
-/// This component stores all source entities currently linked to one target.
-/// It is generally treated as derived data maintained by relationship hooks.
+/// A `RelationshipTarget` component is placed on the **target** entity and maintains the set of
+/// all source entities currently linked to it via the paired [`Relationship`] component. This
+/// component is treated as **derived data** — users should not insert or mutate it directly;
+/// hooks on the source side manage it automatically.
 ///
-/// # Macro setup
+/// # Derive setup
 ///
-/// Relationship-target support is configured through [`derive@Component`]
-/// with `#[relationship_target(relationship = MyRelationship)]` and optional
-/// `#[relationship_target(linked_lifecycle)]`.
+/// Use [`derive@Component`] with relationship-target attributes:
 ///
-/// The collection field that stores linked source entities should be annotated
-/// with `#[relationship]`.
+/// ```ignore
+/// #[derive(Component, Clone)]
+/// #[relationship_target(relationship = ChildOf, linked_lifecycle)]
+/// pub struct Children {
+///     #[relationship]
+///     sources: Vec<Entity>,
+/// }
+/// ```
 ///
-/// For shared component metadata behavior, see [`trait@Component`].
+/// Attribute reference:
+/// - `#[relationship_target(relationship = R)]` — specifies the paired [`Relationship`] type.
+/// - `#[relationship_target(linked_lifecycle)]` — enables [`LINKED_LIFECYCLE`]; despawning the
+///   target will despawn all cached sources. Use this for ownership hierarchies (e.g., parent
+///   despawns its children).
+/// - `#[relationship]` on the source-set field — marks the collection for runtime access.
+///
+/// # Hook behavior
+///
+/// - **Remove/discard**: removes the paired [`Relationship`] from every cached source entity.
+/// - **Despawn** (when `LINKED_LIFECYCLE = true`): despawns every cached source entity.
+///
+/// # Source set
+///
+/// The backing collection type is [`Self::SourceSet`]. Choose based on cardinality and access
+/// requirements — see [`RelationshipSourceSet`] for available implementations.
+///
+/// [`LINKED_LIFECYCLE`]: RelationshipTarget::LINKED_LIFECYCLE
+/// [`derive@Component`]: crate::derive::Component
+/// [`RelationshipSourceSet`]: crate::relationship::RelationshipSourceSet
 pub trait RelationshipTarget: Component + Sized {
     /// Source-side relationship component associated with this target cache.
     type Relationship: Relationship<RelationshipTarget = Self>;
@@ -202,7 +255,7 @@ pub trait RelationshipTarget: Component + Sized {
         let target_ref = entity_ref.get::<Self>().unwrap();
 
         for source_entity in target_ref.iter() {
-            commands.with_entity(source_entity).try_remove::<Self::Relationship>();
+            commands.entity(source_entity).try_remove::<Self::Relationship>();
         }
     }
 

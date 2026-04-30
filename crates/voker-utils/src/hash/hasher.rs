@@ -1,20 +1,18 @@
-//! Provide `FixedHasher` and `NoOpHasher`.
+//! Provide `FixedHasher` and `NoopHasher`.
 //!
 //! `FixedHasher` based on `foldhash` crate,
 //! Provide stable hash results through a fixed hash seed.
 //!
-//! `NoOpHasher` directly use u64 or bit data as hash values.
+//! `NoopHasher` directly use u64 or bit data as hash values.
 
 use core::fmt::Debug;
 use core::hash::{BuildHasher, Hasher};
 
-use foldhash::fast::{FixedState, FoldHasher};
+use foldhash::SharedSeed;
+use foldhash::fast::FoldHasher;
 
 // -----------------------------------------------------------------------------
 // FixedHasher
-
-/// A fixed hash seed.
-const FIXED_HASH_STATE: FixedState = FixedState::with_seed(0x95EE04C4F326B271);
 
 /// A fixed hasher provided hash results that only related on the input.
 ///
@@ -42,12 +40,24 @@ pub type FixedHasher = FoldHasher<'static>;
 #[derive(Copy, Clone, Default, Debug)]
 pub struct FixedHashState;
 
+impl FixedHashState {
+    /// A constant hasher instance with a fixed seed.
+    ///
+    /// This is the compile-time equivalent of `FixedHashState::build_hasher()`,
+    /// providing a deterministic hasher that can be used in const contexts.
+    ///
+    /// The seed (`0x9e3779b97f4a7c15`) has been empirically evaluated
+    /// and demonstrates ood distribution characteristics.
+    pub const HASHER: FixedHasher =
+        FixedHasher::with_seed(0x9e3779b97f4a7c15, SharedSeed::global_fixed());
+}
+
 impl BuildHasher for FixedHashState {
     type Hasher = FixedHasher;
 
     #[inline(always)]
     fn build_hasher(&self) -> Self::Hasher {
-        FIXED_HASH_STATE.build_hasher()
+        FixedHashState::HASHER
     }
 
     #[inline(always)]
@@ -56,23 +66,25 @@ impl BuildHasher for FixedHashState {
         Self: Sized,
         Self::Hasher: Hasher,
     {
-        FIXED_HASH_STATE.hash_one(x)
+        let mut hasher = Self::HASHER;
+        x.hash(&mut hasher);
+        hasher.finish()
     }
 }
 
 // -----------------------------------------------------------------------------
-// NoOpHasher
+// NoopHasher
 
 /// A no-op hash that directly pass value through `u64`.
 ///
-/// Which can be created through [`NoOpHashState::build_hasher`].
-#[derive(Copy, Clone, Default, Debug)]
+/// Which can be created through [`NoopHashState::build_hasher`].
+#[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
-pub struct NoOpHasher {
+pub struct NoopHasher {
     hash: u64,
 }
 
-impl Hasher for NoOpHasher {
+impl Hasher for NoopHasher {
     #[inline(always)]
     fn finish(&self) -> u64 {
         self.hash
@@ -124,23 +136,28 @@ impl Hasher for NoOpHasher {
 ///
 /// ```
 /// use core::hash::{Hash, Hasher, BuildHasher};
-/// use voker_utils::hash::NoOpHashState;
+/// use voker_utils::hash::NoopHashState;
 ///
-/// let mut hasher = NoOpHashState.build_hasher();
+/// let mut hasher = NoopHashState.build_hasher();
 /// 3.hash(&mut hasher);
 /// let result = hasher.finish();
 ///
 /// assert_eq!(result, 3_u64);
 /// ```
 #[derive(Copy, Clone, Default, Debug)]
-pub struct NoOpHashState;
+pub struct NoopHashState;
 
-impl BuildHasher for NoOpHashState {
-    type Hasher = NoOpHasher;
+impl NoopHashState {
+    /// A constant hasher instance, as same as `NoopHashState.build_hasher`.
+    pub const HASHER: NoopHasher = NoopHasher { hash: 0 };
+}
+
+impl BuildHasher for NoopHashState {
+    type Hasher = NoopHasher;
 
     #[inline(always)]
     fn build_hasher(&self) -> Self::Hasher {
-        NoOpHasher { hash: 0 }
+        Self::HASHER
     }
 
     #[inline(always)]
@@ -149,7 +166,7 @@ impl BuildHasher for NoOpHashState {
         Self: Sized,
         Self::Hasher: Hasher,
     {
-        let mut hasher = const { NoOpHasher { hash: 0 } };
+        let mut hasher = Self::HASHER;
         x.hash(&mut hasher);
         hasher.hash
     }
@@ -161,7 +178,7 @@ impl BuildHasher for NoOpHashState {
 /// A fast hasher that provides uniformly distributed values starting from 0.
 ///
 /// Which can be created through [`SparseHashState::build_hasher`].
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
 pub struct SparseHasher {
     hash: u64,
@@ -243,12 +260,17 @@ impl Hasher for SparseHasher {
 #[derive(Copy, Clone, Default, Debug)]
 pub struct SparseHashState;
 
+impl SparseHashState {
+    /// A constant hasher instance, as same as `SparseHashState.build_hasher`.
+    pub const HASHER: SparseHasher = SparseHasher { hash: 0 };
+}
+
 impl BuildHasher for SparseHashState {
     type Hasher = SparseHasher;
 
     #[inline(always)]
     fn build_hasher(&self) -> Self::Hasher {
-        SparseHasher { hash: 0 }
+        Self::HASHER
     }
 
     #[inline(always)]
@@ -257,7 +279,7 @@ impl BuildHasher for SparseHashState {
         Self: Sized,
         Self::Hasher: Hasher,
     {
-        let mut hasher = const { SparseHasher { hash: 0 } };
+        let mut hasher = Self::HASHER;
         x.hash(&mut hasher);
         hasher.hash
     }
@@ -273,8 +295,8 @@ mod tests {
 
     #[test]
     fn noop_typeid_hash() {
-        struct TestNoOpHasher(u64);
-        impl Hasher for TestNoOpHasher {
+        struct TestNoopHasher(u64);
+        impl Hasher for TestNoopHasher {
             fn finish(&self) -> u64 {
                 self.0
             }
@@ -287,7 +309,7 @@ mod tests {
         }
 
         let id = TypeId::of::<u32>();
-        let mut hasher = TestNoOpHasher(0);
+        let mut hasher = TestNoopHasher(0);
         id.hash(&mut hasher);
         core::hint::black_box(id);
     }

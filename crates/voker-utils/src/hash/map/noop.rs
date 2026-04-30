@@ -1,4 +1,4 @@
-//! Provide [`NoOpHashMap`] based on [hashbrown]'s implementation.
+//! Provide [`NoopHashMap`] based on [hashbrown]'s implementation.
 
 use core::fmt::Debug;
 use core::hash::Hash;
@@ -8,24 +8,23 @@ use hashbrown::{Equivalent, TryReserveError, hash_map as hb};
 use hb::{Drain, ExtractIf, Iter, IterMut};
 use hb::{EntryRef, OccupiedError};
 use hb::{IntoKeys, IntoValues, Keys, Values, ValuesMut};
-use hb::{RawEntryBuilder, RawEntryBuilderMut};
 
-use crate::hash::NoOpHashState;
+use crate::hash::NoopHashState;
 
 // -----------------------------------------------------------------------------
-// NoOpHashMap
+// NoopHashMap
 
-type InternalMap<K, V> = hb::HashMap<K, V, NoOpHashState>;
+type InternalMap<K, V> = hb::HashMap<K, V, NoopHashState>;
 
-/// New-type for [`HashMap`](hb::HashMap) with [`NoOpHashState`] as
+/// New-type for [`HashMap`](hb::HashMap) with [`NoopHashState`] as
 /// the default hashing provider.
 ///
 /// # Examples
 ///
 /// ```
-/// use voker_utils::hash::NoOpHashMap;
+/// use voker_utils::hash::NoopHashMap;
 ///
-/// let mut scores = NoOpHashMap::new();
+/// let mut scores = NoopHashMap::new();
 ///
 /// scores.insert("a", 25);
 /// scores.insert("b", 24);
@@ -40,26 +39,26 @@ type InternalMap<K, V> = hb::HashMap<K, V, NoOpHashState>;
 ///
 /// [`HashMap`]: hb::HashMap
 #[repr(transparent)]
-pub struct NoOpHashMap<K, V>(InternalMap<K, V>);
+pub struct NoopHashMap<K, V>(InternalMap<K, V>);
 
 // -----------------------------------------------------------------------------
 // specific methods
 
-impl<K: Eq + Hash, V, const N: usize> From<[(K, V); N]> for NoOpHashMap<K, V> {
+impl<K: Eq + Hash, V, const N: usize> From<[(K, V); N]> for NoopHashMap<K, V> {
     fn from(value: [(K, V); N]) -> Self {
         value.into_iter().collect()
     }
 }
 
-impl<K, V> NoOpHashMap<K, V> {
-    /// Create a empty [`NoOpHashMap`]
+impl<K, V> NoopHashMap<K, V> {
+    /// Create a empty [`NoopHashMap`]
     ///
     /// # Example
     ///
     /// ```rust
-    /// use voker_utils::hash::NoOpHashMap;
+    /// use voker_utils::hash::NoopHashMap;
     ///
-    /// let map = NoOpHashMap::new();
+    /// let map = NoopHashMap::new();
     /// # // docs test
     /// # let mut map = map;
     /// # map.insert(0usize, "foo");
@@ -67,17 +66,17 @@ impl<K, V> NoOpHashMap<K, V> {
     /// ```
     #[inline(always)]
     pub const fn new() -> Self {
-        Self(InternalMap::with_hasher(NoOpHashState))
+        Self(InternalMap::with_hasher(NoopHashState))
     }
 
-    /// Create a empty [`NoOpHashMap`] with specific capacity
+    /// Create a empty [`NoopHashMap`] with specific capacity
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let map = NoOpHashMap::with_capacity(5);
+    /// let map = NoopHashMap::with_capacity(5);
     /// # // docs test
     /// # let mut map = map;
     /// # map.insert(0usize, "foo");
@@ -87,7 +86,7 @@ impl<K, V> NoOpHashMap<K, V> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self(InternalMap::with_capacity_and_hasher(
             capacity,
-            NoOpHashState,
+            NoopHashState,
         ))
     }
 }
@@ -95,7 +94,7 @@ impl<K, V> NoOpHashMap<K, V> {
 // -----------------------------------------------------------------------------
 // Transmute
 
-// impl<K, V> Deref for NoOpHashMap<K, V> {
+// impl<K, V> Deref for NoopHashMap<K, V> {
 //     type Target = InternalMap<K, V>;
 //
 //     #[inline(always)]
@@ -104,7 +103,7 @@ impl<K, V> NoOpHashMap<K, V> {
 //     }
 // }
 
-// impl<K, V> DerefMut for NoOpHashMap<K, V> {
+// impl<K, V> DerefMut for NoopHashMap<K, V> {
 //     #[inline(always)]
 //     fn deref_mut(&mut self) -> &mut Self::Target {
 //         &mut self.0
@@ -114,7 +113,7 @@ impl<K, V> NoOpHashMap<K, V> {
 // -----------------------------------------------------------------------------
 // Re-export the underlying method
 
-impl<K, V> Clone for NoOpHashMap<K, V>
+impl<K, V> Clone for NoopHashMap<K, V>
 where
     InternalMap<K, V>: Clone,
 {
@@ -129,7 +128,7 @@ where
     }
 }
 
-impl<K, V> Debug for NoOpHashMap<K, V>
+impl<K, V> Debug for NoopHashMap<K, V>
 where
     InternalMap<K, V>: Debug,
 {
@@ -139,7 +138,7 @@ where
     }
 }
 
-impl<K, V> Default for NoOpHashMap<K, V>
+impl<K, V> Default for NoopHashMap<K, V>
 where
     InternalMap<K, V>: Default,
 {
@@ -149,7 +148,7 @@ where
     }
 }
 
-impl<K, V> PartialEq for NoOpHashMap<K, V>
+impl<K, V> PartialEq for NoopHashMap<K, V>
 where
     InternalMap<K, V>: PartialEq,
 {
@@ -159,9 +158,9 @@ where
     }
 }
 
-impl<K, V> Eq for NoOpHashMap<K, V> where InternalMap<K, V>: Eq {}
+impl<K, V> Eq for NoopHashMap<K, V> where InternalMap<K, V>: Eq {}
 
-impl<K, V, T> FromIterator<T> for NoOpHashMap<K, V>
+impl<K, V, T> FromIterator<T> for NoopHashMap<K, V>
 where
     InternalMap<K, V>: FromIterator<T>,
 {
@@ -171,7 +170,7 @@ where
     }
 }
 
-impl<K, V, T> Index<T> for NoOpHashMap<K, V>
+impl<K, V, T> Index<T> for NoopHashMap<K, V>
 where
     InternalMap<K, V>: Index<T>,
 {
@@ -183,7 +182,7 @@ where
     }
 }
 
-impl<K, V> IntoIterator for NoOpHashMap<K, V>
+impl<K, V> IntoIterator for NoopHashMap<K, V>
 where
     InternalMap<K, V>: IntoIterator,
 {
@@ -196,7 +195,7 @@ where
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a NoOpHashMap<K, V>
+impl<'a, K, V> IntoIterator for &'a NoopHashMap<K, V>
 where
     &'a InternalMap<K, V>: IntoIterator,
 {
@@ -209,7 +208,7 @@ where
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a mut NoOpHashMap<K, V>
+impl<'a, K, V> IntoIterator for &'a mut NoopHashMap<K, V>
 where
     &'a mut InternalMap<K, V>: IntoIterator,
 {
@@ -222,7 +221,7 @@ where
     }
 }
 
-impl<K, V, T> Extend<T> for NoOpHashMap<K, V>
+impl<K, V, T> Extend<T> for NoopHashMap<K, V>
 where
     InternalMap<K, V>: Extend<T>,
 {
@@ -232,7 +231,7 @@ where
     }
 }
 
-impl<K, V> serde_core::Serialize for NoOpHashMap<K, V>
+impl<K, V> serde_core::Serialize for NoopHashMap<K, V>
 where
     InternalMap<K, V>: serde_core::Serialize,
 {
@@ -245,7 +244,7 @@ where
     }
 }
 
-impl<'de, K, V> serde_core::Deserialize<'de> for NoOpHashMap<K, V>
+impl<'de, K, V> serde_core::Deserialize<'de> for NoopHashMap<K, V>
 where
     InternalMap<K, V>: serde_core::Deserialize<'de>,
 {
@@ -258,31 +257,17 @@ where
     }
 }
 
-impl<K, V> NoOpHashMap<K, V> {
-    /// Creates a raw immutable entry builder for the HashMap.
-    #[inline(always)]
-    pub fn raw_entry(&self) -> RawEntryBuilder<'_, K, V, NoOpHashState> {
-        self.0.raw_entry()
-    }
-
-    /// Creates a raw entry builder for the HashMap.
-    #[inline(always)]
-    pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, NoOpHashState> {
-        self.0.raw_entry_mut()
-    }
-}
-
-impl<K, V> NoOpHashMap<K, V> {
+impl<K, V> NoopHashMap<K, V> {
     /// Returns the number of elements the map can hold without reallocating.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let map = NoOpHashMap::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let map = NoopHashMap::with_capacity(5);
     ///
     /// # // doc test
-    /// # let map: NoOpHashMap<(), ()> = map;
+    /// # let map: NoopHashMap<(), ()> = map;
     /// # assert!(map.capacity() >= 5);
     /// ```
     #[inline(always)]
@@ -295,9 +280,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -318,9 +303,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -341,9 +326,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -364,9 +349,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -387,9 +372,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -410,8 +395,8 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// assert_eq!(map.len(), 0);
     ///
@@ -429,8 +414,8 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// assert!(map.is_empty());
     ///
@@ -448,9 +433,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -473,9 +458,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -499,9 +484,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -528,9 +513,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -551,9 +536,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -574,9 +559,9 @@ impl<K, V> NoOpHashMap<K, V> {
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
+    /// # use voker_utils::hash::NoopHashMap;
     /// #
-    /// let mut map = NoOpHashMap::new();
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -592,20 +577,20 @@ impl<K, V> NoOpHashMap<K, V> {
     }
 }
 
-impl<K, V> NoOpHashMap<K, V>
+impl<K, V> NoopHashMap<K, V>
 where
     K: Eq + Hash,
 {
     /// Reserves capacity for at least additional more elements
-    /// to be inserted in the NoOpHashMap.
+    /// to be inserted in the NoopHashMap.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::with_capacity(5);
     ///
-    /// # let mut map: NoOpHashMap<(), ()> = map;
+    /// # let mut map: NoopHashMap<(), ()> = map;
     /// #
     /// assert!(map.capacity() >= 5);
     ///
@@ -619,15 +604,15 @@ where
     }
 
     /// Tries to reserve capacity for at least additional more elements
-    /// to be inserted in the given `NoOpHashMap<K, V>`.
+    /// to be inserted in the given `NoopHashMap<K, V>`.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::with_capacity(5);
     ///
-    /// # let mut map: NoOpHashMap<(), ()> = map;
+    /// # let mut map: NoopHashMap<(), ()> = map;
     /// #
     /// assert!(map.capacity() >= 5);
     ///
@@ -645,8 +630,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::with_capacity(5);
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::with_capacity(5);
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -677,15 +662,15 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// let value = map.entry("foo").or_insert(0);
     /// #
     /// # assert_eq!(*value, 0);
     /// ```
     #[inline(always)]
-    pub fn entry(&mut self, key: K) -> hb::Entry<'_, K, V, NoOpHashState> {
+    pub fn entry(&mut self, key: K) -> hb::Entry<'_, K, V, NoopHashState> {
         self.0.entry(key)
     }
 
@@ -696,9 +681,9 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
-    /// # let mut map: NoOpHashMap<&'static str, usize> = map;
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
+    /// # let mut map: NoopHashMap<&'static str, usize> = map;
     ///
     /// let value = map.entry_ref("foo").or_insert(0);
     /// #
@@ -708,7 +693,7 @@ where
     pub fn entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
-    ) -> EntryRef<'a, 'b, K, Q, V, NoOpHashState>
+    ) -> EntryRef<'a, 'b, K, Q, V, NoopHashState>
     where
         Q: Hash + Equivalent<K> + ?Sized,
     {
@@ -720,8 +705,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -742,8 +727,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -762,8 +747,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -782,8 +767,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -802,8 +787,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -822,8 +807,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -847,8 +832,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     /// map.insert("bar", 1);
@@ -874,8 +859,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -892,8 +877,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.try_insert("foo", 0).unwrap();
     ///
@@ -904,7 +889,7 @@ where
         &mut self,
         key: K,
         value: V,
-    ) -> Result<&mut V, OccupiedError<'_, K, V, NoOpHashState>> {
+    ) -> Result<&mut V, OccupiedError<'_, K, V, NoopHashState>> {
         self.0.try_insert(key, value)
     }
 
@@ -914,8 +899,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -937,8 +922,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// map.insert("foo", 0);
     ///
@@ -959,8 +944,8 @@ where
     /// # Example
     ///
     /// ```rust
-    /// # use voker_utils::hash::NoOpHashMap;
-    /// let mut map = NoOpHashMap::new();
+    /// # use voker_utils::hash::NoopHashMap;
+    /// let mut map = NoopHashMap::new();
     ///
     /// assert_eq!(map.allocation_size(), 0);
     ///

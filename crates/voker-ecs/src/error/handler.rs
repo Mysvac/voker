@@ -83,35 +83,35 @@ pub fn panic(error: GameError, ctx: ErrorContext) {
 #[inline]
 #[track_caller]
 pub fn error(error: GameError, ctx: ErrorContext) {
-    inner!(log::error, error, ctx);
+    inner!(tracing::error, error, ctx);
 }
 
 /// Error handler that logs the error at the `warn` level.
 #[inline]
 #[track_caller]
 pub fn warn(error: GameError, ctx: ErrorContext) {
-    inner!(log::warn, error, ctx);
+    inner!(tracing::warn, error, ctx);
 }
 
 /// Error handler that logs the error at the `info` level.
 #[inline]
 #[track_caller]
 pub fn info(error: GameError, ctx: ErrorContext) {
-    inner!(log::info, error, ctx);
+    inner!(tracing::info, error, ctx);
 }
 
 /// Error handler that logs the error at the `debug` level.
 #[inline]
 #[track_caller]
 pub fn debug(error: GameError, ctx: ErrorContext) {
-    inner!(log::debug, error, ctx);
+    inner!(tracing::debug, error, ctx);
 }
 
 /// Error handler that logs the error at the `trace` level.
 #[inline]
 #[track_caller]
 pub fn trace(error: GameError, ctx: ErrorContext) {
-    inner!(log::trace, error, ctx);
+    inner!(tracing::trace, error, ctx);
 }
 
 /// Error handler that ignores the error.

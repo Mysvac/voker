@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use voker_utils::hash::HashMap;
-use voker_utils::hash::map::RawEntryMut;
+use voker_utils::hash::map::Entry;
 
 use super::{Table, TableId};
 use crate::component::{ComponentId, ComponentInfo, Components};
@@ -57,13 +57,13 @@ impl Tables {
     ) -> TableId {
         debug_assert!(idents.is_sorted());
 
-        match self.mapper.raw_entry_mut().from_key(idents) {
-            RawEntryMut::Occupied(entry) => *entry.get(),
-            RawEntryMut::Vacant(entry) => {
+        match self.mapper.entry(idents) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
                 let table_id = TableId::new(self.tables.len() as u32);
                 let table = Table::new(table_id, components, idents);
                 self.tables.push(table);
-                entry.insert(idents, table_id);
+                entry.insert(table_id);
 
                 table_id
             }

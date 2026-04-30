@@ -262,7 +262,7 @@ macro_rules! impl_non_max {
             {
                 let value = <$Int as serde_core::Deserialize>::deserialize(deserializer)?;
                 Self::new(value).ok_or_else(|| {
-                    crate::cold_path();
+                    core::hint::cold_path();
                     serde_core::de::Error::invalid_value(
                         serde_core::de::Unexpected::Unsigned(value as u64),
                         &alloc::format!("an integer not equal to {}", <$Int>::MAX).as_str(),

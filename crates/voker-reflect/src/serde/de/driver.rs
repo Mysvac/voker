@@ -15,13 +15,12 @@ use super::set_visitor::SetVisitor;
 use super::struct_visitor::StructVisitor;
 use super::tuple_struct_visitor::TupleStructVisitor;
 use super::tuple_visitor::TupleVisitor;
-
 use crate::Reflect;
 use crate::info::{TypeInfo, Typed};
 use crate::registry::{GetTypeMeta, TypeMeta, TypeRegistry};
 use crate::registry::{ReflectDeserialize, ReflectFromReflect};
 
-crate::cfg::debug! {
+crate::cfg::backtrace! {
     use super::error_utils::TYPE_INFO_STACK;
 }
 
@@ -46,7 +45,7 @@ crate::cfg::debug! {
 ///    which returns dynamic types always.
 ///
 /// For custom `Opaque` types, the reflection system does **not** provide a default deserialization implementation.
-/// Users must annotate the type with `#[reflect(deserialize)]` to supply a serde-based `Deserialize` implementation.
+/// Users must annotate the type with `#[reflect(Deserialize)]` to supply a serde-based `Deserialize` implementation.
 ///
 /// ## Why Default Method Returns Dynamic Type
 ///
@@ -239,7 +238,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
             return deserialize_reflect.deserialize(deserializer);
         }
 
-        crate::cfg::debug! {
+        crate::cfg::backtrace! {
             TYPE_INFO_STACK.with_borrow_mut(|stack|stack.push(self.type_meta.type_info()))
         }
 
@@ -359,11 +358,11 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
                 Ok(Box::new(dynamic_enum))
             }
             TypeInfo::Opaque(_) => Err(Error::custom(
-                "No default deserialization method is available for this opaque type. Register ReflectDeserialize (for example via #[reflect(deserialize)]).",
+                "No default deserialization method is available for this opaque type. Register ReflectDeserialize (for example via #[reflect(Deserialize)]).",
             )),
         };
 
-        crate::cfg::debug! {
+        crate::cfg::backtrace! {
             TYPE_INFO_STACK.with_borrow_mut(|stack|stack.pop())
         }
 
@@ -394,7 +393,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
 ///    Finally, try using the [`ReflectFromReflect`] conversion type.
 ///
 /// For custom `Opaque` types, the reflection system does **not** provide a default deserialization implementation.
-/// Users must annotate the type with `#[reflect(deserialize)]` to supply a serde-based `Deserialize` implementation.
+/// Users must annotate the type with `#[reflect(Deserialize)]` to supply a serde-based `Deserialize` implementation.
 ///
 /// # Input
 ///
@@ -434,7 +433,7 @@ impl<'de, P: DeserializeProcessor> DeserializeSeed<'de> for DeserializeDriver<'_
 /// # use voker_reflect::ops::DynamicStruct;
 /// #
 /// #[derive(Reflect, PartialEq, Debug)]
-/// #[reflect(type_path = "my_crate::MyStruct")]
+/// #[type_path = "my_crate::MyStruct"]
 /// struct MyStruct {
 ///   value: i32
 /// }

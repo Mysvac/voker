@@ -102,7 +102,7 @@ where
     }
 
     /// Returns whether propagation is currently enabled.
-    pub fn get_propagate(&self) -> bool {
+    pub fn is_propagate(&self) -> bool {
         self.trigger.propagate
     }
 }

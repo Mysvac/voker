@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use voker_os::sync::Arc;
+use alloc::sync::Arc;
 
 use crate::info::{CustomAttributes, Generics, Type, TypePath, UnnamedField};
 use crate::info::{impl_custom_attributes_fn, impl_with_custom_attributes};

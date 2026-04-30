@@ -43,8 +43,8 @@ use core::ptr;
 use core::slice;
 use core::sync::atomic::Ordering;
 
-use voker_os::sync::Arc;
-use voker_os::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64};
+use alloc::sync::Arc;
+use voker_os::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64};
 use voker_os::utils::Backoff;
 use voker_utils::vec::ArrayVec;
 
@@ -675,7 +675,7 @@ impl Drop for AllocEntitiesIter<'_> {
     fn drop(&mut self) {
         let leaking = self.len();
         if leaking > 0 {
-            log::warn!("{leaking} entities being leaked via unfinished `AllocEntitiesIter`");
+            tracing::warn!("{leaking} entities being leaked via unfinished `AllocEntitiesIter`");
         }
     }
 }

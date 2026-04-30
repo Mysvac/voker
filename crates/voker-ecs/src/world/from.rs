@@ -6,17 +6,17 @@ use super::{World, WorldId};
 /// derive defaults from world state.
 pub trait FromWorld {
     /// Creates `Self` using data available from [`World`].
-    fn from_world(world: &World) -> Self;
+    fn from_world(world: &mut World) -> Self;
 }
 
 impl<T: Default> FromWorld for T {
-    fn from_world(_world: &World) -> Self {
+    fn from_world(_world: &mut World) -> Self {
         T::default()
     }
 }
 
 impl FromWorld for WorldId {
-    fn from_world(world: &World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         world.id()
     }
 }

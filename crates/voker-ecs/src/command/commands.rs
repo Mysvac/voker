@@ -4,7 +4,7 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 
 use super::queue::RawCommandQueue;
 use super::{Command, CommandQueue, EntityCommand};
-use crate::bundle::Bundle;
+use crate::bundle::{Bundle, DataBundle};
 use crate::entity::{Entity, FetchError};
 use crate::error::ErrorHandler;
 use crate::event::Event;
@@ -71,7 +71,7 @@ impl RefUnwindSafe for Commands<'_, '_> {}
 ///
 /// fn buff_player(mut commands: Commands, players: Query<Entity, Without<Hp>>) {
 ///     for entity in players {
-///         commands.with_entity(entity).insert((Hp(150),));
+///         commands.entity(entity).insert((Hp(150),));
 ///     }
 /// }
 /// ```
@@ -171,7 +171,7 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Returns a reborrowed command writer with a shorter lifetime.
     #[inline]
-    pub fn reborrow(&mut self) -> Commands<'_, '_> {
+    pub fn reborrow(&mut self) -> Commands<'w, '_> {
         Commands {
             queue: self.queue.clone(),
             world: self.world,
@@ -190,7 +190,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// Existence is validated when queued commands execute, not when queued.
     /// The entity may be despawned before application time.
     #[inline]
-    pub fn with_entity(&mut self, entity: Entity) -> EntityCommands<'_> {
+    pub fn entity(&mut self, entity: Entity) -> EntityCommands<'_> {
         EntityCommands {
             entity,
             commands: self.reborrow(),
@@ -206,9 +206,9 @@ impl<'w, 's> Commands<'w, 's> {
     ///
     /// Returns [`FetchError`] if the requested entity does not currently exist.
     #[inline]
-    pub fn try_with_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
+    pub fn checked_entity(&mut self, entity: Entity) -> Result<EntityCommands<'_>, FetchError> {
         let _ = self.world.entities.locate(entity)?;
-        Ok(self.with_entity(entity))
+        Ok(self.entity(entity))
     }
 
     /// Pushes a generic [`Command`] to the queue.
@@ -216,9 +216,9 @@ impl<'w, 's> Commands<'w, 's> {
     /// If the [`Command`] returns a [`Result`], it will be handled
     /// using the [fallback error handler](crate::error::FallbackErrorHandler).
     ///
-    /// To use a custom error handler, see [`Commands::push_handled`].
+    /// To use a custom error handler, see [`Commands::queue_handled`].
     #[inline]
-    pub fn push(&mut self, cmd: impl Command) {
+    pub fn queue(&mut self, cmd: impl Command) {
         unsafe {
             self.queue.push(cmd.handle_error());
         }
@@ -229,9 +229,9 @@ impl<'w, 's> Commands<'w, 's> {
     /// If the [`Command`] returns a [`Result`],
     /// the given `error_handler` will be used to handle error cases.
     ///
-    /// To implicitly use the fallback error handler, see [`Commands::push`].
+    /// To implicitly use the fallback error handler, see [`Commands::queue`].
     #[inline]
-    pub fn push_handled(&mut self, cmd: impl Command, handler: ErrorHandler) {
+    pub fn queue_handled(&mut self, cmd: impl Command, handler: ErrorHandler) {
         unsafe {
             self.queue.push(cmd.handle_error_with(handler));
         }
@@ -239,7 +239,7 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Pushes a generic [`Command`] and silently ignores command errors.
     #[inline]
-    pub fn push_silenced(&mut self, cmd: impl Command) {
+    pub fn queue_silenced(&mut self, cmd: impl Command) {
         unsafe {
             self.queue.push(cmd.ignore_error());
         }
@@ -253,9 +253,9 @@ impl<'w, 's> Commands<'w, 's> {
     pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
         let entity = self.world.alloc_entity();
 
-        self.push(super::spawn_empty_at(entity));
+        self.queue(super::spawn_empty_at(entity));
 
-        self.with_entity(entity)
+        self.entity(entity)
     }
 
     /// Enqueues a spawn operation and returns the corresponding [`EntityCommands`].
@@ -267,16 +267,15 @@ impl<'w, 's> Commands<'w, 's> {
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
         let entity = self.world.alloc_entity();
 
-        self.push(super::spawn_at(bundle, entity));
+        self.queue(super::spawn_at(bundle, entity));
 
-        self.with_entity(entity)
+        self.entity(entity)
     }
 
-    /// Enqueues spawning multiple entities from a batch of [`Bundle`] values.
+    /// Enqueues spawning multiple entities from a batch of [`DataBundle`] values.
     ///
     /// A batch can be any type that implements [`IntoIterator`] and
-    /// contains bundles, such as a [`Vec<Bundle>`](alloc::vec::Vec)
-    /// or an array `[Bundle; N]`.
+    /// contains bundles, such as a `Vec<Bundle>` or an array `[Bundle; N]`.
     ///
     /// This is equivalent to repeatedly calling [`spawn`](Self::spawn), but can
     /// be faster due to batched allocation and contiguous processing.
@@ -285,9 +284,9 @@ impl<'w, 's> Commands<'w, 's> {
     pub fn spawn_batch<I>(&mut self, batch: I)
     where
         I: IntoIterator + Send + Sync + 'static,
-        I::Item: Bundle,
+        I::Item: DataBundle,
     {
-        self.push(super::spawn_batch(batch));
+        self.queue(super::spawn_batch(batch));
     }
 
     /// Despawns an entity and removes all of its components.
@@ -296,7 +295,7 @@ impl<'w, 's> Commands<'w, 's> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn despawn(&mut self, entity: Entity) {
-        self.push(super::despawn(entity));
+        self.queue(super::despawn(entity));
     }
 
     /// Despawns an entity and removes all of its components.
@@ -305,7 +304,7 @@ impl<'w, 's> Commands<'w, 's> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_despawn(&mut self, entity: Entity) {
-        self.push(super::try_despawn(entity));
+        self.queue(super::try_despawn(entity));
     }
 
     /// Despawns many entities from iterator.
@@ -317,19 +316,15 @@ impl<'w, 's> Commands<'w, 's> {
     where
         I: IntoIterator<Item = Entity> + Send + Sync + 'static,
     {
-        self.push(super::despawn_batch(batch));
+        self.queue(super::despawn_batch(batch));
     }
 
     /// Initializes a [`Resource`] in the [`World`] using [`FromWorld`].
     ///
     /// If the resource already exists, this is a no-op.
-    ///
-    /// The inferred value is determined by the [`FromWorld`] trait of the resource.
-    /// Note that any resource with the [`Default`] trait automatically implements
-    /// [`FromWorld`], and those default values will be used.
     #[inline]
     pub fn init_resource<R: Resource + Send + FromWorld>(&mut self) {
-        self.push(super::init_resource::<R>());
+        self.queue(super::init_resource::<R>());
     }
 
     /// Initializes a NonSend [`Resource`] in the [`World`] using [`FromWorld`].
@@ -337,7 +332,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// If the resource already exists, this is a no-op.
     #[inline]
     pub fn init_non_send<R: Resource + FromWorld>(&mut self) {
-        self.push(super::init_non_send::<R>());
+        self.queue(super::init_non_send::<R>());
     }
 
     /// Inserts a [`Resource`] into the [`World`] with a specific value.
@@ -345,13 +340,13 @@ impl<'w, 's> Commands<'w, 's> {
     /// This will overwrite any previous value of the same resource type.
     #[inline]
     pub fn insert_resource<R: Resource + Send>(&mut self, resource: R) {
-        self.push(super::insert_resource::<R>(resource));
+        self.queue(super::insert_resource::<R>(resource));
     }
 
     /// Removes a [`Resource`] from the [`World`] if it exists.
     #[inline]
     pub fn remove_resource<R: Resource + Send>(&mut self) {
-        self.push(super::remove_resource::<R>());
+        self.queue(super::remove_resource::<R>());
     }
 
     /// Registers a system and returns its [`SystemId`] so it can later be called by
@@ -367,7 +362,7 @@ impl<'w, 's> Commands<'w, 's> {
         M: 'static,
     {
         let system_id = system.system_id();
-        self.push(super::register_system(system));
+        self.queue(super::register_system(system));
         system_id
     }
 
@@ -378,7 +373,7 @@ impl<'w, 's> Commands<'w, 's> {
         M: 'static,
         S: IntoSystem<(), (), M> + Send + 'static,
     {
-        self.push(super::run_system::<M, S>(system));
+        self.queue(super::run_system::<M, S>(system));
     }
 
     /// Runs the given system with the given input value,
@@ -390,7 +385,7 @@ impl<'w, 's> Commands<'w, 's> {
         M: 'static,
         S: IntoSystem<I, (), M> + Send + 'static,
     {
-        self.push(super::run_system_with::<I, M, S>(system, input));
+        self.queue(super::run_system_with::<I, M, S>(system, input));
     }
 
     /// Runs the system corresponding to the given [`SystemId`] with input.
@@ -402,40 +397,42 @@ impl<'w, 's> Commands<'w, 's> {
     where
         I: SystemInput<Data<'static>: Send> + Send + 'static,
     {
-        self.push(super::run_system_by_id::<I>(id, input));
+        self.queue(super::run_system_by_id::<I>(id, input));
     }
 
     /// Runs the schedule corresponding to the given [`ScheduleLabel`].
     #[inline]
     pub fn run_schedule(&mut self, label: impl ScheduleLabel) {
-        self.push(super::run_schedule(label));
+        self.queue(super::run_schedule(label));
     }
 
     /// Writes an arbitrary [`Message`].
     #[inline]
     pub fn write_message<M: Message>(&mut self, message: M) {
-        self.push(super::write_message(message));
+        self.queue(super::write_message(message));
     }
 
     /// Triggers the given [`Event`], which will run any [`Observer`]s watching for it.
     ///
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn trigger<'a>(&mut self, event: impl Event<Trigger<'a>: Default>) {
-        self.push(super::trigger(event));
+        self.queue(super::trigger(event));
     }
 
     /// Triggers the given [`Event`] using the given [`Trigger`], which will run any [`Observer`]s watching for it.
     ///
     /// [`Trigger`]: crate::event::Trigger
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn trigger_with<E: Event<Trigger<'static>: Send + Sync>>(
         &mut self,
         event: E,
         trigger: E::Trigger<'static>,
     ) {
-        self.push(super::trigger_with(event, trigger));
+        self.queue(super::trigger_with(event, trigger));
     }
 
     /// Adds a global [`Observer`] to the [`World`].
@@ -443,8 +440,9 @@ impl<'w, 's> Commands<'w, 's> {
     /// The observer will run when matching events are triggered.
     ///
     /// [`Observer`]: crate::observer::Observer
+    #[inline]
     pub fn add_observer<M>(&mut self, observer: impl IntoObserver<M>) {
-        self.push(super::add_observer(observer));
+        self.queue(super::add_observer(observer));
     }
 }
 
@@ -487,10 +485,10 @@ impl<'a> EntityCommands<'a> {
     /// cases. Every [`EntityCommand`] checks whether the entity exists at the time of execution and
     /// returns an error if it does not.
     ///
-    /// To use a custom error handler, see [`EntityCommands::push_handled`].
+    /// To use a custom error handler, see [`EntityCommands::queue_handled`].
     #[inline]
-    pub fn push(&mut self, command: impl EntityCommand) -> &mut Self {
-        self.commands.push(command.with_entity(self.entity));
+    pub fn queue(&mut self, command: impl EntityCommand) -> &mut Self {
+        self.commands.queue(command.with_entity(self.entity));
         self
     }
 
@@ -499,23 +497,23 @@ impl<'a> EntityCommands<'a> {
     /// The given `error_handler` will be used to handle error cases. Every [`EntityCommand`] checks
     /// whether the entity exists at the time of execution and returns an error if it does not.
     ///
-    /// To implicitly use the fallback error handler, see [`EntityCommands::push`].
+    /// To implicitly use the fallback error handler, see [`EntityCommands::queue`].
     #[inline]
-    pub fn push_handled(
+    pub fn queue_handled(
         &mut self,
         command: impl EntityCommand,
         handler: ErrorHandler,
     ) -> &mut Self {
-        self.commands.push_handled(command.with_entity(self.entity), handler);
+        self.commands.queue_handled(command.with_entity(self.entity), handler);
         self
     }
 
     /// Pushes an [`EntityCommand`] for this entity and ignores errors.
     ///
-    /// Unlike [`EntityCommands::push_handled`], this will completely ignore any errors that occur.
+    /// Unlike [`EntityCommands::queue_handled`], this will completely ignore any errors that occur.
     #[inline]
-    pub fn push_silenced(&mut self, command: impl EntityCommand) -> &mut Self {
-        self.commands.push_silenced(command.with_entity(self.entity));
+    pub fn queue_silenced(&mut self, command: impl EntityCommand) -> &mut Self {
+        self.commands.queue_silenced(command.with_entity(self.entity));
         self
     }
 
@@ -525,7 +523,7 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn insert(&mut self, bundle: impl Bundle) -> &mut Self {
-        self.push(super::insert(bundle))
+        self.queue(super::insert(bundle))
     }
 
     /// Adds a [`Bundle`] of components to the entity.
@@ -534,14 +532,14 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_insert(&mut self, bundle: impl Bundle) -> &mut Self {
-        self.push_silenced(super::insert(bundle))
+        self.queue_silenced(super::insert(bundle))
     }
 
     /// Removes all explicit component types in a [`Bundle`] from the entity.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn remove<B: Bundle>(&mut self) -> &mut Self {
-        self.push(super::remove::<B>())
+        self.queue(super::remove::<B>())
     }
 
     /// Removes all explicit component types in a [`Bundle`] from the entity.
@@ -550,14 +548,14 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_remove<B: Bundle>(&mut self) -> &mut Self {
-        self.push_silenced(super::remove::<B>())
+        self.queue_silenced(super::remove::<B>())
     }
 
     /// Removes all components from this entity.
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clear(&mut self) -> &mut Self {
-        self.push(super::clear())
+        self.queue(super::clear())
     }
 
     /// Removes all components from this entity.
@@ -566,7 +564,7 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_clear(&mut self) -> &mut Self {
-        self.push_silenced(super::clear())
+        self.queue_silenced(super::clear())
     }
 
     /// Despawns an entity and removes all of its components.
@@ -595,7 +593,7 @@ impl<'a> EntityCommands<'a> {
     /// [`Observer`]: crate::observer::Observer
     #[inline]
     pub fn observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
-        self.push(super::observe(observer));
+        self.queue(super::observe(observer));
         self
     }
 
@@ -606,7 +604,7 @@ impl<'a> EntityCommands<'a> {
     /// [`Observer`]: crate::observer::Observer
     #[inline]
     pub fn try_observe<M>(&mut self, observer: impl IntoEntityObserver<M>) -> &mut Self {
-        self.push_silenced(super::observe(observer));
+        self.queue_silenced(super::observe(observer));
         self
     }
 
@@ -617,7 +615,7 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn clone(&mut self, linked_clone: bool) -> &mut Self {
-        self.push(super::clone(linked_clone));
+        self.queue(super::clone(linked_clone));
         self
     }
 
@@ -630,7 +628,7 @@ impl<'a> EntityCommands<'a> {
     #[inline]
     #[cfg_attr(any(debug_assertions, feature = "debug"), track_caller)]
     pub fn try_clone(&mut self, linked_clone: bool) -> &mut Self {
-        self.push_silenced(super::clone(linked_clone));
+        self.queue_silenced(super::clone(linked_clone));
         self
     }
 }

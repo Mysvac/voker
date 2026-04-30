@@ -28,7 +28,7 @@
 //! # use voker_reflect::prelude::{TypeRegistry, ReflectSerializeDriver, Reflect};
 //! #
 //! #[derive(Reflect)]
-//! #[reflect(type_path = "my_crate::MyStruct")]
+//! #[type_path = "my_crate::MyStruct"]
 //! struct MyStruct {
 //!   value: i32
 //! }
@@ -69,7 +69,7 @@
 //! # use voker_reflect::prelude::{Reflect, FromReflect, TypeRegistry, ReflectDeserializeDriver};
 //! #
 //! #[derive(Reflect, PartialEq, Debug)]
-//! #[reflect(type_path = "my_crate::MyStruct")]
+//! #[type_path = "my_crate::MyStruct"]
 //! struct MyStruct {
 //!   value: i32
 //! }
@@ -104,8 +104,6 @@
 //! This attribute **only** works with the default implementation (reflection-based serialization/deserialization).
 //! It has **no effect** when custom processors are provided or when types have native `serde` implementations.
 //!
-//! ### Examples
-//!
 //! ```no_run
 //! # use core::marker::PhantomData;
 //! # use voker_reflect::Reflect;
@@ -117,6 +115,24 @@
 //! }
 //! ```
 //!
+//! If you want to completely eliminate reflection for a specific field, including serialization and deserialization,
+//! you can use the `ignore` attribute.
+//!
+//! ```no_run
+//! # use core::marker::PhantomData;
+//! # use voker_reflect::Reflect;
+//! #[derive(Reflect)]
+//! struct Foo<T> {
+//!     data: u64,
+//!     #[reflect(ignore, clone, default)]
+//!     _marker: PhantomData<T>,
+//! }
+//! ```
+//!
+//! Since the field is completely excluded from reflection, this makes `reflect_clone` and `from_reflect`
+//! difficult to implement (easily returning failure values). Therefore, there are two companion attributes:
+//! `clone` and `default`. The former supports `reflect_clone`, and the latter supports `from_reflect`.
+//!
 //! [`TypeMeta`]: crate::registry::TypeMeta
 //! [`ReflectDeserialize`]: crate::registry::ReflectDeserialize
 //! [`ReflectSerialize`]: crate::registry::ReflectSerialize
@@ -124,7 +140,7 @@
 // -----------------------------------------------------------------------------
 // Debug utils
 
-crate::cfg::debug! {
+crate::cfg::backtrace! {
     mod info_stack;
     use info_stack::TypeInfoStack;
 }

@@ -1,7 +1,14 @@
+//! World identity — a unique ID assigned to each [`World`] instance.
+//!
+//! [`WorldId`] is used to detect cross-world entity references and to
+//! distinguish sub-app worlds from the main world at runtime.
+//!
+//! [`World`]: crate::world::World
+
 use core::fmt::{Debug, Display};
 use core::hash::Hash;
 use core::num::NonZeroUsize;
-use voker_os::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use voker_os::atomic::{AtomicUsize, Ordering::Relaxed};
 
 // -----------------------------------------------------------------------------
 // WorldId
@@ -21,7 +28,7 @@ impl WorldId {
         static ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
         let next = ALLOCATOR
-            .fetch_update(Relaxed, Relaxed, |val| val.checked_add(1))
+            .try_update(Relaxed, Relaxed, |val| val.checked_add(1))
             .expect("too many worlds");
 
         // `1..usize::MAX`

@@ -3,13 +3,13 @@ use crate::cfg;
 mod thread_executor;
 
 cfg::switch! {
-    cfg::web => {
-        mod web;
-        use web as impls;
-    }
-    cfg::std => {
+    crate::cfg::multi_threaded => {
         mod multi;
         use multi as impls;
+    }
+    #[cfg(all(feature = "std", target_arch = "wasm32"))] => {
+        mod web;
+        use web as impls;
     }
     _ => {
         mod fallback;

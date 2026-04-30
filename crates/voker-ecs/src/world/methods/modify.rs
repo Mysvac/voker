@@ -1,6 +1,7 @@
 use crate::borrow::UntypedMut;
 use crate::component::Component;
 use crate::entity::{Entity, FetchError};
+use crate::event::{DISCARD, Discard, EntityComponentsTrigger, INSERT, Insert};
 use crate::prelude::ComponentId;
 use crate::utils::DebugLocation;
 use crate::world::World;
@@ -58,12 +59,26 @@ pub(crate) fn modify_component_internal<R>(
 
     let has_on_discard_hooks = !arche.on_discard_hooks().is_empty();
     let has_on_insert_hooks = !arche.on_insert_hooks().is_empty();
+    let has_on_discard_observer = arche.has_on_discard_observer();
+    let has_on_insert_observer = arche.has_on_insert_observer();
+
+    let arche = &raw const *arche;
 
     unsafe {
         if has_on_discard_hooks {
+            let iter = core::iter::once(component_id);
+            world.deferred().trigger_on_discard(entity, iter, caller);
+        }
+        if has_on_discard_observer {
+            let mut event = Discard { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: &[component_id],
+                old_archetype: Some(&*arche),
+                new_archetype: Some(&*arche),
+            };
             world
                 .deferred()
-                .trigger_on_discard(entity, Some(component_id).into_iter(), caller);
+                .trigger_raw(DISCARD, &mut event, &mut trigger, caller);
         }
     }
 
@@ -78,9 +93,17 @@ pub(crate) fn modify_component_internal<R>(
 
     unsafe {
         if has_on_insert_hooks {
-            world
-                .deferred()
-                .trigger_on_insert(entity, Some(component_id).into_iter(), caller);
+            let iter = core::iter::once(component_id);
+            world.deferred().trigger_on_insert(entity, iter, caller);
+        }
+        if has_on_insert_observer {
+            let mut event = Insert { entity };
+            let mut trigger = EntityComponentsTrigger {
+                components: &[component_id],
+                old_archetype: Some(&*arche),
+                new_archetype: Some(&*arche),
+            };
+            world.deferred().trigger_raw(INSERT, &mut event, &mut trigger, caller);
         }
     }
 

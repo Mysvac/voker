@@ -1,5 +1,4 @@
-//! Static-constructor-based auto registration for metadata collection in
-//! reflection and ECS scenarios.
+//! CTOR based metadata collector.
 //!
 //! > Modified from <https://docs.rs/inventory/latest/inventory/>.
 //! >
@@ -27,36 +26,30 @@
 //! }
 //! ```
 //!
+//! When the element does not match the collector,
+//! compilation fails or runtime panic occurs.
+//!
 //! # Platform Support
 //!
 //! This crate supports Wasm, Windows, Linux, macOS, Android, iOS, and other
 //! constructor-capable targets covered by the linker section attributes below.
 //!
-//! Notably, on Wasm you do not need to manually call `__wasm_call_ctors` as in
-//! the upstream `inventory` crate. This implementation wraps that call inside
-//! [`iter`], and runs it automatically on first use.
+//! Notably, on Wasm you do **not** need to manually call `__wasm_call_ctors`
+//! as in the upstream `inventory` crate. This implementation wraps that call
+//! inside [`iter`], and runs it automatically on first use.
 //!
 //! # License
 //!
-//! Licensed under either of:
-//! - Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or
-//!   <https://www.apache.org/licenses/LICENSE-2.0>)
-//! - MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-//!   <https://opensource.org/licenses/MIT>)
-//!
-//! at your option.
-#![expect(clippy::new_without_default, reason = "default is not const")]
+//! MIT or Apache-2.0
 #![expect(unsafe_code, reason = "pointer operation")]
 #![no_std]
 
+use core::any::TypeId;
 use core::cell::UnsafeCell;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-
-#[cfg(debug_assertions)]
-use core::any::TypeId;
 
 const PENDING: usize = 0;
 const RUNNING: usize = 1;
@@ -72,10 +65,8 @@ struct Node {
     next: UnsafeCell<Option<&'static Node>>,
     // Following the constraints in `voker-os`, we require the target
     // platform to support `AtomicPtr`, but not necessarily `AtomicU8`.
-    // So we use `AtomicPtr` instead, maintain the same type size.
+    // So we use `AtomicUsize` instead. Maintain the same Node size.
     state: AtomicUsize,
-    #[cfg(debug_assertions)]
-    type_id: TypeId, // Ensure type correctness in Debug mode.
 }
 
 /// Registry storage for one inventory type.
@@ -88,6 +79,8 @@ pub struct Registry {
     // Head pointer of the singly linked list for one concrete type.
     // New entries are inserted at the head (push-front).
     head: AtomicPtr<Node>,
+    // Ensure type correctness
+    type_id: TypeId,
 }
 
 /// A registrable inventory entry.
@@ -122,12 +115,13 @@ pub struct Iter<T> {
 ///
 /// ```
 /// # use voker_inventory::{Inventory, Registry};
+///
 /// struct Flag;
 ///
-/// unsafe impl Inventory for Flag {
+/// impl Inventory for Flag {
 ///     fn registry() -> &'static Registry {
-///         static reg: Registry = Registry::new();
-///         &reg
+///         static REG: Registry = Registry::new::<Flag>();
+///         &REG
 ///     }
 /// }
 /// ```
@@ -139,15 +133,16 @@ pub struct Iter<T> {
 /// For example, avoid patterns that may cause the same [`Registry`] instance
 /// to be shared across unrelated types, which would corrupt internal typing and
 /// may trigger undefined behavior during iteration.
-pub unsafe trait Inventory: Sync + Sized + 'static {
+pub trait Inventory: Sync + Sized + 'static {
     fn registry() -> &'static Registry;
 }
 
 impl Registry {
-    /// Creates an empty registry.
-    pub const fn new() -> Self {
+    /// Creates an empty registry for specific type.
+    pub const fn new<T: 'static>() -> Self {
         Self {
             head: AtomicPtr::new(ptr::null_mut()),
+            type_id: TypeId::of::<T>(),
         }
     }
 }
@@ -163,8 +158,6 @@ impl<T: Inventory> Item<T> {
                 data: val as *const T as *const (),
                 next: UnsafeCell::new(None),
                 state: AtomicUsize::new(PENDING),
-                #[cfg(debug_assertions)]
-                type_id: TypeId::of::<T>(),
             },
         }
     }
@@ -182,25 +175,6 @@ impl<T: Inventory> Item<T> {
 
         let node = &self.node;
 
-        #[cfg(debug_assertions)]
-        assert_eq!(
-            node.type_id,
-            TypeId::of::<T>(),
-            "\n\
-            ════════════════════════════════════════════════════════════════\n\
-                Type Safety Violation in Inventory Registry                 \n\
-            ════════════════════════════════════════════════════════════════\n\
-                Operation: submit \n\
-                Note: The submitted data type does not match the registry.\n\
-                Expected type: `{}`(TypeId: {:?})\n\
-                Found type:    `?`(TypeId: {:?})\n\
-            ════════════════════════════════════════════════════════════════\n\
-            ",
-            core::any::type_name::<T>(),
-            TypeId::of::<T>(),
-            node.type_id,
-        );
-
         if let Err(mut state) = node.state.compare_exchange(PENDING, RUNNING, Relaxed, Acquire) {
             while state != COMPLETED {
                 core::hint::spin_loop();
@@ -211,6 +185,27 @@ impl<T: Inventory> Item<T> {
         }
 
         let reg = <T as Inventory>::registry();
+
+        // Should we always check?
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            reg.type_id,
+            TypeId::of::<T>(),
+            "\n\
+            ════════════════════════════════════════════════════════════════\n\
+                Type Safety Violation in Inventory Registry                 \n\
+            ════════════════════════════════════════════════════════════════\n\
+                Operation: submit \n\
+                Note: The submitted data type does not match the registry.\n\
+                Registry type: `?`(TypeId: {:?})\n\
+                Found type:    `{}`(TypeId: {:?})\n\
+            ════════════════════════════════════════════════════════════════\n\
+            ",
+            reg.type_id,
+            core::any::type_name::<T>(),
+            TypeId::of::<T>(),
+        );
+
         let mut head = reg.head.load(Relaxed);
 
         loop {
@@ -250,25 +245,6 @@ impl<T: Inventory> Iterator for Iter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.node?;
 
-        #[cfg(debug_assertions)]
-        assert_eq!(
-            node.type_id,
-            TypeId::of::<T>(),
-            "\n\
-            ════════════════════════════════════════════════════════════════\n\
-                Type Safety Violation in Inventory Registry                 \n\
-            ════════════════════════════════════════════════════════════════\n\
-                Operation: iter\n\
-                Note: The same Registry may reused for different types. \n\
-                Expected type: `{}`(TypeId: {:?})\n\
-                Found type:    `?`(TypeId: {:?})\n\
-            ════════════════════════════════════════════════════════════════\n\
-            ",
-            core::any::type_name::<T>(),
-            TypeId::of::<T>(),
-            node.type_id,
-        );
-
         let ptr = node.data as *const T;
         debug_assert!(ptr.is_aligned());
 
@@ -297,6 +273,25 @@ pub fn iter<T: Inventory>() -> Iter<T> {
     call_ctor_in_wasm();
 
     let reg = <T as Inventory>::registry();
+
+    assert_eq!(
+        reg.type_id,
+        TypeId::of::<T>(),
+        "\n\
+        ════════════════════════════════════════════════════════════════\n\
+            Type Safety Violation in Inventory Registry                 \n\
+        ════════════════════════════════════════════════════════════════\n\
+            Operation: iter\n\
+            Note: The same Registry may reused for different types. \n\
+            Registry type:  `?`(TypeId: {:?})\n\
+            Iter Item type: `{}`(TypeId: {:?})\n\
+        ════════════════════════════════════════════════════════════════\n\
+        ",
+        reg.type_id,
+        core::any::type_name::<T>(),
+        TypeId::of::<T>(),
+    );
+
     let head = reg.head.load(Ordering::Acquire);
     unsafe {
         Iter {
@@ -337,11 +332,10 @@ fn call_ctor_in_wasm() {
 #[macro_export]
 macro_rules! collect {
     ($ty:ty) => {
-        #[expect(unsafe_code, reason = "Inventory is unsafe")]
-        unsafe impl $crate::Inventory for $ty {
+        impl $crate::Inventory for $ty {
             #[inline]
             fn registry() -> &'static $crate::Registry {
-                static REGISTRY: $crate::Registry = $crate::Registry::new();
+                static REGISTRY: $crate::Registry = $crate::Registry::new::<$ty>();
                 &REGISTRY
             }
         }

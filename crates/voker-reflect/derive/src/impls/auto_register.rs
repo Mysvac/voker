@@ -6,12 +6,13 @@ pub(crate) fn get_auto_register_impl(meta: &ReflectMeta) -> TokenStream {
     use quote::quote;
 
     if !meta.attrs().impl_switchs.impl_get_type_meta {
-        return crate::utils::empty();
+        return TokenStream::new();
     }
 
-    // Invalid for generic types.
-    if meta.contains_generics() {
-        return crate::utils::empty();
+    // Auto-register requires a concrete, non-generic type.
+    // This must also exclude lifetime-only generics like `Foo<'a>`.
+    if !meta.no_generics() {
+        return TokenStream::new();
     }
 
     let real_ident = meta.real_ident();

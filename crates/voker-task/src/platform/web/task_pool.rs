@@ -1,4 +1,4 @@
-#![expect(unsafe_code, reason = "Assuming it's single threaded environment.")]
+#![expect(unsafe_code, reason = "Low level operation")]
 
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
@@ -7,16 +7,17 @@ use core::future::Future;
 use core::marker::PhantomData;
 use core::mem;
 
-use voker_os::sync::Arc;
-use voker_os::sync::LazyLock;
 use async_task::Task;
+use alloc::sync::Arc;
 
 use super::{ThreadExecutor, ThreadExecutorTicker, block_on};
 
 // -----------------------------------------------------------------------------
 // TaskPoolBuilder
 
-/// Used to create a [`TaskPool`].
+/// Builder for creating a [`TaskPool`].
+///
+/// No op on the single threaded task pool
 #[derive(Default)]
 #[must_use]
 pub struct TaskPoolBuilder {}
@@ -69,15 +70,17 @@ impl TaskPoolBuilder {
 // -----------------------------------------------------------------------------
 // Static Executor
 
-static LOCAL_EXECUTOR: LazyLock<Arc<ThreadExecutor<'static>>> =
-    LazyLock::new(|| Arc::new(ThreadExecutor::new()));
+std::thread_local! {
+    static THREAD_EXECUTOR: Arc<ThreadExecutor<'static>> = Arc::new(ThreadExecutor::new());
+}
 
 // -----------------------------------------------------------------------------
 // TaskPool
 
-/// A thread pool for executing tasks.
+/// A single-thread fallback task pool.
 ///
-/// In this case - main thread only.
+/// This implementation runs on the current thread only
+/// and does not provide background worker threads.
 #[derive(Debug, Default)]
 pub struct TaskPool {}
 
@@ -92,7 +95,7 @@ impl TaskPool {
     /// Return the number of threads owned by the task pool
     ///
     /// Always return `1` in no_std env.
-    #[inline(always)]
+    #[inline]
     pub fn thread_num(&self) -> usize {
         1
     }
@@ -100,7 +103,7 @@ impl TaskPool {
     /// Returns the thread executor for the current thread.
     #[inline]
     pub fn local_executor() -> Arc<ThreadExecutor<'static>> {
-        Arc::clone(&LOCAL_EXECUTOR)
+        THREAD_EXECUTOR.with(Clone::clone)
     }
 
     /// Obtains a `Ticker` that can drive the [`ThreadExecutor`]
@@ -110,27 +113,39 @@ impl TaskPool {
     /// poll tasks submitted via [`TaskPool::spawn_local`].
     #[inline]
     pub fn local_ticker() -> ThreadExecutorTicker<'static, 'static> {
-        LOCAL_EXECUTOR.ticker().unwrap()
+        THREAD_EXECUTOR.with(|ex: &Arc<ThreadExecutor>|{
+            let ex: &ThreadExecutor = ex; // From Arc to Inner
+            #[expect(unsafe_code, reason = "need to transmute lifetime.")]
+            let ex: &'static ThreadExecutor = unsafe { mem::transmute(ex) };
+            ex.ticker_unchecked()
+        })
     }
 
-    /// Spawns a static future that executes on the current thread; returns a Task.
+    /// Spawns a static future on local thread task queue.
     ///
     /// This is functionally identical to [`TaskPool::spawn`].
+    ///
+    /// In a `no_std` environment lacking a thread‑local executor,
+    /// this function schedules the task on the current thread local executor.
+    ///
+    /// The caller **must** ensure execution occurs **on the main thread**.
     #[inline]
     pub fn spawn_local<T: 'static>(&self, future: impl Future<Output = T> + 'static) -> Task<T> {
         web_task::spawn_local(future)
     }
 
-    /// Spawns astatic future that can execute on any thread; returns a Task.
+    /// Spawns a static future onto the thread pool.
     ///
-    /// The returned Task is a future, which can be polled to
-    /// retrieve the output of the original future.
+    /// In fallback mode, this method drives the local executor in a loop and
+    /// does not return until all currently runnable local tasks are drained.
+    ///
+    /// This is intentionally synchronous behavior for no-std single-thread use.
     #[inline]
-    pub fn spawn<T>(&self, future: impl Future<Output = T> + 'static) -> Task<T>
-    where
-        T: 'static + Send,
-    {
-        web_task::spawn_local(future)
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        future: impl Future<Output = T> + Send + 'static,
+    ) -> Task<T> {
+        web_task::spawn(future)
     }
 
     /// Allows spawning non-`'static` futures on the thread pool.
@@ -181,6 +196,11 @@ impl TaskPool {
         // Any usages of the references passed into `Scope` must be accessed through
         // the transmuted reference for the rest of this function.
 
+        let executor: Arc<ThreadExecutor<'static>> = TaskPool::local_executor();
+        let executor_ref: &'env ThreadExecutor<'static> = unsafe {
+            mem::transmute::<&ThreadExecutor<'static>, &ThreadExecutor<'static>>(executor.as_ref())
+        };
+
         // SAFETY: As above, all futures must complete in this function so we can change the lifetime
         let results: RefCell<Vec<Option<T>>> = RefCell::new(Vec::new());
         let results_ref: &'env RefCell<Vec<Option<T>>> = unsafe {
@@ -193,6 +213,7 @@ impl TaskPool {
             unsafe { mem::transmute::<&Cell<usize>, &Cell<usize>>(&pending) };
 
         let mut scope = Scope {
+            executor_ref,
             pending_tasks,
             results_ref,
             scope: PhantomData,
@@ -206,7 +227,8 @@ impl TaskPool {
         f(scope_ref);
 
         // Wait until the scope is complete
-        let ticker = LOCAL_EXECUTOR.ticker().unwrap();
+        let ticker = executor.ticker_unchecked();
+
         block_on(ticker.run(async {
             while pending_tasks.get() != 0 {
                 futures_lite::future::yield_now().await;
@@ -225,6 +247,7 @@ impl TaskPool {
 /// For more information, see [`TaskPool::scope`].
 #[derive(Debug)]
 pub struct Scope<'scope, 'env: 'scope, T> {
+    executor_ref: &'scope ThreadExecutor<'scope>,
     // The number of pending tasks spawned on the scope
     pending_tasks: &'scope Cell<usize>,
     // Vector to gather results of all futures spawned during scope run
@@ -246,7 +269,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
-    pub fn spawn<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
+    pub fn spawn<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {
         // increment the number of pending tasks
         let pending_tasks = self.pending_tasks;
         pending_tasks.update(|i| i + 1);
@@ -272,7 +295,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
         };
 
         unsafe {
-            LOCAL_EXECUTOR.spawn_unchecked(f).detach();
+            self.executor_ref.spawn_unchecked(f).detach();
         }
     }
 
@@ -282,7 +305,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// will be returned as a part of [`TaskPool::scope`]'s return value.
     ///
     /// For more information, see [`TaskPool::scope`].
-    pub fn spawn_scope<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
+    pub fn spawn_scope<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {
         self.spawn(f);
     }
 
@@ -294,7 +317,7 @@ impl<'scope, 'env, T: Send + 'env> Scope<'scope, 'env, T> {
     /// On the single threaded task pool, it just calls [`Scope::spawn_scope`].
     ///
     /// For more information, see [`TaskPool::scope`].
-    pub fn spawn_remote<Fut: Future<Output = T> + 'scope>(&self, f: Fut) {
+    pub fn spawn_remote<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {
         self.spawn(f);
     }
 }

@@ -3,16 +3,14 @@ use quote::quote;
 
 use crate::derive_data::ReflectMeta;
 use crate::path::fp::OptionFP;
-use crate::utils::StringExpr;
+use crate::string_expr::StringExpr;
 
 fn static_path_cell(voker_reflect_path: &syn::Path, generator: TokenStream) -> TokenStream {
     let path_cell_ = crate::path::generic_type_path_cell_(voker_reflect_path);
 
     quote! {
         static CELL: #path_cell_ = #path_cell_::new();
-        CELL.get_or_insert::<Self>(|| {
-            #generator
-        })
+        CELL.get_or_insert::<Self>(|| { #generator })
     }
 }
 
@@ -35,11 +33,11 @@ pub(crate) fn impl_trait_type_path(meta: &ReflectMeta) -> TokenStream {
 
     let real_ident = meta.real_ident();
 
-    let (type_path, type_name, inline_flag) = if meta.contains_generics() {
+    let (type_path, type_name, inline_flag) = if meta.has_type_const_generics() {
         (
             static_path_cell(voker_reflect_path, meta.type_path_into_owned()),
             static_path_cell(voker_reflect_path, meta.type_name_into_owned()),
-            crate::utils::empty(),
+            TokenStream::new(),
         )
     } else {
         (

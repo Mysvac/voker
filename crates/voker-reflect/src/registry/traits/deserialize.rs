@@ -23,7 +23,7 @@ use crate::registry::FromType;
 /// use serde::Deserialize;
 ///
 /// #[derive(Reflect, Deserialize, PartialEq, Debug)]
-/// #[reflect(deserialize)]
+/// #[reflect(Deserialize)]
 /// struct MyStruct {
 ///   value: i32
 /// }

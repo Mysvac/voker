@@ -10,14 +10,17 @@ repository.workspace = true
 default = [ "std" ]
 
 # Enable Type Tracing in serialization and deserialization.
-# Only effect when `std` feature is enabled.
-debug = []
+backtrace = ["std"]
 
 std = [
     "voker-os/std",
     "serde_core/std",
     "erased-serde/std",
 ]
+
+glam = ["dep:glam"]
+
+uuid = ["dep:uuid"]
 
 reflect_docs = [ "voker-reflect-derive/reflect_docs" ]
 
@@ -26,14 +29,21 @@ voker-reflect-derive = { path = "derive" }
 
 voker-ptr = { path = "../voker-ptr" }
 voker-cfg = { path = "../voker-cfg" }
-voker-utils = { path = "../voker-utils" }
 voker-inventory = { path = "../voker-inventory" }
 
 voker-os = { path = "../voker-os", default-features = false }
+voker-utils = { path = "../voker-utils", default-features = false }
+
+# log
+tracing = { version = "0.1", default-features = false }
 
 # reflect serde
 serde_core = { version = "1", default-features = false, features = ["alloc"] }
 erased-serde = { version = "0.4", default-features = false, features = ["alloc"] }
+
+# optional
+glam = { version = "0.32.0", default-features = false, features = ["serde"], optional = true }
+uuid = { version = "1.23", default-features = false, features = ["v4","serde"], optional = true }
 
 [dev-dependencies]
 ron = "0.12"

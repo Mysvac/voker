@@ -1,13 +1,4 @@
-//! See following macros:
-//!
-//! - [`Reflect`]
-//! - [`TypePath`]
-//! - [`impl_reflect`]
-//! - [`impl_reflect_opaque`]
-//! - [`impl_type_path`]
-//! - [`impl_auto_register`]
-//! - [`auto_register`]
-//! - [`reflect_trait`]
+//! Reflection Macros
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::std_instead_of_core, reason = "proc-macro lib")]
 #![allow(clippy::std_instead_of_alloc, reason = "proc-macro lib")]
@@ -17,6 +8,8 @@ use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 
 static REFLECT_ATTRIBUTE: &str = "reflect";
+static TYPE_DATA_ATTRIBUTE: &str = "type_data";
+static TYPE_PATH_ATTRIBUTE: &str = "type_path";
 
 // -----------------------------------------------------------------------------
 // Modules
@@ -24,7 +17,7 @@ static REFLECT_ATTRIBUTE: &str = "reflect";
 mod derive_data;
 mod impls;
 mod path;
-mod utils;
+mod string_expr;
 
 // -----------------------------------------------------------------------------
 // Macros
@@ -66,7 +59,7 @@ mod utils;
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(type_path = "you::me::Foo")]
+/// #[type_path = "you::me::Foo"]
 /// struct Foo { /* ... */ }
 /// ```
 ///
@@ -88,14 +81,18 @@ mod utils;
 ///
 /// When you mark a type as `Opaque`, the macro will not inspect its internal fields; consequently, methods such
 /// as `reflect_clone` or `reflect_hash` that depend on field content cannot be generated automatically. Therefore,
-/// `Opaque` types must implement `Clone` and be marked with the `clone` flag when applicable:
+/// `Opaque` types must declare either `Clone` or `NotCloneable`.
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(Opaque, clone)]
+/// #[reflect(Opaque, Clone)]
 /// struct Foo { /* ... */ }
 ///
 /// impl Clone for Foo {  /* ... */ }
+///
+/// #[derive(Reflect)]
+/// #[reflect(Opaque, NotCloneable)]
+/// struct Bar { /* ... */ }
 /// ```
 ///
 /// This attribute can only be applied at the type level.
@@ -107,64 +104,69 @@ mod utils;
 /// not assume their availability by default. Use attributes to declare available traits so the macro can optimize
 /// accordingly.
 ///
-/// As noted, `Opaque` types require `Clone` support, so they must implement it and be marked with the `clone` flag.
+/// As noted, `Opaque` types require either `Clone` or `NotCloneable` to be explicitly marked.
 ///
 /// ```rust, ignore
 /// #[derive(Reflect)]
-/// #[reflect(Opaque, clone, hash)]
+/// #[reflect(Opaque, Clone, Hash)]
 /// struct Foo { /* ... */ }
 /// // impl Clone, Hash ...
 /// ```
 ///
 /// Available flags:
 ///
-/// - `clone`: Standard `Clone`
-/// - `hash`: Standard `Hash`
-/// - `eq`: Standard `PartialEq`
-/// - `cmp`: Standard `PartialOrd`
-/// - `default`: Standard `Default`
-/// - `serialize`: `serde::Serialize`
-/// - `deserialize`: `serde::Deserialize`
-///
-/// Two convenience bundles enable multiple flags simultaneously:
-///
-/// - `serde`: `serialize` + `deserialize`
-/// - `full`: All seven traits listed above
+/// - `Clone`: Standard `Clone`
+/// - `NotCloneable`: Force `reflect_clone` to return `ReflectCloneError::NotSupport`
+/// - `Hash`: Standard `Hash`
+/// - `PartialEq`: Standard `PartialEq`
+/// - `PartialOrd`: Standard `PartialOrd`
+/// - `Default`: Standard `Default`
+/// - `Serialize`: `serde::Serialize`
+/// - `Deserialize`: `serde::Deserialize`
 ///
 /// These attributes can only be applied at the type level.
 ///
-/// ### Automatic registration
+/// ## Reflection-Based Type Conversion
 ///
-/// For non-generic local types, `#[derive(Reflect)]` automatically emits
-/// registration metadata (as long as `GetTypeMeta` generation is enabled).
+/// If a type implements `Into<T>` or `From<T>` for some other reflected type `T`, you can declare
+/// these conversions so they are accessible through the reflection system at runtime.
 ///
-/// Generic types are not collected automatically because static registration
-/// requires concrete type instantiations. Use [`impl_auto_register`] for
-/// specific generic instantiations.
+/// ```rust, ignore
+/// #[derive(Reflect)]
+/// #[reflect(Into<f64>, From<i32>)]
+/// struct MyNum(f32);
+///
+/// impl Into<f64> for MyNum { /* ... */ }
+/// impl From<i32> for MyNum { /* ... */ }
+/// ```
+///
+/// This inserts a [`ReflectConvert`] entry into the type's `TypeMeta`, which can later be retrieved
+/// from a [`TypeRegistry`] to perform dynamic conversions between reflected types:
+///
+/// These attributes can only be applied at the type level.
 ///
 /// ## Custom GetTypeMeta
 ///
-/// By default, a type's `get_type_meta` includes at least `ReflectFromPtr`. The following type traits may also be
-/// included based on conditions:
+/// By default, The following type traits may be included based on conditions:
 ///
 /// - `ReflectFromReflect`: If the default `FromReflect` implementation is enabled (not disabled with
 ///   `#[reflect(FromReflect = false)]`).
-/// - `ReflectDefault`: If `Default` is marked as available via `#[reflect(default)]`.
-/// - `ReflectSerialize`: If `serde::Serialize` is marked as available via `#[reflect(serialize)]`.
-/// - `ReflectDeserialize`: If `serde::Deserialize` is marked as available via `#[reflect(deserialize)]`.
+/// - `ReflectDefault`: If `Default` is marked as available via `#[reflect(Default)]`.
+/// - `ReflectSerialize`: If `serde::Serialize` is marked as available via `#[reflect(Serialize)]`.
+/// - `ReflectDeserialize`: If `serde::Deserialize` is marked as available via `#[reflect(Deserialize)]`.
 ///
-/// You can also manually add type traits using `#[reflect(type_data = (...))]`. These will be automatically
+/// You can also manually add type traits using `#[type_data(...)]`. These will be automatically
 /// inserted into `get_type_meta`.
 ///
 /// ### Example
 ///
 /// ```rust, ignore
-/// #[derive(Reflect)]
-/// #[reflect(type_data = ReflectPrint)]
+/// #[derive(Reflect, Component)]
+/// #[type_data(ReflectComponent)]
 /// struct A;
 ///
 /// #[derive(Reflect)]
-/// #[reflect(type_data = (ReflectDebug, ReflectClone, ReflectDisplay))]
+/// #[type_data(ReflectDebug, ReflectClone, ReflectDisplay)]
 /// struct A;
 /// ```
 ///
@@ -264,9 +266,43 @@ mod utils;
 /// ```
 ///
 /// Important: This only takes effect with the default serialization provided by the reflection system.
-/// If the type is annotated with `reflect(serde)` and supports serialization via the serde library,
+/// If the type is annotated with `reflect(Serialize, Deserialize)` and supports serialization via the serde library,
 /// this field attribute will not have any effect.
-#[proc_macro_derive(Reflect, attributes(reflect))]
+///
+/// ## ignore
+///
+/// There is a special attribute called `ignore`, which can only be used on fields.
+///
+/// ```rust, ignore
+/// #[derive(Reflect)]
+/// struct A<T> {
+///     text: String
+///     #[reflect(ignore)]
+///     _marker: PhantomData<T>,
+/// }
+/// ```
+///
+/// Unlike `skip_serde`, this attribute causes the field to be completely excluded from reflection.
+/// It cannot be accessed through any reflection APIs, and the reflected `field_len` will not count this field.
+///
+/// This makes `reflect_clone` and `from_reflect` difficult to implement. Therefore, alongside `ignore`,
+/// there are companion attributes `clone` and `default`, which can only be used on `ignore`d fields:
+///
+/// ```rust, ignore
+/// #[derive(Reflect)]
+/// struct A<T> {
+///     text: String
+///     #[reflect(ignore, clone, default)]
+///     _marker: PhantomData<T>,
+/// }
+/// ```
+///
+/// When the complete type does not directly implement `Clone`, `reflect_clone` clones each field individually.
+/// The `clone` attribute ensures that such ignored fields can be cloned properly at that time.
+///
+/// When `Clone` fails and the complete type does not implement `Default`, `from_reflect` initializes each field individually.
+/// The `default` attribute ensures that such ignored fields can be constructed properly at that time.
+#[proc_macro_derive(Reflect, attributes(reflect, type_data, type_path))]
 pub fn derive_full_reflect(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
 
@@ -288,27 +324,27 @@ pub fn derive_full_reflect(input: TokenStream) -> TokenStream {
 ///
 /// // custom implementation
 /// #[derive(TypePath)]
-/// #[reflect(type_path = "crate_name::foo::B")]
+/// #[type_path = "crate_name::foo::B"]
 /// struct B;
 ///
 /// // support generics
 /// #[derive(TypePath)]
-/// #[reflect(type_path = "crate_name::foo::C")]
+/// #[type_path = "crate_name::foo::C"]
 /// struct C<T>(T);
 /// ```
-#[proc_macro_derive(TypePath, attributes(reflect))]
+#[proc_macro_derive(TypePath, attributes(type_path))]
 pub fn derive_type_path(input: TokenStream) -> TokenStream {
-    use crate::derive_data::{ReflectMeta, TypeAttributes, TypeParser};
+    use crate::derive_data::{ReflectMeta, TypeAttributes, TypeSignature};
 
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
 
-    let type_attributes = match TypeAttributes::parse_attrs(&ast.attrs) {
+    let type_attributes = match TypeAttributes::parse_type_path(&ast.attrs) {
         Ok(v) => v,
         Err(err) => return err.into_compile_error().into(),
     };
 
     let type_parser =
-        TypeParser::new_local(&ast.ident, type_attributes.type_path.clone(), &ast.generics);
+        TypeSignature::new_local(&ast.ident, type_attributes.type_path.clone(), &ast.generics);
 
     let meta = ReflectMeta::new(type_attributes, type_parser);
     impls::impl_trait_type_path(&meta).into()
@@ -325,7 +361,7 @@ pub fn derive_type_path(input: TokenStream) -> TokenStream {
 ///
 /// ```rust, ignore
 /// impl_reflect! {
-///     #[reflect(type_path = "core::option:Option")]
+///     #[type_path = "core::option:Option"]
 ///     enum Option<T> {
 ///         Some(T),
 ///         None,
@@ -357,19 +393,19 @@ pub(crate) enum ImplSourceKind {
 /// ## Example
 ///
 /// ```rust, ignore
-/// impl_reflect_opaque!(u64 (full));
-/// impl_reflect_opaque!(::utils::One<T: Clone> (clone));
-/// impl_reflect_opaque!(::alloc::string::String (clone, debug, docs = "hello"));
-/// impl_reflect_opaque!((in core::time) Instant (clone));
-/// impl_reflect_opaque!((in core::time as Ins) Instant (clone));
+/// impl_reflect_opaque!(u64 (Clone, Debug, Hash, PartialEq, PartialOrd, Default, Serialize, Deserialize));
+/// impl_reflect_opaque!(::utils::One<T: Clone> (Clone));
+/// impl_reflect_opaque!(::alloc::string::String (Clone, Debug, docs = "hello"));
+/// impl_reflect_opaque!((in core::time) Instant (Clone));
+/// impl_reflect_opaque!((in core::time as Ins) Instant (Clone));
 /// ```
 ///
-/// This macro always implies `Opaque`, so `clone` is required.
+/// This macro always implies `Opaque`, so `Clone` is required.
 ///
 /// See available attributes in [`derive Reflect`](derive_full_reflect) .
 #[proc_macro]
 pub fn impl_reflect_opaque(input: TokenStream) -> TokenStream {
-    use crate::derive_data::{ReflectMeta, ReflectOpaqueParser, TypeParser};
+    use crate::derive_data::{ReflectMeta, ReflectOpaqueParser, TypeSignature};
 
     let ReflectOpaqueParser {
         attrs,
@@ -379,7 +415,7 @@ pub fn impl_reflect_opaque(input: TokenStream) -> TokenStream {
         generics,
     } = parse_macro_input!(input with ReflectOpaqueParser::parse);
 
-    let parser = TypeParser::new_foreign(&type_ident, &type_path, custom_path, &generics);
+    let parser = TypeSignature::new_foreign(&type_ident, &type_path, custom_path, &generics);
 
     let meta = ReflectMeta::new(attrs, parser);
 
@@ -426,7 +462,7 @@ pub fn impl_reflect_opaque(input: TokenStream) -> TokenStream {
 /// See: [`derive Reflect`](derive_full_reflect)
 #[proc_macro]
 pub fn impl_type_path(input: TokenStream) -> TokenStream {
-    use crate::derive_data::{ReflectMeta, ReflectTypePathParser, TypeAttributes, TypeParser};
+    use crate::derive_data::{ReflectMeta, ReflectTypePathParser, TypeAttributes, TypeSignature};
 
     let ReflectTypePathParser {
         custom_path,
@@ -435,7 +471,7 @@ pub fn impl_type_path(input: TokenStream) -> TokenStream {
         generics,
     } = parse_macro_input!(input with ReflectTypePathParser::parse);
 
-    let parser = TypeParser::new_foreign(&type_ident, &type_path, custom_path, &generics);
+    let parser = TypeSignature::new_foreign(&type_ident, &type_path, custom_path, &generics);
 
     let meta = ReflectMeta::new(TypeAttributes::default(), parser);
 
@@ -525,6 +561,7 @@ pub fn impl_auto_register(input: TokenStream) -> TokenStream {
 /// - The type must be **concrete** (no unbound generic parameters).
 ///
 /// # Example
+///
 /// ```ignore
 /// auto_register!(std::string::String);      // OK - remote type
 /// auto_register!(Vec<u32>);                // OK - concrete, but consider impl_auto_register! for local
@@ -555,19 +592,22 @@ pub fn auto_register(input: TokenStream) -> TokenStream {
 
 /// Impl `TypeData` for specific trait with a new struct.
 ///
-/// This macro will generate a `{trait_name}FromReflect` struct, which implements `TypeData` and `TypePath`.
-///
-/// For example, for `Display`, this will generate `DisplayReflect`.
+/// This macro will generate a `{trait_name}FromReflect`(default) struct,
+/// which implements `TypeData` and `TypePath`. For example, for `Display`,
+/// this will generate `DisplayFromReflect`.
 ///
 /// It only contains three methods internally:
 /// - `from_ref`: cast `&dyn Reflect` to `&dyn {trait_name}`
 /// - `from_mut`: cast `&mut dyn Reflect` to `&mut dyn {trait_name}`
 /// - `from_boxed`: cast `Box<dyn Reflect>` to `Box<dyn {trait_name}>`
 ///
+/// You can specify the generated type name through `name = Name`
+/// (e.g. `#[reflect_trait(name = MyDisplay)]`).
+///
 /// ## Example
 ///
 /// ```ignore
-/// #[reflect_trait]
+/// #[reflect_trait(name = MyDebugAdapter)]
 /// pub trait MyDebug {
 ///     fn debug(&self);
 /// }
@@ -576,15 +616,15 @@ pub fn auto_register(input: TokenStream) -> TokenStream {
 ///
 /// let reg = TypeRegistry::new()
 ///     .register::<String>()
-///     .register_type_data::<String, MyDebugFromReflect>();
+///     .register_type_data::<String, MyDebugAdapter>();
 ///
 /// let x: Box<dyn Reflect> = Box::new(String::from("123"));
 ///
-/// let my_debug_from = reg.get_type_data::<MyDebugFromReflect>((*x).type_id()).unwrap();
+/// let my_debug_from = reg.get_type_data::<MyDebugAdapter>((*x).type_id()).unwrap();
 /// let x: Box<dyn MyDebug> = my_debug_from.from_boxed(x);
 /// x.debug();
 /// ```
 #[proc_macro_attribute]
-pub fn reflect_trait(_args: TokenStream, input: TokenStream) -> TokenStream {
-    impls::impl_reflect_trait(input)
+pub fn reflect_trait(args: TokenStream, input: TokenStream) -> TokenStream {
+    impls::impl_reflect_trait(args, input)
 }

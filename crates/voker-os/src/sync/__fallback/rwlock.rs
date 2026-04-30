@@ -7,7 +7,7 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use super::{LockResult, TryLockError, TryLockResult};
-use crate::sync::atomic::AtomicU32;
+use crate::atomic::AtomicU32;
 
 /// Fallback implementation of `RwLock` from the standard library.
 ///
@@ -153,7 +153,7 @@ impl<T: ?Sized> RwLock<T> {
     pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<'_, T>> {
         let res = self
             .state
-            .fetch_update(Acquire, Relaxed, |s| {
+            .try_update(Acquire, Relaxed, |s| {
                 is_read_lockable(s).then(|| s + READ_LOCKED)
             })
             .is_ok();
@@ -182,7 +182,7 @@ impl<T: ?Sized> RwLock<T> {
     pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<'_, T>> {
         let res = self
             .state
-            .fetch_update(Acquire, Relaxed, |s| {
+            .try_update(Acquire, Relaxed, |s| {
                 is_unlocked(s).then_some(s | WRITE_LOCKED)
             })
             .is_ok();

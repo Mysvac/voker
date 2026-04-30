@@ -1,6 +1,7 @@
 use crate::borrow::ResMut;
 use crate::message::{Message, MessageKey, MessageKeyIter, MessageQueue};
-use crate::system::{SystemParam, SystemParamError};
+use crate::system::{AccessTable, SystemParam, SystemParamError};
+use crate::world::{UnsafeWorld, World};
 
 /// System parameter that appends messages of type `M`.
 ///
@@ -64,16 +65,16 @@ unsafe impl<M: Message> SystemParam for MessageWriter<'_, M> {
     const NON_SEND: bool = false;
     const EXCLUSIVE: bool = false;
 
-    fn init_state(world: &mut crate::world::World) -> Self::State {
+    fn init_state(world: &mut World) -> Self::State {
         <InternalParam<M> as SystemParam>::init_state(world)
     }
 
-    fn mark_access(table: &mut crate::system::AccessTable, state: &Self::State) -> bool {
+    fn mark_access(table: &mut AccessTable, state: &Self::State) -> bool {
         <InternalParam<M> as SystemParam>::mark_access(table, state)
     }
 
     unsafe fn build_param<'w, 's>(
-        world: crate::world::UnsafeWorld<'w>,
+        world: UnsafeWorld<'w>,
         state: &'s mut Self::State,
         last_run: crate::tick::Tick,
         this_run: crate::tick::Tick,

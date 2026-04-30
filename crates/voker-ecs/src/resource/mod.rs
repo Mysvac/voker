@@ -1,8 +1,14 @@
-//! Global resources unrelated to entities.
+//! Global resources — singleton data attached to the world.
 //!
-//! Resources are singleton-like values stored per world.
-//! This module defines resource identity/metadata and resource containers,
-//! plus derive support for user-defined resource types.
+//! This module covers the **registration** layer only:
+//! - [`Resource`] — the marker trait types must implement.
+//! - [`ResourceId`] / [`ResourceInfo`] — stable identity and type metadata.
+//! - [`Resources`] — the per-world registry that maps `TypeId → ResourceId`.
+//!
+//! The actual **storage** (raw bytes and change-detection ticks) lives in
+//! [`crate::storage::ResourceStorage`], which is indexed by `ResourceId`.
+//! World methods (`insert_resource`, `get_resource`, etc.) coordinate between
+//! both layers.
 
 // -----------------------------------------------------------------------------
 // Modules

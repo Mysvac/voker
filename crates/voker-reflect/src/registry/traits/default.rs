@@ -53,7 +53,7 @@ use crate::registry::FromType;
 ///
 /// # Derive macro support
 ///
-/// If a type implements `Default` and is annotated with `#[reflect(default)]`, [`ReflectDefault`]
+/// If a type implements `Default` and is annotated with `#[reflect(Default)]`, [`ReflectDefault`]
 /// will be automatically registered when the type is added to the registry:
 ///
 /// ```
@@ -61,7 +61,7 @@ use crate::registry::FromType;
 /// use voker_reflect::prelude::*;
 ///
 /// #[derive(Reflect, Default)]
-/// #[reflect(default)]
+/// #[reflect(Default)]
 /// struct Foo;
 ///
 /// let mut registry = TypeRegistry::default();

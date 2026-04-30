@@ -1,3 +1,4 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
@@ -7,12 +8,12 @@ use super::{impl_trait_reflect, impl_trait_type_path, impl_trait_typed};
 use crate::derive_data::ReflectMeta;
 
 /// Implement full reflect for unit type.
-pub(crate) fn impl_unit(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+pub(crate) fn impl_unit(meta: &ReflectMeta) -> TokenStream {
     // trait: TypePath
     let type_path_trait_tokens = if meta.attrs().impl_switchs.impl_type_path {
         impl_trait_type_path(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Typed
@@ -20,7 +21,7 @@ pub(crate) fn impl_unit(meta: &ReflectMeta) -> proc_macro2::TokenStream {
         let (info_tokens, is_const_expr) = meta.type_info_tokens();
         impl_trait_typed(meta, info_tokens, is_const_expr, false)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: Reflect
@@ -46,21 +47,21 @@ pub(crate) fn impl_unit(meta: &ReflectMeta) -> proc_macro2::TokenStream {
             false,
         )
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: GetTypeMeta
     let get_type_meta_tokens = if meta.attrs().impl_switchs.impl_get_type_meta {
-        impl_trait_get_type_meta(meta, crate::utils::empty())
+        impl_trait_get_type_meta(meta, TokenStream::new())
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // trait: FromReflect
     let from_reflect_tokens = if meta.attrs().impl_switchs.impl_from_reflect {
         impl_unit_from_reflect(meta)
     } else {
-        crate::utils::empty()
+        TokenStream::new()
     };
 
     // featuer: auto_resiter
@@ -82,7 +83,7 @@ pub(crate) fn impl_unit(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::apply` implementation tokens.
-fn get_unit_apply_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_apply_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::{CloneFP, OptionFP, ResultFP};
 
     let voker_reflect_path = meta.voker_reflect_path();
@@ -124,7 +125,7 @@ fn get_unit_apply_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::to_dynamic` implementation tokens.
-fn get_unit_to_dynamic_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_to_dynamic_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::CloneFP;
 
     let voker_reflect_path = meta.voker_reflect_path();
@@ -149,13 +150,25 @@ fn get_unit_to_dynamic_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::reflect_clone` implementation tokens.
-fn get_unit_clone_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_clone_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::{CloneFP, ResultFP};
 
     let voker_reflect_path = meta.voker_reflect_path();
     let macro_utils_ = crate::path::macro_utils_(voker_reflect_path);
     let reflect_ = crate::path::reflect_(voker_reflect_path);
     let reflect_clone_error_ = crate::path::reflect_clone_error_(voker_reflect_path);
+    let type_path_ = crate::path::type_path_(voker_reflect_path);
+
+    if meta.attrs().avail_traits.not_cloneable.is_some() {
+        return quote! {
+            #[inline]
+            fn reflect_clone(&self) -> #ResultFP<#macro_utils_::Box<dyn #reflect_>, #reflect_clone_error_> {
+                #ResultFP::Err(#reflect_clone_error_::NotSupport {
+                    type_path: <Self as #type_path_>::type_path(),
+                })
+            }
+        };
+    }
 
     if let Some(span) = meta.attrs().avail_traits.clone {
         let reflect_clone = Ident::new("reflect_clone", span);
@@ -177,12 +190,12 @@ fn get_unit_clone_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::reflect_eq` implementation tokens.
-fn get_unit_eq_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_eq_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::{OptionFP, PartialEqFP};
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.eq {
+    if let Some(span) = meta.attrs().avail_traits.partial_eq {
         let reflect_eq = Ident::new("reflect_eq", span);
 
         quote! {
@@ -209,12 +222,12 @@ fn get_unit_eq_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::reflect_eq` implementation tokens.
-fn get_unit_cmp_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_cmp_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::{OptionFP, PartialOrdFP};
     let voker_reflect_path = meta.voker_reflect_path();
     let reflect_ = crate::path::reflect_(voker_reflect_path);
 
-    if let Some(span) = meta.attrs().avail_traits.cmp {
+    if let Some(span) = meta.attrs().avail_traits.partial_ord {
         let reflect_cmp = Ident::new("reflect_cmp", span);
 
         quote! {
@@ -241,7 +254,7 @@ fn get_unit_cmp_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::reflect_hash` implementation tokens.
-fn get_unit_hash_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_hash_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::{HashFP, HasherFP, OptionFP, TypeIdFP};
 
     let voker_reflect_path = meta.voker_reflect_path();
@@ -271,7 +284,7 @@ fn get_unit_hash_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `Reflect::reflect_debug` implementation tokens.
-fn get_unit_debug_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn get_unit_debug_impl(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::DebugFP;
 
     let type_path_ = crate::path::type_path_(meta.voker_reflect_path());
@@ -296,7 +309,7 @@ fn get_unit_debug_impl(meta: &ReflectMeta) -> proc_macro2::TokenStream {
 }
 
 /// Generate `FromReflect` trait implementation tokens.
-fn impl_unit_from_reflect(meta: &ReflectMeta) -> proc_macro2::TokenStream {
+fn impl_unit_from_reflect(meta: &ReflectMeta) -> TokenStream {
     use crate::path::fp::OptionFP;
 
     let voker_reflect_path = meta.voker_reflect_path();

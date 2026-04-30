@@ -45,22 +45,21 @@ impl ObservedBy {
         let observer_by = world.get::<Self>(entity).expect("should exist");
         let idents = observer_by.0.as_slice();
 
+        let world = unsafe { world.unsafe_world().data_mut() };
+        let observers = &mut world.observers;
+
         for &id in idents {
-            let world1 = unsafe { world.unsafe_world().data_mut() };
-            let world2 = unsafe { world.unsafe_world().data_mut() };
-
-            let observer = unsafe { world1.observers.get_unchecked_mut(id) };
-            observer.observed_entities.remove(&entity);
-
+            let observer = unsafe { observers.observers.get_unchecked_mut(id) };
+            observer.entities.remove(&entity);
             let event_id = observer.event_id;
-            let observers = unsafe { world2.observers.runners.get_unchecked_mut(event_id.index()) };
+            let cached = unsafe { observers.runners.get_unchecked_mut(event_id.index()) };
 
-            if let Some(maps) = observers.entity_observers.get_mut(&entity) {
+            if let Some(maps) = cached.entity_observers.get_mut(&entity) {
                 maps.remove(&id);
             }
 
-            for cid in observer.observed_components.as_slice() {
-                if let Some(maps) = observers.component_observers.get_mut(cid)
+            for cid in observer.components.as_slice() {
+                if let Some(maps) = cached.component_observers.get_mut(cid)
                     && let Some(maps) = maps.entity_component_observers.get_mut(&entity)
                 {
                     maps.remove(&id);
@@ -74,25 +73,24 @@ impl ObservedBy {
         let observer_by = world.get::<Self>(entity).expect("should exist");
         let idents = observer_by.0.as_slice();
 
+        let world = unsafe { world.unsafe_world().data_mut() };
+        let observers = &mut world.observers;
+
         for &id in idents {
-            let world1 = unsafe { world.unsafe_world().data_mut() };
-            let world2 = unsafe { world.unsafe_world().data_mut() };
-
-            let observer = unsafe { world1.observers.get_unchecked_mut(id) };
-
+            let observer = unsafe { observers.observers.get_unchecked_mut(id) };
             let event_id = observer.event_id;
-            let observers = unsafe { world2.observers.runners.get_unchecked_mut(event_id.index()) };
+            let cached = unsafe { observers.runners.get_unchecked_mut(event_id.index()) };
 
-            observers.entity_observers.remove(&entity);
+            cached.entity_observers.remove(&entity);
 
-            for cid in observer.observed_components.as_slice() {
-                if let Some(maps) = observers.component_observers.get_mut(cid) {
+            for cid in observer.components.as_slice() {
+                if let Some(maps) = cached.component_observers.get_mut(cid) {
                     maps.entity_component_observers.remove(&entity);
                 }
             }
 
-            if observer.observed_entities.is_empty() {
-                world1.observers.observers.remove(id);
+            if observer.entities.is_empty() {
+                observers.observers.remove(id);
             }
         }
     }
@@ -102,24 +100,23 @@ impl ObservedBy {
         let observer_by = world.get::<Self>(entity).expect("should exist");
         let idents = observer_by.0.as_slice();
 
+        let world = unsafe { world.unsafe_world().data_mut() };
+        let observers = &mut world.observers;
+
         for &id in idents {
-            let world1 = unsafe { world.unsafe_world().data_mut() };
-            let world2 = unsafe { world.unsafe_world().data_mut() };
-
-            let observer = unsafe { world1.observers.get_unchecked_mut(id) };
-            observer.observed_entities.insert(entity);
-
+            let observer = unsafe { observers.observers.get_unchecked_mut(id) };
+            observer.entities.insert(entity);
             let event_id = observer.event_id;
-            let observers = unsafe { world2.observers.runners.get_unchecked_mut(event_id.index()) };
+            let cached = unsafe { observers.runners.get_unchecked_mut(event_id.index()) };
 
-            observers
+            cached
                 .entity_observers
                 .entry(entity)
                 .or_default()
                 .insert(id, observer.runner);
 
-            for &cid in observer.observed_components.as_slice() {
-                observers
+            for &cid in observer.components.as_slice() {
+                cached
                     .component_observers
                     .entry(cid)
                     .or_default()

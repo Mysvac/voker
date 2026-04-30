@@ -10,6 +10,9 @@
 # AI
 /.github/agents
 /.github/skills
+/.github/instructions
+/.claude
+/claude.md
 
 # Custom
 /temp

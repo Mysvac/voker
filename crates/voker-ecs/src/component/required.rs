@@ -4,7 +4,6 @@ use voker_utils::range_invoke;
 
 use crate::component::{Component, ComponentWriter};
 use crate::component::{ComponentCollector, ComponentRegistrar};
-use crate::world::FromWorld;
 
 // -----------------------------------------------------------------------------
 // Required
@@ -72,6 +71,12 @@ impl Required {
 ///
 /// Implementations must ensure that all required components are properly
 /// registered, collected, and written.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an `RequiredComponents`",
+    label = "invalid `RequiredComponents`",
+    note = "The required component could be a single component or a tuple that \
+    no longer then 15. And all internal types need to support `Default` trait."
+)]
 pub unsafe trait RequiredComponents {
     /// Registers all required components with the given registrar.
     ///
@@ -98,7 +103,7 @@ unsafe impl RequiredComponents for () {
     unsafe fn required_write(_writer: &mut ComponentWriter) {}
 }
 
-unsafe impl<T: Component + FromWorld> RequiredComponents for T {
+unsafe impl<T: Component + Default> RequiredComponents for T {
     fn required_register(registrar: &mut ComponentRegistrar) {
         registrar.register::<T>();
     }
@@ -109,7 +114,7 @@ unsafe impl<T: Component + FromWorld> RequiredComponents for T {
 
     unsafe fn required_write(writer: &mut ComponentWriter) {
         unsafe {
-            writer.write_required::<T>(T::from_world);
+            writer.write_required::<T>(T::default);
         }
     }
 }
@@ -118,7 +123,7 @@ macro_rules! impl_required_for_tuple {
     (0: []) => {};
     (1 : [ $index:tt : $name:ident ]) => {
         #[cfg_attr(docsrs, doc(fake_variadic))]
-        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 12 items long.")]
+        #[cfg_attr(docsrs, doc = "This trait is implemented for tuples up to 15 items long.")]
         unsafe impl<$name: RequiredComponents> RequiredComponents for ($name,) {
             fn required_register(registrar: &mut ComponentRegistrar) {
                 <$name>::required_register(registrar);
@@ -151,4 +156,4 @@ macro_rules! impl_required_for_tuple {
     };
 }
 
-range_invoke!(impl_required_for_tuple, 12);
+range_invoke!(impl_required_for_tuple, 15);

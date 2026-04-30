@@ -130,7 +130,7 @@ impl Entities {
         let info = self.infos.get(entity.index()).unwrap_or(&DEFAULT_INFO);
 
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(FetchError::Mismatch { expect, actual });
@@ -152,11 +152,11 @@ impl Entities {
     /// - `FetchError::NotSpawned` - Entity exists but is not spawned
     pub fn locate(&self, entity: Entity) -> Result<EntityLocation, FetchError> {
         let Some(info) = self.infos.get(entity.index()) else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(FetchError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(FetchError::Mismatch { expect, actual });
@@ -200,11 +200,11 @@ impl Entities {
 
         let (new_tag, wrapping) = info.tag.checked_add(version);
 
-        info.tag = new_tag;
         if wrapping {
-            log::warn!("Entity({id}) tag wrapped on Entities::free, aliasing may occur.");
+            tracing::warn!("Entity({id}) tag wrapped on Entities::free, aliasing may occur.");
         }
 
+        info.tag = new_tag;
         Entity::new(id, new_tag)
     }
 
@@ -254,18 +254,18 @@ impl Entities {
                 self.infos.get_unchecked_mut(index).tag = entity.tag();
             }
         }
-
+        // SAFETY: just resize above.
         let info = unsafe { self.infos.get_unchecked_mut(index) };
 
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(SpawnError::Mismatch { expect, actual });
         }
 
         if info.location.is_some() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(SpawnError::AlreadySpawned(entity));
         }
 
@@ -284,11 +284,11 @@ impl Entities {
     /// - `Err(DespawnError)` - If entity state is invalid
     pub unsafe fn set_despawned(&mut self, entity: Entity) -> Result<EntityLocation, DespawnError> {
         let Some(info) = self.infos.get_mut(entity.index()) else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(DespawnError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(DespawnError::Mismatch { expect, actual });
@@ -310,13 +310,13 @@ impl Entities {
             return Err(MoveError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(MoveError::Mismatch { expect, actual });
         }
         let Some(loc) = &mut info.location else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(MoveError::NotSpawned(entity));
         };
 
@@ -336,19 +336,18 @@ impl Entities {
         let Some(entity) = moved.entity else {
             return Ok(());
         };
-
         let Some(info) = self.infos.get_mut(entity.index()) else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(MoveError::NotFound(entity.id()));
         };
         if info.tag != entity.tag() {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             let expect = entity;
             let actual = Entity::new(entity.id(), info.tag);
             return Err(MoveError::Mismatch { expect, actual });
         }
         let Some(location) = &mut info.location else {
-            voker_utils::cold_path();
+            core::hint::cold_path();
             return Err(MoveError::NotSpawned(entity));
         };
         match moved.new_row {
@@ -361,6 +360,7 @@ impl Entities {
     /// Returns an iterator over spawned entities.
     pub fn iter(&self) -> impl FusedIterator<Item = (Entity, EntityLocation)> {
         self.infos.iter().enumerate().filter_map(|(idx, info)| {
+            // The location of invalid index `0` must be `None`.
             if let Some(location) = info.location {
                 // Faster than `without_provenance` in this hot path.
                 let temp = Entity::from_bits(idx as u64);

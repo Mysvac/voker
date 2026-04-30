@@ -1,11 +1,8 @@
-use voker_task::ComputeTaskPool;
-
 use crate::component::{ComponentInfo, StorageMode};
 use crate::resource::ResourceInfo;
 use crate::storage::{Maps, Tables};
-use crate::tick::CheckTicks;
 
-use super::ResSet;
+use super::ResourceStorage;
 
 // -----------------------------------------------------------------------------
 // Storages
@@ -13,7 +10,7 @@ use super::ResSet;
 /// Central coordinator for all ECS storage backends.
 ///
 /// `Storages` aggregates and manages the three primary storage systems in the ECS:
-/// - **Resources** (`ResSet`) - Singleton data attached to the world itself
+/// - **Resources** (`ResourceStorage`) - Singleton data attached to the world itself
 /// - **Tables** (`Tables`) - Dense, contiguous storage for components (archetype-based)
 /// - **Maps** (`Maps`) - Sparse storage for components that don't benefit from dense storage
 ///
@@ -31,7 +28,7 @@ use super::ResSet;
 ///   rarely-present components or large component sets
 #[derive(Debug)]
 pub struct Storages {
-    pub res_set: ResSet,
+    pub resources: ResourceStorage,
     pub tables: Tables,
     pub maps: Maps,
 }
@@ -40,7 +37,7 @@ impl Storages {
     /// Creates a new, empty storage coordinator.
     pub(crate) fn new() -> Storages {
         Storages {
-            res_set: ResSet::new(),
+            resources: ResourceStorage::new(),
             tables: Tables::new(),
             maps: Maps::new(),
         }
@@ -55,16 +52,16 @@ impl Storages {
     /// |    State         | Description                            | Storage Status                       |
     /// |------------------|----------------------------------------|--------------------------------------|
     /// | **Unregistered** | No `ResourceId` allocated yet          | Not tracked                          |
-    /// | **Registered**   | `Id` allocated, but no memory reserved | `ResData` not initialized            |
+    /// | **Registered**   | `Id` allocated, but no memory reserved | `ResourceData` not initialized       |
     /// | **Prepared**     | Memory allocated, ready for insertion  | Storage reserved, data uninitialized |
     /// | **Inserted**     | Memory allocated and initialized       | Active resource                      |
-    /// | **Removed**      | Memory allocated, the data is removed  | Equivlant to **Prepared**            |
+    /// | **Removed**      | Memory allocated, the data is removed  | Equivalent to **Prepared**           |
     ///
     /// This method transitions a resource from **unprepared** to **prepared** state.
     /// First call may allocate, subsequent calls are no-op
     #[inline]
     pub fn prepare_resource(&mut self, info: &ResourceInfo) {
-        self.res_set.prepare(info);
+        self.resources.prepare(info);
     }
 
     /// Prepares storage for a component type based on its storage strategy.
@@ -98,51 +95,6 @@ impl Storages {
             StorageMode::Sparse => {
                 self.maps.prepare(info);
             }
-        }
-    }
-
-    /// Updates tick information across all storage backends.
-    ///
-    /// This method advances the tick counters for all stored data, marking which
-    /// components and resources have been accessed or modified. It automatically
-    /// parallelizes the work when a [`ComputeTaskPool`] is available.
-    ///
-    /// # Parallelism
-    /// When a compute task pool is available, this method spawns separate tasks for:
-    /// - Resource set tick updates
-    /// - Each individual table's tick updates  
-    /// - Each individual map's tick updates
-    ///
-    /// This provides near-optimal parallel utilization for large worlds with
-    /// many tables and maps.
-    pub fn check_ticks(&mut self, check: CheckTicks) {
-        let Storages {
-            res_set,
-            tables,
-            maps,
-        } = self;
-        let now = check.tick();
-
-        if let Some(task_pool) = ComputeTaskPool::try_get() {
-            task_pool.scope(|scope| {
-                scope.spawn(async move {
-                    res_set.check_ticks(now);
-                });
-                tables.iter_mut().for_each(|tb| {
-                    scope.spawn(async move { tb.check_ticks(now) });
-                });
-                maps.iter_mut().for_each(|mp| {
-                    scope.spawn(async move { mp.check_ticks(now) });
-                });
-            });
-        } else {
-            res_set.check_ticks(now);
-            tables.iter_mut().for_each(|tb| {
-                tb.check_ticks(now);
-            });
-            maps.iter_mut().for_each(|mp| {
-                mp.check_ticks(now);
-            });
         }
     }
 }
